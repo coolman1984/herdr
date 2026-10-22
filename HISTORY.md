@@ -385,3 +385,24 @@ window stays `ctrl+b i` (it lists the new key from keys.toml by itself).
 **Proof:** `-Status` listed claude / argon (working) and coder (idle); the dialog screenshot
 showed all three and the warning; it was closed unanswered and the server was still running.
 **Lesson:** #36.
+
+## Phase 21 - Cline Pass signed in; models researched by Argon, verified live (2026-10-22)
+
+**Symptom:** the owner bought Cline Pass and asked to update Cline and sign in, then asked
+Argon (Antigravity, Gemini 4 Argon High) to research Cline Pass and its models so Claude can
+recommend daily coding models and how to control Cline.
+**Findings:** Cline 3.0.73 is already npm's latest. The owner ran `cline auth cline-pass`
+(device-code sign-in). The saved model `stealth/ox-alpha` is retired (404: it was GLM-5.3
+Flash). Argon wrote `docs/CLINE-PASS.md` from `tasks/cline-pass-research.md` (12 models,
+benchmarks, routing, control). Claude's review: many sources are bare home pages, so benchmark
+numbers and reference prices are marked unverified; price $9.99/month and the model families
+confirmed by independent pages; live tests: `cline-pass/glm-5.3`, `glm-5.3-flash`,
+`deepseek-v4-pro`, `kimi-k3` answer (~60 s each, mostly start-up); bare `glm-5.3` is rejected
+(`modelType/model` format required).
+**Fix:** agents.json - `cline` = Cline Pass GLM-5.3 (daily), new `cline-flash` (GLM-5.3 Flash),
+`deepseek` = Cline Pass DeepSeek V4 Pro (gets around the network block on DeepSeek's own API),
+new `kimi` (Kimi K3, hard problems); AGENT-ROSTER updated. Also this phase: Sol (Codex) ran its
+`c-drive-safe-cleanup` skill: C: 1.15 -> 3.66 GB free (Temp 1.25 GB, npm cache 1.19 GB, crash
+dumps 109 MB, pip 27 MB, Recycle Bin); G-MES credential store, profiles and CDP Profile
+verified present afterwards.
+**Lesson:** #37.

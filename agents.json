@@ -58,14 +58,14 @@
       "kind": "cline",
       "command": "cline",
       "modelFlag": "-m",
-      "model": "",
+      "model": "cline-pass/glm-5.3",
       "args": [
         "--tui",
         "--auto-approve",
         "true"
       ],
       "providerFlag": "-P",
-      "provider": "",
+      "provider": "cline-pass",
       "effortArgs": [
         "--thinking",
         "{0}"
@@ -75,14 +75,14 @@
       "kind": "cline",
       "command": "cline",
       "modelFlag": "-m",
-      "model": "",
+      "model": "cline-pass/deepseek-v4-pro",
       "args": [
         "--tui",
         "--auto-approve",
         "true"
       ],
       "providerFlag": "-P",
-      "provider": "deepseek",
+      "provider": "cline-pass",
       "effortArgs": [
         "--thinking",
         "{0}"
@@ -114,6 +114,40 @@
       ],
       "effortArgs": [
         "--effort",
+        "{0}"
+      ]
+    },
+    "cline-flash": {
+      "kind": "cline",
+      "command": "cline",
+      "modelFlag": "-m",
+      "model": "cline-pass/glm-5.3-flash",
+      "args": [
+        "--tui",
+        "--auto-approve",
+        "true"
+      ],
+      "providerFlag": "-P",
+      "provider": "cline-pass",
+      "effortArgs": [
+        "--thinking",
+        "{0}"
+      ]
+    },
+    "kimi": {
+      "kind": "cline",
+      "command": "cline",
+      "modelFlag": "-m",
+      "model": "cline-pass/kimi-k3",
+      "args": [
+        "--tui",
+        "--auto-approve",
+        "true"
+      ],
+      "providerFlag": "-P",
+      "provider": "cline-pass",
+      "effortArgs": [
+        "--thinking",
         "{0}"
       ]
     }

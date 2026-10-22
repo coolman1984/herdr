@@ -122,3 +122,6 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 36. **Closing Herdr's window only detaches**: the server is its own process (no living parent)
     and keeps every pane and agent running. Only `herdr server stop`, sign-out or a restart
     end them; after a restart Herdr restores the layout and resumes Claude/Codex sessions.
+37. **Cline Pass model ids need the `cline-pass/` prefix** (`-P cline-pass -m cline-pass/glm-5.3`);
+    a bare id fails with "Expected format: modelType/model". A retired model answers 404 with
+    its replacement's name. Each headless `cline` run spends ~60 s before the first token.
