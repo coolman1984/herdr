@@ -15,7 +15,17 @@ herdr-agents ask <name> "<task>" [-TimeoutSec 900] [-Lines 200]
 herdr-agents ask <name> -TaskFile task.md
 herdr-agents read <name> [-Lines 200] [-Visible]
 herdr-agents stop <name>                   # only agents this tool started
+herdr-agents start <agent> -Pane <pane-id> # start in an existing empty shell pane
 ```
+
+## Layouts with agents
+
+`Ctrl+B` `Shift+B` opens the layout builder: per column a folder and what runs in
+it (PowerShell, a new agent from `agents.json` with an optional model, or a running
+agent, which is moved in and keeps running). An agent can build the same without a
+window: write a plan file and run
+`pwsh -File herdr-layout.ps1 -PlanFile plan.json` (format in the script's header).
+Moving the last pane out of a space closes that space (LESSONS #18).
 
 | Output | Meaning | Exit |
 |---|---|---|

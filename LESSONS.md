@@ -47,3 +47,8 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     pane -> 64 | 190). Equal N columns: split with 1/N, then the new pane with
     1/(N-1), ... 1/2. Repeated plain `ctrl+b v` halves each time (1/2, 1/4, 1/8 ...).
     `herdr pane current` with no argument returns the UI-focused pane.
+18. **`pane move <id> --tab T --split right --target-pane P` moves a running agent
+    without stopping it**; it keeps its agent name but gets a new pane id
+    (`.result.move_result.pane.pane_id`). Moving the last pane out of a space closes
+    that space. To put a moved pane exactly in a placeholder's place: move it next
+    to the placeholder, then `pane close` the placeholder - the sibling takes its rect.

@@ -10,6 +10,7 @@
 | `docs/` | SETUP, DELEGATION, this file |
 | `Herdr.cmd` | Launcher: Windows Terminal + Herdr in the current folder (App Path target) |
 | `herdr-open-folder.ps1` | Folder picker -> new workspace (+ Claude / + team) |
+| `herdr-layout.ps1` | Layout builder window (ctrl+b shift+b); `-PlanFile` builds without a window |
 | `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
 | `agents.json` | Agent profiles for the delegation tool |
@@ -33,6 +34,7 @@
 | `%APPDATA%\herdr\config.toml` | key bindings (`config/keys.toml`) |
 | `%APPDATA%\herdr\open-folder-last.txt` | last folder picked |
 | `%APPDATA%\herdr\herdr-agents-panes.json` | panes started by `herdr-agents` |
+| `%APPDATA%\herdr\layout-last.json` | last layout chosen in the layout builder |
 | Desktop + Start menu `Herdr.lnk` | one-click start |
 | `~/.claude/skills/herdr-team`, `herdr-workspace` | Claude skills (from `skills/`) |
 | npm global `cline@3.0.73` | Cline CLI |

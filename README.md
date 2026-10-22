@@ -30,6 +30,7 @@ Press `Ctrl+B`, let go, then the key.
 | `Ctrl+B` `T` | Same, with a team: Claude Code left + Codex (GPT-6.1-Sol) right |
 | `Ctrl+B` `V` | Split the pane in two, side by side |
 | `Ctrl+B` `Shift+V` | Split the pane into 4 equal columns, all in the same folder |
+| `Ctrl+B` `Shift+B` | **Layout builder**: 1-6 equal columns, each with its own folder and an empty PowerShell, a new agent (any model), or an already-running agent moved in |
 | `Ctrl+B` `-` / `C` | Split down / new tab |
 | `Ctrl+B` `Q` | Detach (agents keep running) |
 | `Ctrl+B` `?` | All keys |

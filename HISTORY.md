@@ -136,3 +136,26 @@ diagnostics. The owner had meanwhile switched the theme to `gruvbox` - kept.
 **Proof:** test workspace, 254 columns wide -> panes at x=0/64/127/191, widths
 64/63/64/63, all four in the same folder; workspace closed.
 **Lesson:** #17.
+
+## Phase 12 - Layout builder: a folder and an agent per column (2026-10-22)
+
+**Symptom:** the owner wanted to choose each column's project folder when opening
+side-by-side panes, and to put agents that are already running into those columns.
+**Cause:** `ctrl+b shift+v` (Phase 11) gives every column the focused pane's folder
+and empty shells only.
+**Fix:** `herdr-layout.ps1` (`ctrl+b shift+b`): a window with 1-6 columns, "Open in"
+(new tab here / new space), and per column a folder (Browse...), what runs (PowerShell,
+`New: <profile>` from agents.json with optional model, or `Running: <agent>`) and the
+model. Equal widths with ratios 1/N..1/2 (LESSONS #17); new agents via
+`herdr-agents start <profile> -Pane <id>` (new `-Pane` option, same safety args);
+running agents moved next to a placeholder that is then closed (LESSONS #18), and
+the herdr-agents pane record follows the new id. Last choices remembered in
+`%APPDATA%\herdr\layout-last.json`. `-PlanFile` builds the same without a window
+(for agents and tests; errors print instead of message boxes).
+**Proof:** source space with Codex `codexsrc` in `docs`; plan = shell in HERDR, new
+codex in `skills`, running `codexsrc` -> new space: panes x=0/85/170, widths 85/85/84,
+folders HERDR / skills / docs; `codex` started (gpt-6.1-sol), `codexsrc` moved and
+still alive under its name, record updated to the new pane; the source space closed
+itself. Window opened and was screenshot-checked (4 rows, defaults = focused pane's
+folder). Test agents stopped, test space closed.
+**Lesson:** #18.

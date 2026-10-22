@@ -24,3 +24,10 @@ command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Deve
 key = "prefix+shift+v"
 type = "shell"
 command = 'pwsh -NoProfile -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-columns.ps1" -Count 4'
+
+# Layout builder: ctrl+b then shift+b -> window: N columns, each with its own folder and
+# an empty PowerShell, a new agent, or a running agent moved in.
+[[keys.command]]
+key = "prefix+shift+b"
+type = "shell"
+command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-layout.ps1"'

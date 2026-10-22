@@ -33,6 +33,8 @@ pwsh -NoProfile -File $T <command> ...
 | Long task | write it to a .md file, then `ask codex -TaskFile <path>` |
 | See its screen / transcript | `pwsh -NoProfile -File $T read codex` (`-Visible` = screen now) |
 | Stop an agent I started | `pwsh -NoProfile -File $T stop codex` |
+| Start in an existing empty pane | `pwsh -NoProfile -File $T start codex -Pane <pane-id>` |
+| Open a multi-column layout | write a plan file, `pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-layout.ps1" -PlanFile <plan.json>` (format in its header; moving a running agent = Type "existing", Value = its pane id) |
 
 Agent profiles (command, model flag, default model, safety flags) are in
 `D:\WORK\Software Development\GitHub\HERDR\agents.json`. Defaults: claude =

@@ -2,6 +2,7 @@
 #
 #   herdr-agents tools                                   which agents exist on this PC (agents.json)
 #   herdr-agents start <agent> [-Model M] [-Name N] [-Direction right|down] [-Cwd PATH]
+#   herdr-agents start <agent> -Pane <pane-id>           start in an existing empty shell pane
 #   herdr-agents ask <name> "<task>" [-TimeoutSec 900] [-Lines 200]   send a task, wait, print the answer
 #   herdr-agents ask <name> -TaskFile task.md                          long task from a file
 #   herdr-agents read <name> [-Lines 200] [-Visible]                   what is on its screen
@@ -23,6 +24,7 @@ param(
     [ValidateSet("right", "down")] [string]$Direction = "right",
     [string]$Cwd,
     [string]$TaskFile,
+    [string]$Pane,
     [int]$TimeoutSec = 900,
     [int]$Lines = 200,
     [switch]$Visible
@@ -96,7 +98,7 @@ switch ($Command) {
     }
 
     "start" {
-        if ($env:HERDR_ENV -ne "1" -or -not $env:HERDR_PANE_ID) {
+        if (-not $Pane -and ($env:HERDR_ENV -ne "1" -or -not $env:HERDR_PANE_ID)) {
             Fail "start must run inside a Herdr pane (HERDR_ENV=1); it opens the agent next to the caller."
         }
         if (-not $Target) { Fail "start needs an agent, e.g. herdr-agents start codex. See: herdr-agents tools" }
@@ -122,9 +124,13 @@ switch ($Command) {
         $mdl = if ($Model) { $Model } else { $a.model }
         if ($mdl) { $agentArgs += @($a.modelFlag, $mdl) }
 
-        $split = Invoke-Herdr @("pane", "split", $env:HERDR_PANE_ID, "--direction", $Direction, "--cwd", $Cwd, "--no-focus")
-        if (-not $split.Ok) { Fail "Could not open a pane: $($split.Text)" }
-        $pane = $split.Json.result.pane.pane_id
+        if ($Pane) {
+            $pane = $Pane
+        } else {
+            $split = Invoke-Herdr @("pane", "split", $env:HERDR_PANE_ID, "--direction", $Direction, "--cwd", $Cwd, "--no-focus")
+            if (-not $split.Ok) { Fail "Could not open a pane: $($split.Text)" }
+            $pane = $split.Json.result.pane.pane_id
+        }
 
         $startArgs = @("agent", "start", $Name, "--kind", $a.kind, "--pane", $pane, "--timeout", "120000")
         if ($agentArgs.Count -gt 0) { $startArgs += @("--") + $agentArgs }
