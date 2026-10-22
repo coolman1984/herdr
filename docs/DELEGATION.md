@@ -89,8 +89,13 @@ focus where it is, and names the agent (`codex`, `codex-2`, ...).
 |---|---|---|---|---|
 | claude | Claude Code | `--model` | claude-opus-5-5 | |
 | codex | Codex | `-m` | gpt-6.1-sol | |
-| cline | Cline | `-m` (+ `-P provider`) | Cline's choice | `--tui --auto-approve false` |
-| deepseek | Cline on DeepSeek | `-m` | chosen at `cline auth deepseek` | `--tui --auto-approve false -P deepseek` |
+| cline | Cline | `-m` (+ `-P provider`) | Cline's choice | `--tui --auto-approve true` |
+| deepseek | Cline on DeepSeek | `-m` | chosen at `cline auth deepseek` | `--tui --auto-approve true -P deepseek` |
+
+Approval modes (owner decision 2026-10-22, CLAUDE.md rule 3): Claude `--permission-mode auto`,
+Codex `-a never -s workspace-write`, Cline `--auto-approve true`, Antigravity `--mode auto`,
+Grok `--always-approve` - no approval prompts. Folder-trust questions still appear once per
+folder/repository.
 | opencode | OpenCode | `-m provider/model` | its default | |
 | grok | Grok | `-m` | its default | |
 | agy | Antigravity | `--model` | its default | |

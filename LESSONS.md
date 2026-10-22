@@ -110,3 +110,9 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     and its Zen models returned an error page, Cline's provider needed re-authentication and
     its DeepSeek endpoint returned an HTML page (network block), Grok was not signed in. Check
     with one tiny prompt before planning work on an agent (docs/AGENT-ROSTER.md section 6).
+34. **Approval and trust are separate.** Auto modes (Claude `--permission-mode auto`, Codex
+    `-a never`, Cline `--auto-approve true`, Antigravity `--mode auto`, Grok `--always-approve`)
+    stop tool prompts, but Codex and Antigravity still ask once per repository/folder whether
+    to trust it (Codex: `[projects.'<path>'] trust_level = "trusted"` in `~\.codex\config.toml`).
+    Claude Code's classifier will not let Claude itself turn other agents into auto-approvers
+    or edit trust settings - the owner runs that change.

@@ -21,9 +21,13 @@ Then run `pwsh -File check.ps1` - it must pass.
    a file, an argument, an environment variable, a log or a chat.
 2. **Never approve for the owner.** When an agent is BLOCKED (tool approval or a
    question), show its screen and let the owner decide.
-3. **Agents start with approval ON.** Do not add `--yolo`, `--auto-approve true`,
-   `--dangerously-skip-permissions` or similar to `agents.json` unless the owner asks
-   for that agent, in that run.
+3. **Approval mode is the owner's decision.** Owner decision 2026-10-22 (HISTORY Phase 18):
+   every profile in `agents.json` runs without approval prompts - Claude
+   `--permission-mode auto`, Codex `-a never -s workspace-write` (still sandboxed to its
+   folder), Cline `--auto-approve true`, Antigravity `--mode auto`, Grok `--always-approve`.
+   The owner made this change; agents must not change approval or trust settings on their
+   own, and must not widen them further (e.g. Codex's full sandbox bypass) unless the owner
+   asks. Secrets, sign-ins and folder-trust questions still go to the owner.
 4. **Claude's own settings are the owner's.** `~/.claude/settings.json` and Herdr
    integrations (`herdr integration install ...`) change Claude Code itself - give the
    owner the exact command to run, do not run it (LESSONS #3).

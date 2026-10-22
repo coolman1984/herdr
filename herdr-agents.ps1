@@ -21,7 +21,8 @@
 #     (-Overflow space = new spaces instead). Up to 16 agents.
 #   herdr-agents collect -Agents coder,tester            wait for all, one report (like fanout)
 #
-# Safety: agents start with tool approval ON where the CLI allows it (agents.json "args").
+# Approval: agents.json "args" set each agent's approval mode; since 2026-10-22 the owner
+# runs them all without approval prompts (CLAUDE.md rule 3). Secrets and trust stay the owner's.
 # When an agent waits for approval, "ask" prints BLOCKED and its screen - a person decides.
 [CmdletBinding()]
 param(

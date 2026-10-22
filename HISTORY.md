@@ -338,3 +338,24 @@ the owner.
 started as "Gemini 4 Argon · medium" and stopped at Antigravity's trust question (owner's
 answer). Test session removed.
 **Lesson:** #32, #33.
+
+## Phase 18 - Owner decision: agents run without approval prompts (2026-10-22)
+
+**Symptom:** Antigravity (Gemini 4 Argon High), pushing the toolkit, stopped at a permission
+prompt for every git command; the owner asked that all CLI agents work like Claude Code's
+auto mode and trust new folders automatically.
+**Cause:** CLAUDE.md rule 3 started every agent with approval ON. Claude Code's own safety
+classifier refused to let Claude switch other agents to auto-approve ("Create Unsafe
+Agents"), and Claude did not route that change through another agent.
+**Fix:** the owner ran the change from Claude's prompt (`!` command): `agents.json`
+args = Claude `--permission-mode auto`, Codex `-a never -s workspace-write` (no prompts, still
+sandboxed to its folder - chosen over Codex's full bypass), Cline `--auto-approve true`,
+Antigravity `--mode auto` (`agy`, `gemini`, `gemini-flash`), Grok `--always-approve`; backup
+`agents.json.bak` (git-ignored, skipped by check.ps1). Claude then recorded the decision:
+CLAUDE.md rule 3 (owner's decision, agents never widen it), `check.ps1` (OK line per agent;
+still FAILs on flags that remove the sandbox or skip all permissions), DELEGATION, GUIDE,
+AGENT-ROSTER, header of herdr-agents.ps1. The classifier also refused one wording edit in
+GUIDE section 12; that line still says "approval ON".
+**Folder trust:** no "trust every folder" switch could be confirmed for any of the CLIs; each
+remembers its answer per folder/repository (LESSONS #34).
+**Lesson:** #34.

@@ -144,7 +144,10 @@ It remembers the last layout you opened. Without the window:
 | `deepseek` | Cline on DeepSeek | chosen at `cline auth deepseek` |
 | `opencode`, `grok`, `agy` | their CLIs | their default |
 
-All start with **tool approval ON**. Cline is forced to `--auto-approve false`.
+All run **without approval prompts** (your decision of 2026-10-22): Claude in auto mode,
+Codex never asks but can only write inside its project folder, Cline auto-approve,
+Antigravity auto mode, Grok always-approve. Change it in `agents.json` (`args`); a backup
+of the old settings is `agents.json.bak`.
 
 ### First-time sign-ins (you, once)
 - DeepSeek / other Chinese models through Cline: in any pane run `cline auth deepseek`
@@ -383,7 +386,7 @@ Files: `%APPDATA%\herdr\agent-runs\<date>\`.
 ### 13.16 Use DeepSeek or another Chinese model (Cline)
 1. Once: in any pane run `cline auth deepseek` and paste your own API key there.
 2. `herdr-agents start deepseek -Model <model-id>` (or pick `New: deepseek` in the layout
-   builder). Cline starts with approval ON.
+   builder). Cline starts with auto-approve (your setting).
 
 ### 13.17 Show all shortcuts
 `Ctrl+B` `I`: a window with every shortcut (type to filter) and this guide. `Ctrl+B` `?`

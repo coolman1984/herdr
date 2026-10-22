@@ -40,11 +40,14 @@ try {
         }
         if ($kinds -and $a.kind -notin $kinds) { Bad "agents.json '$($p.Name)': Herdr does not know kind '$($a.kind)'" }
         $flags = @($a.args)
+        # Owner decision 2026-10-22 (CLAUDE.md rule 3): no approval prompts, but nothing that
+        # removes Codex's sandbox or skips every permission outright.
         $hit = $flags | Where-Object { $_ -in $dangerous }
-        if ($hit) { Bad "agents.json '$($p.Name)' auto-approves ($hit) - CLAUDE.md rule 2.3" }
+        if ($hit) { Bad "agents.json '$($p.Name)' uses $hit - wider than the owner's decision (CLAUDE.md rule 3)" }
+        $auto = @($flags | Where-Object { $_ -in @('auto', 'never', '--always-approve') })
         $i = [array]::IndexOf($flags, '--auto-approve')
-        if ($i -ge 0 -and $flags[$i + 1] -ne 'false') { Bad "agents.json '$($p.Name)' sets --auto-approve $($flags[$i + 1])" }
-        if ($a.kind -eq 'cline' -and $flags -notcontains '--auto-approve') { Bad "agents.json '$($p.Name)': Cline needs --auto-approve false (LESSONS #12)" }
+        if ($i -ge 0 -and $flags[$i + 1] -eq 'true') { $auto += '--auto-approve true' }
+        if ($auto) { Ok "agent '$($p.Name)' runs without approval prompts (owner decision, CLAUDE.md rule 3)" }
         if (Get-Command $a.command -ErrorAction SilentlyContinue) { Ok "agent '$($p.Name)' ($($a.command)) installed" }
         else { Warn "agent '$($p.Name)': $($a.command) not installed" }
     }
@@ -105,7 +108,7 @@ foreach ($m in [regex]::Matches($inFolder, '\|\s*`([^`]+)`')) {
         if (-not (Test-Path -LiteralPath $path)) { Bad "docs/FILES.md lists '$name' but it does not exist" }
     }
 }
-foreach ($file in Get-ChildItem -LiteralPath $root -File | Where-Object { $_.Name -notlike '.*' }) {
+foreach ($file in Get-ChildItem -LiteralPath $root -File | Where-Object { $_.Name -notlike '.*' -and $_.Extension -ne '.bak' }) {
     if (-not $files.Contains("``$($file.Name)``")) { Bad "$($file.Name) is not described in docs/FILES.md" }
 }
 $lessons = Get-Content -LiteralPath (Join-Path $root "LESSONS.md") -Raw
