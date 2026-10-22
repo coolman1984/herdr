@@ -15,6 +15,9 @@ if not exist "%HERDR_EXE%" (
     exit /b 1
 )
 
+rem Pane HUD (name, path, model, context on every pane border); one copy only.
+start "" /min pwsh -NoProfile -WindowStyle Hidden -File "%~dp0herdr-hud.ps1"
+
 where wt.exe >nul 2>&1
 if %errorlevel%==0 (
     start "" wt.exe -d "%START_DIR%" --title Herdr "%HERDR_EXE%"

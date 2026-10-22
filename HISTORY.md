@@ -234,3 +234,38 @@ separated, still alive under its name, pane record updated each time, `stop sbs`
 right pane. Window screenshot checked. Key added to `config/keys.toml` and the live config
 (backed up), `config check` ok, reload `applied`. Test session removed.
 **Lesson:** #21 (updated), #24.
+
+## Phase 15 - Each agent keeps its name; pane HUD with path, model and usage (2026-10-22)
+
+**Symptom:** after "side by side" every agent in the sidebar was called `side by side`; the
+owner asked what the red `main` and the arrows mean, and wanted every pane to show its
+project path, model and consumption the way Claude's and Codex's own status lines do.
+**Cause:** the agent panel's default first row is the SPACE name (LESSONS #25); the branch
+colour is gruvbox's; panes had no title. Herdr already supports metadata titles on pane
+borders and custom sidebar tokens (LESSONS #25, #26).
+**Fix:**
+- `herdr-spaces.ps1` names every moved pane after the space it came from (`pane rename`),
+  unless the pane already has its own name.
+- `herdr-hud.ps1` (background, one copy, started at sign-in by a Startup shortcut and by
+  `Herdr.cmd`): every 5 s sets each pane's border title to
+  `name · path · model · ctx N% (used/window) · out N` and the tokens `$name $model $ctx $path
+  $out` (TTL 2 min). Usage comes from the CLIs' session logs (LESSONS #28), read
+  incrementally; Claude's window from the new agents.json `contextWindow` (1M, as its own
+  status line shows).
+- `config/settings.toml`: agent rows `state + $name + space / agent + $model / $ctx`; space
+  rows with the branch in a calm colour. Applied to the live config (backed up), `config
+  check` ok, reload `applied`.
+**Bugs found by the tests:** (1) the log reader returned its two results as one array -> no
+usage shown; fixed. (2) names were read from `pane layout`, which has no labels -> every
+title said `side by side`; read from `pane list` (LESSONS #27).
+**Note:** one `herdr-hud.ps1 -Once` dry run went to the owner's live session before the
+isolated test (it set border titles that expire after 2 minutes; nothing else).
+**Proof (isolated session with a test config):** 3 spaces + a Codex agent -> side by side ->
+titles `Digital- Factory · D:\...\GitHub\HERDR · gpt-6.1-sol medium · ctx 5% (22.7k/475k) ·
+out 8`, `MR.Park · ...`, `opening-nerp-tcode · ...`; labels and tokens confirmed by
+`pane get`; after Separate the names stayed. Claude reader on this session's log:
+`claude-opus-5-5 · ctx 30% (303.8k/1M) · out 245.1k`, 0.9 s first pass, 0.005 s after.
+Live: HUD running, the owner's Claude pane titled `HERDR · D:\...\opening-nerp-tcode ·
+claude-opus-5-5 · ctx 33% (327k/1M)`. A screenshot of the test window was not possible
+(Windows kept the owner's window in front).
+**Lesson:** #25, #26, #27, #28.

@@ -50,10 +50,12 @@ function Get-TabPanes($Workspace) {
     $list = Invoke-Herdr @("pane", "list", "--workspace", $Workspace.workspace_id)
     if (-not $list.Ok) { return @() }
     $panes = @($list.Json.result.panes | Where-Object { $_.tab_id -eq $Workspace.active_tab_id })
-    if ($panes.Count -le 1) { return $panes }
+    if (-not $panes) { return @() }
     $layout = Invoke-Herdr @("pane", "layout", "--pane", $panes[0].pane_id)
     $rects = @{}
     if ($layout.Ok) { foreach ($p in $layout.Json.result.layout.panes) { $rects[$p.pane_id] = $p.rect } }
+    # The pane's own name (ctrl+b shift+p) is "label" in pane list; absent when it has none.
+    foreach ($p in $panes) { if (-not $p.PSObject.Properties["label"]) { $p | Add-Member -NotePropertyName label -NotePropertyValue $null } }
     @($panes | Sort-Object { if ($rects[$_.pane_id]) { $rects[$_.pane_id].x } else { 0 } }, { if ($rects[$_.pane_id]) { $rects[$_.pane_id].y } else { 0 } })
 }
 
@@ -90,6 +92,15 @@ function Join-Spaces($Chosen) {
         $columns[$i] = $col
     }
 
+    # Every moved pane keeps a name: its own, else the space it came from - so the sidebar
+    # and its border do not all say "side by side". Rename any time with ctrl+b shift+p.
+    function Set-PaneName([string]$Id, $Pane, [string]$Space) {
+        if (-not $Pane.label) { [void](Invoke-Herdr @("pane", "rename", $Id, $Space)) }
+    }
+    for ($i = 0; $i -lt $n; $i++) {
+        if ($columns.ContainsKey($i)) { Set-PaneName $columns[$i] $sources[$i].Panes[0] $sources[$i].Space.label }
+    }
+
     # 3. Extra panes of a space are stacked inside ITS column only.
     for ($i = 0; $i -lt $n; $i++) {
         if (-not $columns.ContainsKey($i)) { continue }
@@ -101,6 +112,7 @@ function Join-Spaces($Chosen) {
             if (-not $m.Ok) { $problems += "$($src.Space.label) pane $($k + 1): $($m.Text)"; continue }
             $below = $m.Json.result.move_result.pane.pane_id
             Update-PaneRecord $src.Panes[$k].pane_id $below
+            Set-PaneName $below $src.Panes[$k] $src.Space.label
             $ids += $below
         }
         $groups += [PSCustomObject]@{ label = $src.Space.label; panes = $ids }

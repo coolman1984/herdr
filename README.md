@@ -53,6 +53,10 @@ herdr-agents fanout "<question>" -Agents codex,deepseek   # same task to both, o
 herdr-agents history    # every task and answer, kept as Markdown
 ```
 
+Every pane's top border shows **name · project path · model · context used · tokens**
+(`herdr-hud.ps1`, starts by itself), and the sidebar shows each agent's own name, model
+and context. Rename a pane with `Ctrl+B` `Shift+P`.
+
 Windows notifications are on: when an agent in a space you are not looking at
 finishes or needs you, Windows tells you.
 

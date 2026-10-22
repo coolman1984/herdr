@@ -11,6 +11,7 @@
 | `Herdr.cmd` | Launcher: Windows Terminal + Herdr in the current folder (App Path target) |
 | `herdr-open-folder.ps1` | Folder picker -> new workspace (+ Claude / + team) |
 | `herdr-layout.ps1` | Layout builder window (ctrl+b shift+b); `-PlanFile` builds without a window |
+| `herdr-hud.ps1` | Pane HUD: name, path, model, context, tokens on every pane border + sidebar (runs in the background) |
 | `herdr-spaces.ps1` | Spaces side by side and separate again (ctrl+b shift+s) |
 | `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
@@ -42,6 +43,7 @@
 | `%APPDATA%\herdr\herdr-agents-panes.json` | panes started by `herdr-agents` |
 | `%APPDATA%\herdr\layout-last.json` | last layout chosen in the layout builder |
 | Desktop + Start menu `Herdr.lnk` | one-click start |
+| Startup folder `Herdr HUD.lnk` | starts `herdr-hud.ps1` hidden at sign-in (one copy; Herdr.cmd starts it too) |
 | `~/.claude/skills/herdr-team`, `herdr-workspace` | Claude skills (from `skills/`) |
 | npm global `cline@3.0.73` | Cline CLI |
 | `~/.claude/settings.json` | only if the owner installs the Claude integration (one SessionStart hook) |

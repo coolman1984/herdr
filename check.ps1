@@ -84,6 +84,8 @@ if ($target -and (Test-Path -LiteralPath $target)) { Ok "'herdr' in Explorer -> 
 foreach ($lnk in @((Join-Path ([Environment]::GetFolderPath('Desktop')) "Herdr.lnk"), (Join-Path ([Environment]::GetFolderPath('Programs')) "Herdr.lnk"))) {
     if (Test-Path -LiteralPath $lnk) { Ok "shortcut $lnk" } else { Warn "shortcut missing: $lnk" }
 }
+$hudLink = Join-Path ([Environment]::GetFolderPath('Startup')) "Herdr HUD.lnk"
+if (Test-Path -LiteralPath $hudLink) { Ok "pane HUD starts at sign-in ($hudLink)" } else { Warn "pane HUD not started at sign-in: $hudLink missing" }
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User") -split ";"
 if ($userPath -contains $root) { Ok "this folder on user PATH (herdr-agents)" } else { Warn "this folder is not on the user PATH" }
 if (Test-Path -LiteralPath $herdr) {

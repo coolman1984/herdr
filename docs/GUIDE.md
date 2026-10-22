@@ -147,6 +147,22 @@ All start with **tool approval ON**. Cline is forced to `--auto-approve false`.
   and paste YOUR key there (never into a chat).
 - Codex asks **"Trust this folder?"** once per repository - answer in its pane.
 
+### What every pane and the sidebar show (ours)
+- **Pane top border:** `name · project path · model · ctx 33% (327k/1M) · out 245k`
+  - name = the pane's own name (`Ctrl+B` `Shift+P` to rename), else its space's name
+  - ctx = how full the agent's context window is (like Claude's and Codex's own status lines)
+  - out = tokens the agent has written in this session
+  - Codex shows model + effort (`gpt-6.1-sol medium`); Claude its model; others the model
+    they were started with.
+- **Sidebar, agents:** row 1 = state + the agent's own name + its space; row 2 = CLI and
+  model; row 3 = context. In a "side by side" view each agent keeps the name of the space
+  it came from.
+- **Sidebar, spaces:** row 2 = the git branch of the space's folder (e.g. `main`) and
+  arrows: `↑2` = 2 commits made here that are not pushed yet; `↓3` = 3 commits on GitHub
+  you have not pulled yet. No arrow = in sync.
+- Updated every 5 s by `herdr-hud.ps1`, which starts at sign-in and with Herdr. Claude's
+  dollar cost is not shown (only Claude Code itself knows it - see its own status line).
+
 ### Reading an agent at a glance
 The sidebar shows each agent's state. `Ctrl+B` `A` opens the board; `Ctrl+B` `G` jumps to
 any agent; `Ctrl+B` `O` jumps to the one that just notified you.

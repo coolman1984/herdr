@@ -77,3 +77,21 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     new id, so find spaces by label, not by a remembered id. A headless server with no
     window attached can fail splits with `ghostty error -1`; attach a window
     (`herdr --session <name>`) before testing layouts.
+25. **The sidebar is configurable** (`[ui.sidebar.agents] rows`, `[ui.sidebar.spaces] rows`):
+    built-in tokens `state_icon`, `workspace`, `tab`, `pane`, `agent`, `branch`, `git_status`
+    ..., plus `$name` custom tokens set by `pane report-metadata --token name=value`; a missing
+    token is left out. The agent panel's default first row is the SPACE name, so every agent
+    in one space shows the same name. Space rows: `branch` = the folder's git branch (the
+    theme colours it; gruvbox = red, not an error), `git_status` = up N commits not pushed,
+    down N commits on the remote not pulled (hidden when both are 0).
+26. **A pane's top border shows its metadata title** (`pane report-metadata --title`), else
+    its own name (`pane rename` / ctrl+b shift+p). The sidebar `pane` token uses the same
+    order, so put names in a `$token`, not in `pane`. Metadata with `--ttl-ms` disappears
+    by itself when nobody refreshes it.
+27. **A pane's own name is `label` in `pane list` / `pane get`** (absent when unset);
+    `pane layout` does NOT return it.
+28. **Agent usage is in the CLIs' session logs**, found by Herdr's `agent_session.value`:
+    Codex `~\.codex\sessions\**\rollout-*-<id>.jsonl` (`turn_context` model + effort,
+    `token_count` last input = context, `model_context_window`, total output); Claude
+    `~\.claude\projects\*\<id>.jsonl` (usage per reply, written on several lines with one
+    message id - count once). Read usage fields only.

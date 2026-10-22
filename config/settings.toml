@@ -5,3 +5,14 @@
 # needs you (approval / question), Windows shows a notification. Herdr's default is off.
 [ui.toast]
 delivery = "system"
+
+# Sidebar agent rows: its own name (from the HUD, herdr-hud.ps1) + the space, then the
+# CLI and model, then the context used - like the CLIs' own status lines.
+[ui.sidebar.agents]
+rows = [["state_icon", "$name", "workspace"], ["agent", "$model"], ["$ctx"]]
+
+# Sidebar space rows: the git branch in a calm colour (gruvbox showed it red, which looked
+# like an error); git_status = arrows: up N = commits not pushed yet, down N = commits on
+# the remote you have not pulled.
+[ui.sidebar.spaces]
+rows = [["state_icon", "workspace"], [{ token = "branch", fg = "#a89984" }, "git_status"]]
