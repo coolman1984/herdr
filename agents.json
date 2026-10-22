@@ -2,7 +2,7 @@
   "_comment": "Agent CLIs that herdr-agents.ps1 can start in Herdr panes. kind = Herdr agent kind; modelFlag = how the CLI takes a model; args = always passed (safety first: tools need approval); model = default when -Model is not given (empty = the CLI's own default). Edit freely.",
   "agents": {
     "claude":   { "kind": "claude",   "command": "claude",   "modelFlag": "--model", "model": "claude-opus-5-5", "args": [], "contextWindow": 1000000 },
-    "codex":    { "kind": "codex",    "command": "codex",    "modelFlag": "-m",      "model": "gpt-6.1-sol",     "args": [] },
+    "codex":    { "kind": "codex",    "command": "codex",    "modelFlag": "-m",      "model": "gpt-6.1-sol",     "args": [], "effortArgs": ["-c", "model_reasoning_effort={0}"] },
     "cline":    { "kind": "cline",    "command": "cline",    "modelFlag": "-m",      "model": "",                "args": ["--tui", "--auto-approve", "false"], "providerFlag": "-P", "provider": "" },
     "deepseek": { "kind": "cline",    "command": "cline",    "modelFlag": "-m",      "model": "",                "args": ["--tui", "--auto-approve", "false"], "providerFlag": "-P", "provider": "deepseek" },
     "opencode": { "kind": "opencode", "command": "opencode", "modelFlag": "-m",      "model": "",                "args": [] },

@@ -9,6 +9,8 @@
 #   Claude ~\.claude\projects\*\<session>.jsonl : assistant usage (input + cache = context,
 #          output summed per message id), model; window from agents.json "contextWindow"
 #   Others the model herdr-agents started them with, else the profile's default.
+#   Claude's $ cost: %APPDATA%\herdr\claude-cost\<session>.json, written by the owner's
+#          status line script ~\.claude\statusline.js (only Claude Code knows its cost).
 # <name> = the pane's own name (ctrl+b shift+p), else its space's name.
 [CmdletBinding()]
 param([int]$IntervalSec = 5, [switch]$Once)
@@ -172,6 +174,18 @@ function Update-Panes {
             if ($usage -and $usage.effort) { $model = "$model $($usage.effort)" }
             $parts += $model
             $tokens.model = $model
+            # Claude's dollar cost: written by ~\.claude\statusline.js for its session.
+            if ($kind -eq "claude" -and $sid) {
+                $costFile = Join-Path $env:APPDATA "herdr\claude-cost\$sid.json"
+                if (Test-Path -LiteralPath $costFile) {
+                    try {
+                        $c = Get-Content -LiteralPath $costFile -Raw | ConvertFrom-Json
+                        $cost = [string]::Format([cultureinfo]::InvariantCulture, '${0:0.00}', [double]$c.cost)
+                        $parts += $cost
+                        $tokens.cost = $cost
+                    } catch { }
+                }
+            }
             if ($usage -and $usage.ctx) {
                 $ctx = if ($usage.window) { "ctx {0}% ({1}/{2})" -f [int](100 * $usage.ctx / $usage.window), (Format-Tokens $usage.ctx), (Format-Tokens $usage.window) }
                        else { "ctx $(Format-Tokens $usage.ctx)" }

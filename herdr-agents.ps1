@@ -3,6 +3,7 @@
 #   herdr-agents tools                                   which agents exist on this PC (agents.json)
 #   herdr-agents start <agent> [-Model M] [-Name N] [-Direction right|down] [-Cwd PATH]
 #   herdr-agents start <agent> -Pane <pane-id>           start in an existing empty shell pane
+#   herdr-agents start codex -Effort medium              reasoning effort (agents.json effortArgs)
 #   herdr-agents ask <name> "<task>" [-TimeoutSec 900] [-Lines 200]   send a task, wait, print the answer
 #   herdr-agents ask <name> -TaskFile task.md                          long task from a file
 #   herdr-agents read <name> [-Lines 200] [-Visible]                   what is on its screen
@@ -13,22 +14,32 @@
 #   herdr-agents fanout "<task>" -Agents codex,deepseek  same task to several agents in parallel
 #   herdr-agents history [<n>]                           past tasks and answers (n = show one)
 #   herdr-agents watch [-Once] [-OpenPane]               live board: who is blocked / working / done
+#   herdr-agents team -PlanFile team.json [-LeadShare 0.4]   a team in columns right of me, tasks sent
+#     { "agents": [ { "name": "coder", "agent": "codex", "model": "gpt-6.1-sol", "effort": "medium",
+#                     "provider": "", "cwd": "D:\\x", "task": "..." or "taskFile": "D:\\x\\t.md" } ] }
+#     Page 1 = me + up to 3 agents; agents 4.. go 4 per page into new tabs "team 2", "team 3" ...
+#     (-Overflow space = new spaces instead). Up to 16 agents.
+#   herdr-agents collect -Agents coder,tester            wait for all, one report (like fanout)
 #
 # Safety: agents start with tool approval ON where the CLI allows it (agents.json "args").
 # When an agent waits for approval, "ask" prints BLOCKED and its screen - a person decides.
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory)]
-    [ValidateSet("tools", "start", "ask", "read", "status", "stop", "diff", "fanout", "history", "watch")]
+    [ValidateSet("tools", "start", "ask", "read", "status", "stop", "diff", "fanout", "history", "watch", "team", "collect")]
     [string]$Command,
     [Parameter(Position = 1)] [string]$Target,
     [Parameter(Position = 2)] [string]$Task,
     [string]$Model,
+    [string]$Effort,
     [string]$Provider,
     [string]$Name,
     [ValidateSet("right", "down")] [string]$Direction = "right",
     [string]$Cwd,
     [string]$TaskFile,
+    [string]$PlanFile,
+    [double]$LeadShare = 0.4,
+    [ValidateSet("tab", "space")] [string]$Overflow = "tab",
     [string]$Pane,
     [string]$Worktree,
     [string[]]$Agents,
@@ -196,6 +207,11 @@ switch ($Command) {
         if ($prov) { $agentArgs += @($a.providerFlag, $prov) }
         $mdl = if ($Model) { $Model } else { $a.model }
         if ($mdl) { $agentArgs += @($a.modelFlag, $mdl) }
+        # Reasoning effort (low / medium / high ...): agents.json "effortArgs", {0} = the value.
+        if ($Effort) {
+            if (-not $a.PSObject.Properties["effortArgs"]) { Fail "$Target has no effort setting in agents.json." }
+            $agentArgs += @($a.effortArgs | ForEach-Object { $_ -f $Effort })
+        }
 
         $repoRoot = $null; $baseBranch = $null
         if ($Worktree) {
@@ -286,6 +302,109 @@ switch ($Command) {
         $log = Save-Run ("fanout-" + ($names -join "-")) $task $summary $body
         foreach ($x in $answers) { Write-Output "===== $($x.Name): $($x.Outcome) ====="; Write-Output $x.Text; Write-Output "" }
         Write-Output "FANOUT $summary"
+        Write-Output "--- saved: $log ---"
+        $worst = ($answers | Measure-Object -Property Exit -Maximum).Maximum
+        exit $(if ($answers | Where-Object { $_.Outcome -eq "FAILED" }) { 1 } else { $worst })
+    }
+
+    "team" {
+        # The lead (the caller, usually Claude) keeps the left part of its pane; the team
+        # gets equal columns to the right; every agent starts and gets its task, no waiting.
+        if ($env:HERDR_ENV -ne "1" -or -not $env:HERDR_PANE_ID) { Fail "team must run inside a Herdr pane (HERDR_ENV=1)." }
+        if (-not $PlanFile -or -not (Test-Path -LiteralPath $PlanFile)) { Fail "team needs -PlanFile team.json (format in this script's header)." }
+        $members = @((Get-Content -LiteralPath $PlanFile -Raw | ConvertFrom-Json).agents)
+        if ($members.Count -lt 1 -or $members.Count -gt 16) { Fail "A team has 1 to 16 agents." }
+        $registry = Get-Registry
+        foreach ($m in $members) {
+            if (-not $registry.PSObject.Properties[$m.agent]) { Fail "Unknown agent '$($m.agent)' for '$($m.name)'. See: herdr-agents tools" }
+            if ($m.name -and $m.name -notmatch '^[a-z][a-z0-9_-]{0,31}$') { Fail "Name must match [a-z][a-z0-9_-]{0,31}: $($m.name)" }
+        }
+        # Agents without a "cwd" work in the lead pane's folder.
+        $lead = (Invoke-Herdr @("pane", "get", $env:HERDR_PANE_ID)).Json.result.pane
+        $here = if ($lead -and $lead.cwd) { ([string]$lead.cwd).TrimEnd('\') } else { (Get-Location).ProviderPath }
+        $cwdOf = { param($m) if ($m.PSObject.Properties["cwd"] -and $m.cwd) { $m.cwd } else { $here } }
+        $fmt = { param($v) [string]::Format([cultureinfo]::InvariantCulture, "{0:0.####}", $v) }
+        # Split $First into $Count equal columns to its right... (ratio 1/remaining, LESSONS #17).
+        $fill = {
+            param($first, $group)
+            $ids = @($first)
+            for ($k = 1; $k -lt $group.Count; $k++) {
+                $s = Invoke-Herdr @("pane", "split", $ids[-1], "--direction", "right", "--ratio", (& $fmt (1.0 / ($group.Count - $k + 1))), "--cwd", (& $cwdOf $group[$k]), "--no-focus")
+                if (-not $s.Ok) { Fail "Could not open a column for $($group[$k].name): $($s.Text)" }
+                $ids += $s.Json.result.pane.pane_id
+            }
+            $ids
+        }
+        # Page 1 = the lead + up to 3 agents (4 columns). More agents: 4 per extra page, each
+        # page a new tab of the lead's space ("team 2", "team 3" ...), or a new space with
+        # -Overflow space.
+        $firstGroup = @($members | Select-Object -First 3)
+        $split = Invoke-Herdr @("pane", "split", $env:HERDR_PANE_ID, "--direction", "right", "--ratio", (& $fmt ([Math]::Min(0.8, [Math]::Max(0.2, $LeadShare)))), "--cwd", (& $cwdOf $firstGroup[0]), "--no-focus")
+        if (-not $split.Ok) { Fail "Could not open the team area: $($split.Text)" }
+        $panes = @(& $fill $split.Json.result.pane.pane_id $firstGroup)
+        $rest = @($members | Select-Object -Skip 3)
+        $page = 2
+        while ($rest.Count -gt 0) {
+            $group = @($rest | Select-Object -First 4)
+            $rest = @($rest | Select-Object -Skip 4)
+            $label = "team $page"
+            $made = if ($Overflow -eq "space") {
+                Invoke-Herdr @("workspace", "create", "--cwd", (& $cwdOf $group[0]), "--label", "$((Invoke-Herdr @('workspace', 'get', $lead.workspace_id)).Json.result.workspace.label) $label", "--no-focus")
+            } else {
+                Invoke-Herdr @("tab", "create", "--workspace", $lead.workspace_id, "--cwd", (& $cwdOf $group[0]), "--label", $label, "--no-focus")
+            }
+            if (-not $made.Ok) { Fail "Could not open page ${page}: $($made.Text)" }
+            $panes += @(& $fill $made.Json.result.root_pane.pane_id $group)
+            Write-Output "PAGE $page ($Overflow): $(($group | ForEach-Object { $_.name }) -join ', ')"
+            $page++
+        }
+        $exit = 0
+        for ($i = 0; $i -lt $members.Count; $i++) {
+            $m = $members[$i]
+            $startArgs = @("-NoProfile", "-File", $PSCommandPath, "start", $m.agent, "-Pane", $panes[$i], "-Cwd", (& $cwdOf $m))
+            foreach ($f in @("name", "model", "effort", "provider")) {
+                if ($m.PSObject.Properties[$f] -and $m.$f) { $startArgs += @("-$((Get-Culture).TextInfo.ToTitleCase($f))", $m.$f) }
+            }
+            $out = (& pwsh @startArgs 2>&1) -join "`n"
+            $code = $LASTEXITCODE
+            Write-Output $out
+            if ($code -ne 0) { $exit = 2; continue }
+            $who = if ($out -match 'STARTED name=(\S+)') { $Matches[1] } else { $null }
+            if ($who) { [void](Invoke-Herdr @("pane", "rename", $panes[$i], $who)) }
+            $t = if ($m.PSObject.Properties["taskFile"] -and $m.taskFile) { Get-Content -LiteralPath $m.taskFile -Raw } elseif ($m.PSObject.Properties["task"]) { $m.task } else { $null }
+            if ($who -and $t) {
+                $sent = Invoke-Herdr @("agent", "prompt", $who, $t)
+                Write-Output $(if ($sent.Ok) { "SENT task to $who" } else { "NOT SENT to ${who}: $($sent.Text)" })
+                if (-not $sent.Ok) { $exit = 1 }
+            }
+        }
+        Write-Output "TEAM ready. Watch: herdr-agents read <name> -Visible   Collect: herdr-agents collect -Agents <names>"
+        exit $exit
+    }
+
+    "collect" {
+        # Wait for every named agent to settle, then one report (as fanout, without sending).
+        $names = @($Agents | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+        if (-not $names) { Fail "collect needs -Agents a,b,c (see: herdr-agents status)" }
+        $ms = ($TimeoutSec * 1000).ToString()
+        $jobs = foreach ($n in $names) {
+            Start-ThreadJob -ArgumentList $herdr, $n, $ms -ScriptBlock {
+                param($h, $n, $ms)
+                $out = & $h agent wait $n --timeout $ms 2>&1
+                $text = ($out | ForEach-Object { $_.ToString() }) -join "`n"
+                $json = $null
+                try { $json = $text | ConvertFrom-Json } catch { }
+                [PSCustomObject]@{ Name = $n; Ok = ($LASTEXITCODE -eq 0); Text = $text; Json = $json }
+            }
+        }
+        $results = @($jobs | Wait-Job | Receive-Job)
+        $jobs | Remove-Job
+        $answers = foreach ($n in $names) { Complete-Ask $n ($results | Where-Object { $_.Name -eq $n } | Select-Object -First 1) }
+        $body = ($answers | ForEach-Object { "### $($_.Name): $($_.Outcome)`n`n``````text`n$($_.Text)`n```````n" }) -join "`n"
+        $summary = ($answers | ForEach-Object { "$($_.Name)=$($_.Outcome)" }) -join " "
+        $log = Save-Run ("collect-" + ($names -join "-")) "(collect)" $summary $body
+        foreach ($x in $answers) { Write-Output "===== $($x.Name): $($x.Outcome) ====="; Write-Output $x.Text; Write-Output "" }
+        Write-Output "COLLECT $summary"
         Write-Output "--- saved: $log ---"
         $worst = ($answers | Measure-Object -Property Exit -Maximum).Maximum
         exit $(if ($answers | Where-Object { $_.Outcome -eq "FAILED" }) { 1 } else { $worst })

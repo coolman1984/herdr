@@ -23,6 +23,27 @@ herdr-agents history [<n>]                 # past tasks + answers (%APPDATA%\her
 herdr-agents watch [-Once] [-OpenPane]     # live board; ctrl+b a opens it in a pane below
 ```
 
+## Team routine: several agents in columns beside Claude
+
+Tell Claude e.g. *"make 3 subagents: Codex SOL 6.1 medium writes X, DeepSeek writes the
+tests, a second Claude reviews"*. Claude then (skill `herdr-team`, section 1b):
+1. writes a self-contained task per agent and keeps the critical part for itself;
+2. `herdr-agents team -PlanFile team.json` - its own pane keeps the left 40%, the agents
+   get equal columns on the right (each pane named after its agent), every task is sent;
+3. does its own part, reads each agent's screen every few minutes and corrects it;
+4. `herdr-agents collect -Agents a,b,c` - waits for all, one report saved;
+5. reviews every change itself (diff, tests), sends defects back;
+6. gives you a short report and stops the agents.
+
+```json
+{ "agents": [
+  { "name": "coder",  "agent": "codex",    "model": "gpt-6.1-sol", "effort": "medium", "taskFile": "tasks\\x.md" },
+  { "name": "tester", "agent": "deepseek", "model": "<model-id>",  "task": "Write tests for ..." }
+] }
+```
+
+`-Effort` (low / medium / high ...) works for Codex (`effortArgs` in agents.json).
+
 ## Worktrees: an agent on its own branch
 
 `-Worktree <branch>` makes `~\.herdr\worktrees\<repo>\<branch>` with `git worktree add`

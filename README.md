@@ -32,6 +32,7 @@ Press `Ctrl+B`, let go, then the key.
 | `Ctrl+B` `Shift+V` | Split the pane into 4 equal columns, all in the same folder |
 | `Ctrl+B` `Shift+B` | **Layout builder**: 1-6 equal columns, each with its own folder and an empty PowerShell, a new agent (any model), or an already-running agent moved in. **Save preset...** keeps a layout under a name; pick it next time from **Preset** |
 | `Ctrl+B` `A` | **Agent board** in a pane below: every agent, blocked ones first in red |
+| `Ctrl+B` `I` | **All shortcuts** (type to filter) and the full guide in one window |
 | `Ctrl+B` `Shift+S` | **Spaces side by side**: tick spaces from the sidebar -> one view, a column each (agents keep running); **Separate again** puts them back |
 | `Ctrl+B` `-` / `C` | Split down / new tab |
 | `Ctrl+B` `Q` | Detach (agents keep running) |

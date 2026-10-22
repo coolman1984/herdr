@@ -29,6 +29,9 @@ pwsh -NoProfile -File $T <command> ...
 | ... Cline, any provider | `pwsh -NoProfile -File $T start cline -Provider <id> -Model <model>` |
 | ... a second Claude | `pwsh -NoProfile -File $T start claude -Name reviewer` |
 | ... below instead of right | add `-Direction down` |
+| ... with reasoning effort | add `-Effort medium` (codex; agents.json `effortArgs`) |
+| A whole team in columns, tasks sent | `pwsh -NoProfile -File $T team -PlanFile team.json` (section 1b) |
+| Wait for the team, one report | `pwsh -NoProfile -File $T collect -Agents a,b,c` |
 | Give a task, wait, get answer | `pwsh -NoProfile -File $T ask codex "<task>" -TimeoutSec 900` |
 | Long task | write it to a .md file, then `ask codex -TaskFile <path>` |
 | See its screen / transcript | `pwsh -NoProfile -File $T read codex` (`-Visible` = screen now) |
@@ -56,6 +59,40 @@ Code changes by another agent: prefer `-Worktree <branch>` so the main checkout 
 clean, review with `diff`, run the tests in the worktree, and leave merging and removing
 the worktree to the user unless they ask. A new repo's Codex starts BLOCKED on its trust
 question - the user answers it.
+
+## 1b. Team routine (the owner's standing order)
+
+When the owner asks for N subagents ("make 3 subagents: Codex SOL 6.1 medium does X,
+DeepSeek does Y ..."), ALWAYS run this routine:
+
+0. **You are the lead senior engineer** with full control and full responsibility. You
+   make the whole plan and the design; agents execute. They never guess: you decide the
+   technologies, files, function names and signatures, data formats, UI layout, error
+   handling and the checks. Research first (code, docs, web) when the design is unclear.
+1. **Plan and specs.** Write the overall plan (goal, parts, order, who does what, how the
+   parts fit). For each agent: profile, model, effort, provider, folder, and ONE spec file
+   `tasks\<name>.md` filled from
+   `D:\WORK\Software Development\GitHub\HERDR\tasks\TEMPLATE.md` (role + goal + why,
+   context, exact scope, design with function signatures, steps, definition of done with
+   commands, answer format). Keep the critical / risky / integrating part for yourself.
+   Split work so two agents never edit the same file.
+2. **Open the team** in vertical columns right of your pane, tasks sent at once:
+   write `team.json` and run `pwsh -NoProfile -File $T team -PlanFile team.json`
+   (you keep 40% on the left; `-LeadShare` changes it). Check every line says STARTED
+   and SENT; NOT READY = show the owner its screen.
+3. **Do your own part** while they work.
+4. **Monitor.** Every few minutes `read <name> -Visible` for each agent (and `watch -Once`).
+   Wrong direction -> `agent prompt` a correction at once (stop it with
+   `herdr agent send-keys <name> esc` first if it is mid-turn). BLOCKED -> show the owner;
+   approve only what the owner allowed in this request (never secrets, never outside the
+   task's folder).
+5. **Collect**: `pwsh -NoProfile -File $T collect -Agents a,b,c -TimeoutSec 1800`.
+6. **Review.** Read every change yourself (git diff, run the tests/checks). Send defects
+   back to the agent that made them; optionally ask one agent to review another's work.
+   Nothing is "done" until you verified it.
+7. **Report** to the owner, short: per agent - task, result, verified how; your own part;
+   what is left. Then stop the agents you started (`stop <name>`) unless the owner wants
+   them kept.
 
 ## 2. How to delegate well
 

@@ -95,3 +95,11 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     `token_count` last input = context, `model_context_window`, total output); Claude
     `~\.claude\projects\*\<id>.jsonl` (usage per reply, written on several lines with one
     message id - count once). Read usage fields only.
+29. **Codex effort: `-c model_reasoning_effort=<level>`** (levels in `~\.codex\config.toml`
+    `enabled-reasoning-efforts`). Its footer says `default` until the first turn, then the
+    real level (`GPT-6.1-Sol medium`); `herdr pane process-info` shows the real argv.
+30. **Claude's dollar cost exists only inside Claude Code**: the status line command gets it
+    on stdin (`cost.total_cost_usd`, `session_id`); the session log has tokens, no cost.
+31. **Codex brings its own environment rules into our code** (it used a Chrome-launcher
+    script from its skills for "open in browser"). Name the exact API in the spec and
+    review for outside dependencies.

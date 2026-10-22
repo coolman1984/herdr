@@ -269,3 +269,42 @@ Live: HUD running, the owner's Claude pane titled `HERDR · D:\...\opening-nerp-
 claude-opus-5-5 · ctx 33% (327k/1M)`. A screenshot of the test window was not possible
 (Windows kept the owner's window in front).
 **Lesson:** #25, #26, #27, #28.
+
+## Phase 16 - Shortcuts window by a Codex subagent, Claude's cost, team routine (2026-10-22)
+
+**Symptom:** the owner wanted (1) Claude's dollar cost on the pane border, (2) a key that
+pops up every shortcut, (3) a guide section explaining how to use every feature, (4) Codex
+SOL 6.1 medium as a visible subagent writing code while Claude reads and controls it, and
+then (5) this as the standing routine for any team of subagents, with Claude as the lead
+senior engineer who plans everything and gives agents complete specs.
+**Fix:**
+1. Cost: the owner approved changing `~\.claude\statusline.js` (backed up): new
+   `shareCostWithHerdr` writes `%APPDATA%\herdr\claude-cost\<session>.json`; the status line
+   output is unchanged. `herdr-hud.ps1` adds `$cost` for Claude panes (LESSONS #30).
+2. `herdr-help.ps1` (`ctrl+b i`): Shortcuts tab (filter + list from `config/keys.toml`, Herdr's
+   keys, commands) and Guide tab (`docs/GUIDE.md` rendered), Open in browser, `-List`.
+   **Written by Codex** in a pane next to Claude from the spec `tasks/help-window.md`.
+3. `docs/GUIDE.md` section 13: step by step for every feature (18 parts).
+4. `herdr-agents start -Effort <level>` (agents.json `effortArgs`, Codex) - LESSONS #29.
+5. `herdr-agents team -PlanFile` (lead keeps 40% left, agents in equal named columns, each
+   started and given its task) and `collect -Agents` (waits for all, one report).
+6. Routine in the `herdr-team` skill section 1b (lead engineer: research, plan, design,
+   specs from `tasks/TEMPLATE.md`, monitor screens, correct, review, collect, short report)
+   and in Claude's memory.
+**How Codex was led:** started at `-Effort medium` (process argv confirmed
+`model_reasoning_effort=medium`; footer showed `default` until its first turn, then
+`GPT-6.1-Sol medium`). Claude read its screen during the work: it found and fixed its own
+ListViewGroup bug and reported DONE (37 rows, 0 parse errors). Claude's review found one
+defect - "Open guide in browser" depended on a Chrome-launcher Python script from Codex's
+own skills (LESSONS #31) - and sent it back: fixed in 40 s (`Start-Process` on the file,
+error boxes owned by the window). Claude then fixed the descriptions (they repeated the
+key) itself.
+**Proof:** `-List` 38 rows (8 keys of ours + 27 Herdr + 3 commands), descriptions clean;
+window screenshot: tabs, filter, 38 rows, buttons. Status line test: same output, cost file
+written. Live border: `HERDR · ... · claude-opus-5-5 · $10.18 · ctx ...`; Codex pane
+`gpt-6.1-sol medium · ctx 14% (67.9k/475k)`. Isolated session: `team` with 2 Codex agents ->
+lead 48 / agents 36 + 36 columns, panes named `ta` / `tb`, both answered (`TA-OK`, effort
+`low` shown); `collect` -> `ta=DONE tb=DONE`, report saved; an agent without `cwd` starts in
+the lead's folder. Key added to keys.toml + live config (backed up), `config check` ok,
+reload `applied`. Test session removed.
+**Lesson:** #29, #30, #31.

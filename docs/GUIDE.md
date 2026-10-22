@@ -6,7 +6,10 @@ folder around it.
 
 Contents: 1 Start · 2 Words · 3 Keys · 4 Folders and layouts · 5 Agents ·
 6 Claude leads the team · 7 Notifications · 8 Sessions and machines ·
-9 Daily recipes · 10 Tricks · 11 When something goes wrong · 12 Safety
+9 Daily recipes · 10 Tricks · 11 When something goes wrong · 12 Safety ·
+**13 How to do everything, step by step**
+
+All shortcuts in one window: `Ctrl+B`, then `I` (search box + this guide).
 
 ---
 
@@ -52,6 +55,7 @@ Press `Ctrl+B`, let go, then the key. `Ctrl+B` `?` shows them inside the app.
 | `Shift+B` | **Layout builder** window (section 4) |
 | `A` | **Agent board** in a pane below: every agent, blocked first in red |
 | `Shift+S` | **Spaces side by side** / separate again (section 4) |
+| `I` | **All shortcuts** (type to filter) and this guide in one window |
 
 ### Herdr's own
 
@@ -266,3 +270,128 @@ More: [SETUP.md](SETUP.md) (install, update, restore).
 - Close only what they started; never `herdr server stop` on their own.
 - Never delete a worktree or merge a branch for you unless you ask.
 - Back up Herdr's config before every change (`config.toml.<time>.bak`).
+
+## 13. How to do everything, step by step
+
+Every feature, as exact steps. "Press `Ctrl+B` `X`" means: press `Ctrl+B`, let go,
+then press `X`. Commands can be typed in any pane (PowerShell).
+
+### 13.1 Open Herdr
+1. Double-click **Herdr** on the Desktop or in the Start menu - or in File Explorer
+   go to a project folder, click the address bar, type `herdr`, press Enter.
+2. Herdr opens in Windows Terminal. If it was already running you get your spaces back.
+3. To leave without stopping anything: `Ctrl+B` `Q` (or close the window).
+
+### 13.2 Open a project
+1. Press `Ctrl+B` `F` (empty terminal), `Ctrl+B` `Shift+F` (with Claude) or `Ctrl+B` `T`
+   (Claude left + Codex right).
+2. A folder dialog opens at the last folder you used. Choose the project, click
+   **Select Folder**.
+3. A new space named after the folder appears in the sidebar and is focused.
+
+### 13.3 Split, move, resize, zoom, close panes
+- Split side by side: `Ctrl+B` `V`. Split stacked: `Ctrl+B` `-`.
+- Four equal columns in this folder: `Ctrl+B` `Shift+V`.
+- Move between panes: `Ctrl+B` then `H` `J` `K` `L` (or arrows), or click the pane.
+- Swap a pane with its neighbour: `Ctrl+B` `Shift+H/J/K/L`.
+- Resize: `Ctrl+B` `R`, then arrows, `Esc` to finish.
+- Zoom one pane to full size and back: `Ctrl+B` `Z`.
+- Close the pane: `Ctrl+B` `X` (an agent in it stops).
+
+### 13.4 Build a layout with a folder and an agent per column
+1. `Ctrl+B` `Shift+B`.
+2. **Columns**: 1-6. **Open in**: new tab here, or a new space. **Name**: what it is called.
+3. For each column: type or **Browse...** a folder; in **Runs** pick `PowerShell (empty)`,
+   `New: <agent>` (optional **model**), or `Running: <agent>` to move a running agent in.
+4. Click **Open layout**.
+5. To keep it: before opening, click **Save preset...** and give a name. Next time pick
+   it from **Preset** and click **Open layout**.
+
+### 13.5 See several spaces side by side, then separate them
+1. `Ctrl+B` `Shift+S`. Every space is listed and ticked; untick what you do not want.
+   The top one becomes the left column.
+2. Click **Side by side**. A space `side by side` opens with one column per space; each
+   pane keeps the name of the space it came from; agents keep running.
+3. To undo: `Ctrl+B` `Shift+S` -> **Separate again**. Each goes back to its own space.
+
+### 13.6 Rename things
+- A pane (shows on its border and in the sidebar): `Ctrl+B` `Shift+P`, type, Enter.
+- A tab: `Ctrl+B` `Shift+T`. A space: `Ctrl+B` `Shift+W`.
+
+### 13.7 Read a pane's border and the sidebar
+- Border: `name · path · model · $cost · ctx 33% (327k/1M) · out 245k`.
+  `$cost` = Claude's cost so far (Claude only); `ctx` = how full its memory (context
+  window) is; `out` = tokens it has written.
+- Sidebar agents: state dot + name + space / CLI + model / context.
+- Sidebar spaces: `main` = git branch; `↑2` = 2 commits not pushed; `↓3` = 3 commits on
+  GitHub not pulled.
+- The values refresh every 5 s. If a border shows nothing: run
+  `pwsh -File "D:\WORK\Software Development\GitHub\HERDR\herdr-hud.ps1"` once in any
+  pane (it starts by itself at sign-in and with Herdr).
+
+### 13.8 Start an agent yourself
+- In a pane at the prompt type the CLI: `claude`, `codex`, `cline`, `opencode`, `grok`, `agy`.
+- Or next to your pane, with a model/effort:
+  `herdr-agents start codex -Model gpt-6.1-sol -Effort medium`
+  `herdr-agents start claude -Model claude-opus-5-5 -Name reviewer`
+  `herdr-agents start deepseek -Model <model-id>`
+  Add `-Direction down` to open it below, `-Cwd <folder>` for another folder.
+
+### 13.9 Let Claude lead other agents
+1. Open Claude in Herdr (`Ctrl+B` `Shift+F`).
+2. Ask in plain words, e.g. *"Start Codex on SOL 6.1 medium next to you, make it write X,
+   watch its screen and check its work."*
+3. Claude starts the agent in a pane next to it, sends the task, reads its screen, and
+   checks the result. If the agent asks for approval, Claude shows you; you decide.
+
+### 13.10 Give a task and get the answer (yourself)
+1. `herdr-agents status` - see names (`codex`, `codex-2`, ...).
+2. `herdr-agents ask codex "Explain what herdr-hud.ps1 does in 5 lines"`.
+3. It waits and prints DONE + the answer (or BLOCKED: go to its pane and decide).
+4. Long task: write it in a .md file, `herdr-agents ask codex -TaskFile task.md`.
+5. See its screen any time: `herdr-agents read codex -Visible`.
+
+### 13.11 Ask several agents the same thing
+1. Start them (13.8), e.g. `codex` and `deepseek`.
+2. `herdr-agents fanout "Which approach is safer, A or B? Why?" -Agents codex,deepseek`.
+3. Both answer in parallel; one report is printed and saved.
+
+### 13.12 Let an agent change code safely (own branch)
+1. In the project: `herdr-agents start codex -Worktree fix-login -Cwd <repo folder>`.
+   A new space opens on branch `fix-login` in its own folder.
+2. Codex may ask "Trust this folder?" - answer it in its pane (once per repository).
+3. Give the task: `herdr-agents ask codex "Fix the login timeout; run the tests"`.
+4. Review: `herdr-agents diff codex` (commits and files changed).
+5. Happy? In your main folder: `git merge fix-login`.
+6. `herdr-agents stop codex`, then run the `git worktree remove ...` line it prints.
+
+### 13.13 Find an old answer
+`herdr-agents history` lists the last 20 tasks; `herdr-agents history 3` shows number 3.
+Files: `%APPDATA%\herdr\agent-runs\<date>\`.
+
+### 13.14 Watch all agents
+- `Ctrl+B` `A` opens the live board below the current pane (blocked = red, on top).
+  Close it with `Ctrl+C`, then `Ctrl+B` `X`.
+- Away from Herdr: a Windows notification tells you when an agent in another space
+  finishes or needs you; `Ctrl+B` `O` jumps to it.
+
+### 13.15 Stop agents
+- One this tool started: `herdr-agents stop <name>`.
+- Any agent: go to its pane and exit it (`/exit` or `Ctrl+C`), or `Ctrl+B` `X`.
+- Everything, including the server: `herdr server stop` (rarely needed).
+
+### 13.16 Use DeepSeek or another Chinese model (Cline)
+1. Once: in any pane run `cline auth deepseek` and paste your own API key there.
+2. `herdr-agents start deepseek -Model <model-id>` (or pick `New: deepseek` in the layout
+   builder). Cline starts with approval ON.
+
+### 13.17 Show all shortcuts
+`Ctrl+B` `I`: a window with every shortcut (type to filter) and this guide. `Ctrl+B` `?`
+shows Herdr's own key list.
+
+### 13.18 Check, repair, update
+- Check everything: `pwsh -File "D:\WORK\Software Development\GitHub\HERDR\check.ps1"`.
+- A key stopped working: `herdr server reload-config`.
+- Update Herdr: `herdr update`, then run the check.
+- Restore an older config: `%APPDATA%\herdr\config.toml.<time>.bak` (copy it over
+  `config.toml`, then reload).

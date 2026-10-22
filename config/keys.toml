@@ -44,3 +44,9 @@ command = 'pwsh -NoProfile -WindowStyle Hidden -File "D:\WORK\Software Developme
 key = "prefix+shift+s"
 type = "shell"
 command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-spaces.ps1"'
+
+# Help: ctrl+b then i -> every shortcut (type to filter) and the full guide in one window.
+[[keys.command]]
+key = "prefix+i"
+type = "shell"
+command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-help.ps1"'
