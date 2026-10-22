@@ -121,3 +121,18 @@ installed by the owner. `check.ps1` -> all checks passed.
 **Proof the check can fail:** with a reference to a lesson number that does not exist, Cline set to
 `--auto-approve true` and an undocumented file, `check.ps1` reported 4 FAIL, exit 1;
 restored -> all checks passed.
+
+## Phase 11 - Side-by-side panes: 2 and 4 equal columns (2026-10-22)
+
+**Symptom:** the owner wanted 2 panes side by side, and 4 PowerShell panes side by
+side in one space.
+**Cause:** 2 is built in (`ctrl+b v`), but repeating it halves the focused pane each
+time (1/2, 1/4, 1/8), so 4 equal columns needed the right pane each time and a ratio.
+**Fix:** `herdr-columns.ps1` (`-Count 2..8`, `-Direction right|down`) splits the
+focused pane (`herdr pane current`) with ratios 1/N, 1/(N-1) ... 1/2, every new
+pane in the same folder, focus unchanged. Bound to `prefix+shift+v` (4 columns) in
+`config/keys.toml` and the live config (backed up first); reload -> `applied`, no
+diagnostics. The owner had meanwhile switched the theme to `gruvbox` - kept.
+**Proof:** test workspace, 254 columns wide -> panes at x=0/64/127/191, widths
+64/63/64/63, all four in the same folder; workspace closed.
+**Lesson:** #17.

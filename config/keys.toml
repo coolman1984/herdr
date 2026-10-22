@@ -18,3 +18,9 @@ command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Deve
 key = "prefix+t"
 type = "shell"
 command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-open-folder.ps1" -Agent team'
+
+# Columns: ctrl+b then shift+v -> split the focused pane into 4 equal columns (same folder).
+[[keys.command]]
+key = "prefix+shift+v"
+type = "shell"
+command = 'pwsh -NoProfile -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-columns.ps1" -Count 4'

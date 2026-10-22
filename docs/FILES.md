@@ -10,6 +10,7 @@
 | `docs/` | SETUP, DELEGATION, this file |
 | `Herdr.cmd` | Launcher: Windows Terminal + Herdr in the current folder (App Path target) |
 | `herdr-open-folder.ps1` | Folder picker -> new workspace (+ Claude / + team) |
+| `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
 | `agents.json` | Agent profiles for the delegation tool |
 | `config/keys.toml` | Master copy of the key bindings added to Herdr's config |

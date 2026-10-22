@@ -28,7 +28,9 @@ Press `Ctrl+B`, let go, then the key.
 | `Ctrl+B` `F` | Pick a folder (Windows dialog) -> new workspace there |
 | `Ctrl+B` `Shift+F` | Same, and start Claude Code in it |
 | `Ctrl+B` `T` | Same, with a team: Claude Code left + Codex (GPT-6.1-Sol) right |
-| `Ctrl+B` `V` / `-` / `C` | Split right / split down / new tab |
+| `Ctrl+B` `V` | Split the pane in two, side by side |
+| `Ctrl+B` `Shift+V` | Split the pane into 4 equal columns, all in the same folder |
+| `Ctrl+B` `-` / `C` | Split down / new tab |
 | `Ctrl+B` `Q` | Detach (agents keep running) |
 | `Ctrl+B` `?` | All keys |
 

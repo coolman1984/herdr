@@ -43,3 +43,7 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     "has unknown keys" notice but the rest still applies.
 16. **Herdr's own agent skill** (`herdr --skill`, copy in `herdr-skill.md`) is the
     authority for CLI syntax; it says agent commands require `HERDR_ENV=1`.
+17. **`pane split --ratio R` gives the ORIGINAL pane the share R** (0.25 on a 254-wide
+    pane -> 64 | 190). Equal N columns: split with 1/N, then the new pane with
+    1/(N-1), ... 1/2. Repeated plain `ctrl+b v` halves each time (1/2, 1/4, 1/8 ...).
+    `herdr pane current` with no argument returns the UI-focused pane.
