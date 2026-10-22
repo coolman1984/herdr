@@ -57,6 +57,7 @@ Press `Ctrl+B`, let go, then the key. `Ctrl+B` `?` shows them inside the app.
 | `Shift+S` | **Spaces side by side** / separate again (section 4) |
 | `I` | **All shortcuts** (type to filter) and this guide in one window |
 | `Shift+Q` | **Stop Herdr for real** (asks first): every agent and pane stops. Same as the Desktop icon **Stop Herdr** |
+| `Shift+C` | **Claude on the NEXT account**: the Claude account with the least 5-hour use (section 13.20) |
 
 ### Herdr's own
 
@@ -285,6 +286,9 @@ then press `X`. Commands can be typed in any pane (PowerShell).
    go to a project folder, click the address bar, type `herdr`, press Enter.
 2. Herdr opens in Windows Terminal. If it was already running you get your spaces back.
 3. To leave without stopping anything: `Ctrl+B` `Q` (or close the window).
+- All three ways start `launcher\HerdrLauncher.exe`: a windowless program, so no black console
+  window flashes (it also starts the pane HUD, one copy only). `Herdr.cmd` does the same and
+  stays as the fallback; `pwsh -File launcher\use-launcher.ps1 -Undo` points everything back at it.
 
 ### 13.2 Open a project
 1. Press `Ctrl+B` `F` (empty terminal), `Ctrl+B` `Shift+F` (with Claude) or `Ctrl+B` `T`
@@ -423,3 +427,19 @@ Grok / OpenCode subscription (another email) has its own limits.
 - Works for: Claude, Codex, Cline (all Cline Pass profiles share the `cline` accounts), OpenCode,
   Grok. Not for Antigravity (its sign-in cannot be separated).
 - Check each provider's terms for using several accounts.
+
+### 13.20 Claude's usage limits and switching accounts (2030 / 2040 / 1984)
+Claude accounts have names: **2030** = your main sign-in, **2040** and **1984** = the separate
+accounts. Each has its own 5-hour and weekly limit.
+1. See them: `herdr-agents usage` - per account the 5-hour %, weekly %, reset times, cost
+   today and how old the numbers are; `LIMIT` = 95% or more; last line `NEXT: <account>` = the
+   one with the least 5-hour use. "no data (open it once)": start Claude on it once.
+2. The border of every Claude pane shows `5h N%` and `account <name>`.
+3. At 95%, Herdr shows one notification: "<account> at 96% - switch: Ctrl+B Shift+C".
+4. Switch: `Ctrl+B` `Shift+C` (or `herdr-agents start next`) opens Claude on NEXT beside the
+   focused pane. A conversation cannot move between accounts, so the lead first writes a
+   handoff: `herdr-agents handoff` makes `tasks\handoff-<time>.md` with the limits, live agents
+   and git state filled in; it fills every TODO, and the new Claude starts by reading it.
+- A particular account: `herdr-agents start 2030`, `start 2040`, `start 1984`.
+- The numbers come from Claude Code's status line (`~\.claude\statusline.js`), so an account
+  only has data after a Claude on it has drawn its status line once.

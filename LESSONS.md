@@ -137,3 +137,19 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     still flashes it. A program started hidden (VBS `Run ..., 0`) also gets its FIRST window
     hidden - dialogs stayed invisible, even after showing a throwaway window first. What works:
     `conhost.exe --headless pwsh ...` - no console at all, and dialogs show normally.
+40. **Windows command-line quoting:** in `"..."`, a backslash run followed by `"` is halved
+    and `\"` is an escaped quote, so `"D:\"` swallows the closing quote and breaks the line.
+    Double the trailing backslashes (`"D:\\"`). Test a built command line by splitting it with
+    `CommandLineToArgvW` (shell32), the rule programs use - not by reading it.
+41. **Herdr's state for Cline is unreliable:** it showed `idle` while Cline (GLM-5.3 Flash) was
+    still thinking. For Cline agents read the screen (`read <name> -Visible`) before believing
+    `idle` / `done`.
+42. **Claude's limits are in its status line input:** `rate_limits.five_hour` and `.seven_day`
+    (`used_percentage`, `resets_at` unix seconds) - account-wide, per account; our
+    `statusline.js` saves them with `config_dir` ("" = the main sign-in). An account has data
+    only after a Claude on it drew its status line; after `resets_at` the old % no longer holds.
+    Codex's `rate_limits` in its logs were null on this plan.
+43. **A pane gets the Herdr SERVER's environment**, not the caller's, plus `--env`. A profile
+    without an account (e.g. alias `2030`) inherits `CLAUDE_CONFIG_DIR` if the server was
+    started from an account's shell. Account folders hold COPIES of skills and settings made
+    when the account was created: `sync-skills.ps1` updates only `~\.claude\skills`.

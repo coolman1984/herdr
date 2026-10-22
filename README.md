@@ -16,6 +16,10 @@ Herdr itself is the **official 0.9.5 build**, unmodified. Everything here is bui
 | Type `herdr` in File Explorer's address bar | Herdr opens in the folder you are looking at |
 | `Win + R` -> `herdr` | Herdr opens in the GitHub folder |
 
+All three run `launcher\HerdrLauncher.exe` - no console window flashes (`Herdr.cmd` is the fallback).
+**Claude limits:** `herdr-agents usage` (accounts 2030 / 2040 / 1984, `NEXT:`); `Ctrl+B` `Shift+C`
+starts Claude on the account with the least 5-hour use (docs/GUIDE.md 13.20).
+
 Close the window any time: the agents keep running (Herdr's server runs on its own).
 Open Herdr again and they are still working. **Stop everything for real:** `Ctrl+B`
 `Shift+Q` or the Desktop icon **Stop Herdr** - both ask first. **All shortcuts:** `Ctrl+B` `I`.

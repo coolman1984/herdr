@@ -31,6 +31,9 @@ pwsh -NoProfile -File $T <command> ...
 | ... below instead of right | add `-Direction down` |
 | ... on a separate account (own limits) | add `-Account <name>`; sign it in once with `login <profile> -Account <name>` (owner finishes it); list: `accounts` |
 | ... with reasoning effort | add `-Effort medium` (codex; agents.json `effortArgs`) |
+| Claude limits per account (2030 = main, 2040, 1984) | `pwsh -NoProfile -File $T usage` -> 5h / weekly %, resets, `LIMIT` at 95%, `NEXT: <account>` |
+| Claude on the least-used account | `pwsh -NoProfile -File $T start next` (owner's key `ctrl+b shift+c`); one account: `start 2030` / `2040` / `1984` |
+| Hand my work to the next lead | `pwsh -NoProfile -File $T handoff` -> `tasks\handoff-<time>.md`, facts filled; I fill every TODO |
 | A whole team in columns, tasks sent | `pwsh -NoProfile -File $T team -PlanFile team.json` (section 1b) |
 | Wait for the team, one report | `pwsh -NoProfile -File $T collect -Agents a,b,c` |
 | Give a task, wait, get answer | `pwsh -NoProfile -File $T ask codex "<task>" -TimeoutSec 900` |
@@ -75,6 +78,11 @@ DeepSeek does Y ..."), ALWAYS run this routine:
    owner names an agent that does not work now, say so and propose the closest working one.
    More than 3 agents: `team` puts 4 per extra page in new tabs ("team 2" ...;
    `-Overflow space` for new spaces) - start heavy agents in waves (rate limits).
+   **Before a big task run `usage`.** When MY account is at 95% or more of its 5-hour limit
+   (also the HUD's `5h N%` and Herdr's notification), stop starting work: run `handoff`,
+   fill every TODO (owner's words, done-with-proof, in progress, decisions, refused actions,
+   numbered next steps with checks, traps), tell the owner, and the work continues on NEXT
+   (`start next`, its first prompt = "read <handoff file> and do it"). Owner's rule, 2026-10-22.
 1. **Plan and specs.** Write the overall plan (goal, parts, order, who does what, how the
    parts fit). For each agent: profile, model, effort, provider, folder, and ONE spec file
    `tasks\<name>.md` filled from

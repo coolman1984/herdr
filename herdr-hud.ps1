@@ -9,6 +9,8 @@
 #   Claude ~\.claude\projects\*\<session>.jsonl : assistant usage (input + cache = context,
 #          output summed per message id), model; window from agents.json "contextWindow"
 #   Others the model herdr-agents started them with, else the profile's default.
+#   Claude's account and its 5-hour limit ("5h N%", token $limit): claude-limits.ps1; at 95%
+#          one Herdr notification per account and window (HISTORY Phase 24).
 #   Claude's $ cost: %APPDATA%\herdr\claude-cost\<session>.json, written by the owner's
 #          status line script ~\.claude\statusline.js (only Claude Code knows its cost).
 # <name> = the pane's own name (ctrl+b shift+p), else its space's name.
@@ -19,6 +21,7 @@ $ErrorActionPreference = "Stop"
 $herdr = Join-Path $env:LOCALAPPDATA "Programs\Herdr\bin\herdr.exe"
 $registry = (Get-Content -LiteralPath (Join-Path $PSScriptRoot "agents.json") -Raw | ConvertFrom-Json).agents
 $panesState = Join-Path $env:APPDATA "herdr\herdr-agents-panes.json"
+. (Join-Path $PSScriptRoot "claude-limits.ps1")
 $source = "herdr-hud"
 $ttlMs = 120000
 
@@ -143,6 +146,21 @@ function Get-StartedModels {
     $map
 }
 
+# One Herdr notification when an account reaches the limit: once per account and reset
+# window (a HUD restart may repeat it once). -Once never notifies.
+$noticed = @{}
+function Send-LimitNotices($Limits) {
+    if ($Once) { return }
+    foreach ($l in $Limits | Where-Object { $_.HasData -and $_.FiveHour -ge $script:ClaudeLimitThreshold }) {
+        $key = "$($l.Account)|$($l.FiveResets)"
+        if ($noticed[$key]) { continue }
+        $noticed[$key] = $true
+        $next = Get-ClaudeNextAccount $Limits
+        $body = if ($next) { "Least used: $($next.Account) ($($next.FiveHour)%). Resets $($l.FiveResets.ToString('HH:mm'))." } else { "No other account below the limit. Resets $($l.FiveResets.ToString('HH:mm'))." }
+        [void](Invoke-Herdr @("notification", "show", "$($l.Account) at $($l.FiveHour)% - switch: Ctrl+B Shift+C", "--body", $body, "--sound", "request"))
+    }
+}
+
 $last = @{}
 $lastSent = @{}
 function Update-Panes {
@@ -161,6 +179,9 @@ function Update-Panes {
     foreach ($p in $panes) { if ($p.PSObject.Properties["label"] -and $p.label) { $names[$p.pane_id] = $p.label } }
     $started = Get-StartedModels
     $paneAccounts = Get-PaneAccounts
+    $claudeAccounts = @(Get-ClaudeAccountNames)
+    $claudeLimits = @(Get-ClaudeLimits)
+    Send-LimitNotices $claudeLimits
     $now = Get-Date
     foreach ($p in $panes) {
         $space = $labels[$p.workspace_id]
@@ -187,7 +208,8 @@ function Update-Panes {
             if ($usage -and $usage.effort) { $model = "$model $($usage.effort)" }
             $parts += $model
             $tokens.model = $model
-            # Claude's dollar cost: written by ~\.claude\statusline.js for its session.
+            # Claude's dollar cost and its account's 5-hour limit: written by
+            # ~\.claude\statusline.js for its session (config_dir names the account).
             if ($kind -eq "claude" -and $sid) {
                 $costFile = Join-Path $env:APPDATA "herdr\claude-cost\$sid.json"
                 if (Test-Path -LiteralPath $costFile) {
@@ -196,6 +218,10 @@ function Update-Panes {
                         $cost = [string]::Format([cultureinfo]::InvariantCulture, '${0:0.00}', [double]$c.cost)
                         $parts += $cost
                         $tokens.cost = $cost
+                        $acc = Get-ClaudeAccountOf ([string]$c.config_dir) $claudeAccounts
+                        if ($acc -and -not $paneAccounts[$p.pane_id]) { $paneAccounts[$p.pane_id] = $acc }
+                        $lim = $claudeLimits | Where-Object { $_.Account -eq $acc } | Select-Object -First 1
+                        if ($lim -and $null -ne $lim.FiveHour) { $parts += "5h $($lim.FiveHour)%"; $tokens.limit = "5h $($lim.FiveHour)%" }
                     } catch { }
                 }
             }

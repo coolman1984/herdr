@@ -23,6 +23,9 @@
 #   herdr-agents login codex -Account work2              sign a separate account in (owner finishes it)
 #   herdr-agents start codex -Account work2              agent on that account (own limits)
 #   herdr-agents accounts                                every separate account folder
+#   herdr-agents usage                                   Claude 5-hour / weekly limits per account, NEXT account
+#   herdr-agents start next                              Claude on the account with the least 5-hour use
+#   herdr-agents handoff [-TaskFile out.md]              a handoff file for the next lead, facts filled in
 #
 # Approval: agents.json "args" set each agent's approval mode; since 2026-10-22 the owner
 # runs them all without approval prompts (CLAUDE.md rule 3). Secrets and trust stay the owner's.
@@ -30,7 +33,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory)]
-    [ValidateSet("tools", "start", "ask", "read", "status", "stop", "diff", "fanout", "history", "watch", "team", "collect", "login", "accounts")]
+    [ValidateSet("tools", "start", "ask", "read", "status", "stop", "diff", "fanout", "history", "watch", "team", "collect", "login", "accounts", "usage", "handoff")]
     [string]$Command,
     [Parameter(Position = 1)] [string]$Target,
     [Parameter(Position = 2)] [string]$Task,
@@ -59,6 +62,7 @@ param(
 $ErrorActionPreference = "Stop"
 $herdr = Join-Path $env:LOCALAPPDATA "Programs\Herdr\bin\herdr.exe"
 $registryPath = Join-Path $PSScriptRoot "agents.json"
+. (Join-Path $PSScriptRoot "claude-limits.ps1")
 $statePath = Join-Path $env:APPDATA "herdr\herdr-agents-panes.json"
 $runsPath = Join-Path $env:APPDATA "herdr\agent-runs"
 
@@ -222,6 +226,28 @@ switch ($Command) {
     }
 
     "start" {
+        # Started from a Herdr key ([[keys.command]]): Herdr passes the focused pane as
+        # HERDR_ACTIVE_PANE_ID / _CWD instead of the caller's HERDR_PANE_ID.
+        if (-not $env:HERDR_PANE_ID -and $env:HERDR_ACTIVE_PANE_ID) {
+            $env:HERDR_PANE_ID = $env:HERDR_ACTIVE_PANE_ID; $env:HERDR_ENV = "1"
+            if (-not $Cwd -and $env:HERDR_ACTIVE_PANE_CWD) { $Cwd = $env:HERDR_ACTIVE_PANE_CWD }
+        }
+        # Short names (agents.json "aliases"): e.g. "2040" = profile claude on account 2040.
+        $aliases = (Get-Content -LiteralPath $registryPath -Raw | ConvertFrom-Json).aliases
+        # "next" = Claude on the account with the least 5-hour use, below the limit.
+        if ($Target -eq "next") {
+            $next = Get-ClaudeNextAccount (Get-ClaudeLimits)
+            if (-not $next) { Fail "No Claude account below $($script:ClaudeLimitThreshold)% with usage data. See: herdr-agents usage" }
+            $Target = if ($aliases -and $aliases.PSObject.Properties[$next.Account]) { $next.Account } else { "claude" }
+            if ($Target -eq "claude" -and -not $next.Main -and -not $Account) { $Account = $next.Account }
+            Write-Output "NEXT account: $($next.Account) (5h $($next.FiveHour)%, weekly $($next.SevenDay)%)"
+        }
+        if ($Target -and $aliases -and $aliases.PSObject.Properties[$Target]) {
+            $al = $aliases.$Target
+            if (-not $Account -and $al.account) { $Account = $al.account }
+            if (-not $Name) { $Name = $al.name }
+            $Target = $al.profile
+        }
         if (-not $Pane -and -not $Worktree -and ($env:HERDR_ENV -ne "1" -or -not $env:HERDR_PANE_ID)) {
             Fail "start must run inside a Herdr pane (HERDR_ENV=1); it opens the agent next to the caller."
         }
@@ -495,6 +521,39 @@ switch ($Command) {
         $none = @($registry.PSObject.Properties | Where-Object { -not ($_.Value.PSObject.Properties["account"] -and $_.Value.account) } | ForEach-Object { $_.Name })
         if ($none) { Write-Output "No separate accounts: $($none -join ', ')" }
         Write-Output "New account: herdr-agents login <profile> -Account <name>   then: herdr-agents start <profile> -Account <name>"
+    }
+
+    "usage" {
+        # Claude limits per account (claude-limits.ps1); the owner switches at 95% (HISTORY 24).
+        Format-ClaudeLimits (Get-ClaudeLimits)
+    }
+
+    "handoff" {
+        # A lead -> lead handoff file (tasks\HANDOFF-TEMPLATE.md) with the facts filled in;
+        # the writer fills the TODO sections. Never overwrites a file.
+        $template = Join-Path $PSScriptRoot "tasks\HANDOFF-TEMPLATE.md"
+        $folder = if ($Cwd) { $Cwd } else { (Get-Location).ProviderPath }
+        $out = if ($TaskFile) { $TaskFile } else { Join-Path $PSScriptRoot ("tasks\handoff-{0}.md" -f (Get-Date -Format "yyyyMMdd-HHmm")) }
+        if (Test-Path -LiteralPath $out) { Fail "Exists already, not overwritten: $out" }
+        $limits = @(Get-ClaudeLimits)
+        $me = Get-ClaudeAccountOf $env:CLAUDE_CONFIG_DIR (Get-ClaudeAccountNames)
+        $mine = $limits | Where-Object { $_.Account -eq $me } | Select-Object -First 1
+        $next = Get-ClaudeNextAccount ($limits | Where-Object { $_.Account -ne $me })
+        $why = if ($mine -and $mine.HasData) { "Account $me is at $($mine.FiveHour)% of its 5-hour limit (weekly $($mine.SevenDay)%). TODO: or another reason." } else { "TODO: why (limit / context full / owner asked)." }
+        $agentRows = @(Get-LiveAgents | ForEach-Object { "| {0} | {1} | {2} | {3} | {4} |" -f $_.name, $_.agent, $_.agent_status, $_.pane_id, $_.cwd })
+        $agentsText = if ($agentRows) { (@("| name | kind | state | pane | folder |", "|---|---|---|---|---|") + $agentRows) -join "`n" } else { "(none)" }
+        $git = Invoke-Git $folder @("status", "--short", "--branch")
+        $gitText = if ($git.Ok) { "Last commit: " + (Invoke-Git $folder @("log", "-1", "--oneline")).Text + "`n`n" + '```' + "`n" + $git.Text + "`n" + '```' } else { "(not a git folder)" }
+        $hist = Join-Path $folder "HISTORY.md"
+        $lastPhase = if (Test-Path -LiteralPath $hist) { (Select-String -LiteralPath $hist -Pattern '^## Phase' | Select-Object -Last 1).Line -replace '^## ', '' } else { "TODO" }
+        $text = (Get-Content -LiteralPath $template -Raw).
+            Replace("{{FROM}}", "Claude $me").Replace("{{TO}}", $(if ($next) { "Claude $($next.Account)" } else { "the next lead" })).
+            Replace("{{TIME}}", (Get-Date -Format "yyyy-MM-dd HH:mm")).Replace("{{FOLDER}}", $folder).Replace("{{WHY}}", $why).
+            Replace("{{LAST_PHASE}}", $lastPhase).Replace("{{AGENTS}}", $agentsText).Replace("{{GIT}}", $gitText).
+            Replace("{{USAGE}}", ('```' + "`n" + ((Format-ClaudeLimits $limits) -join "`n") + "`n" + '```'))
+        Set-Content -LiteralPath $out -Value $text -Encoding utf8
+        Write-Output "HANDOFF $out"
+        Write-Output "Fill every TODO, then the next lead starts with: herdr-agents start next   and reads that file."
     }
 
     "history" {

@@ -57,3 +57,9 @@ command = 'conhost.exe --headless pwsh -NoProfile -STA -File "D:\WORK\Software D
 key = "prefix+shift+q"
 type = "shell"
 command = 'conhost.exe --headless pwsh -NoProfile -STA -File "D:\WORK\Software Development\GitHub\HERDR\herdr-stop.ps1"'
+
+# Claude on the NEXT account: ctrl+b then shift+c -> Claude Code on the account with the least 5-hour use (herdr-agents usage), next to the focused pane.
+[[keys.command]]
+key = "prefix+shift+c"
+type = "shell"
+command = 'conhost.exe --headless pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-agents.ps1" start next'

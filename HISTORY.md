@@ -435,3 +435,73 @@ Proof: layout builder and Stop dialog `visible=True` with no ConsoleWindowClass 
 (9) switched in keys.toml + live config (backed up), `config check` ok, reload applied. Left:
 `herdr` typed in Explorer still runs `Herdr.cmd`, which flashes a console for a moment.
 **Lesson:** #24 (corrected), #38, #39.
+## Phase 23 - HerdrLauncher.exe: starting Herdr never flashes a console (2026-10-22)
+
+**Symptom:** typing `herdr` in Explorer (App Path -> `Herdr.cmd`) flashed a console window for
+a moment - the one pop-up left after Phase 22.
+**Cause:** a batch file always gets a console from Windows.
+**Fix:** `launcher\HerdrLauncher.exe`, a GUI-subsystem exe (`/target:winexe`, C# 5, built by
+`launcher\build.ps1` with the .NET Framework `csc.exe` - no SDK). Same folder rules as
+`Herdr.cmd` (argument, else current folder, System32 -> the GitHub folder); starts the HUD with
+`conhost --headless pwsh` and `wt.exe -d <folder> --title Herdr herdr.exe`; `--dry-run` writes
+the commands to `%TEMP%\herdr-launcher-dryrun.txt`. Written by GLM-5.3 Flash (Cline Pass) from
+`tasks\herdr-launcher.md`. The lead's hidden tests
+(`HERDR-trials\launcher-tests\test-launcher.ps1`, split every command line with Windows' own
+`CommandLineToArgvW`): 16/20 first - a folder ending in `\` (including `D:\`) produced
+`"D:\"`, which Windows reads as an escaped quote, so wt got a broken command line. Flash fixed
+it (`tasks\herdr-launcher-fix1.md`): `Quote()` doubles trailing backslashes -> 21/21. While
+Flash was still thinking, Herdr reported Cline `idle`; its screen showed the truth (LESSONS #41).
+**Live proof (owner told first):** `LAUNCHER_REAL=1` -> 23/23: no visible ConsoleWindowClass
+window at any 40 ms sample for 6 s, a new Herdr client (`herdr.exe`, 16:45:22) attached in a new
+Windows Terminal window, and the HUD's mutex kept it to one copy.
+**Switch:** the first attempt to change the registry from Claude was refused by Claude Code's
+permission classifier ("persistence"); the owner said "try again" and Claude ran the new
+`launcher\use-launcher.ps1`: App Path `herdr.exe` -> the exe (old value `...\HERDR\Herdr.cmd`),
+Desktop + Start-menu `Herdr.lnk` -> the exe (were `wt.exe -d "D:\WORK\Software
+Development\GitHub" --title Herdr herdr.exe`; icon, working folder kept); backups in
+`%APPDATA%\herdr\backup\launcher-20261022-165104\`; `-Undo` restores. `Herdr.cmd` stays as the
+fallback. The Flash pane was already closed when the lead came to stop it.
+**Lesson:** #40, #41.
+
+## Phase 24 - Claude usage limits per account; switch at 95%; handoffs (2026-10-22)
+
+**Symptom:** the owner wanted to see each Claude account's limits and, when the account in use
+passes 95% of its 5-hour limit, to continue on the account with the least use. Claude 2030
+(main sign-in) reached 99% at 16:41 and handed over to 2040 with `tasks\handoff-2040.md`; the
+owner then asked for a better, more detailed handoff, and signed in a third account (1984).
+**Found:** Claude Code's status line input carries `rate_limits.five_hour` / `seven_day`
+(`used_percentage`, `resets_at` unix seconds); `~\.claude\statusline.js` (owner-approved,
+Phase 22) already writes them with `config_dir` to `%APPDATA%\herdr\claude-cost\<session>.json`
+(LESSONS #42). Codex's `token_count.rate_limits` were null on this plan - Claude only.
+**Fix:**
+- `claude-limits.ps1` (dot-sourced): newest file per account wins; a window whose reset time
+  has passed counts 0%; `LIMIT` at >= 95% of the 5-hour OR weekly window; NEXT = lowest 5-hour
+  use below the limit (accounts without data are never chosen).
+- `herdr-agents usage` (table + `NEXT:`), `start next`, `start 2030` (alias, main sign-in,
+  `agents.json` `accountNames.claude = "2030"`), alias `1984`; `handoff` writes
+  `tasks\handoff-<time>.md` from the new `tasks\HANDOFF-TEMPLATE.md` with the limits, live
+  agents, git state and newest HISTORY phase filled in, 10 sections to fill (owner's words,
+  done-with-proof, in progress, decisions, refused actions, numbered next steps with checks,
+  traps, rules, definition of done) and never overwrites.
+- HUD: Claude panes show `5h N%` (token `$limit`) and `account <name>` from `config_dir` (also
+  for Claude panes not started by herdr-agents); one Herdr notification per account and reset
+  window at 95% (`"<account> at N% - switch: Ctrl+B Shift+C"`, sound `request`).
+- `ctrl+b shift+c` (added by 2030 for `start 2040`, uncommitted until now) now runs
+  `start next` (keys.toml + live config, backup `config.toml.bak-20261022-165405`; `config
+  check` ok, `server reload-config` applied).
+- Third account: `herdr-agents login claude -Account 2050`, owner signed in (`claude auth
+  status`: mflma1984, Pro), folder renamed to `1984` at the owner's word.
+- Skill `herdr-team` (commands + 1b: usage before a big task, handoff at 95%), copied to the
+  account folders' own skill copies too; memory `reference_claude_2040_account.md` names all three.
+**Proof:** `usage` live: 2030* 99% LIMIT, 2040 5%, 1984 no data, `NEXT: 2040`; HUD `-Once`:
+`... $2.24 · 5h 6% · ctx 14% ... · account 2040`. Lead's tests
+`HERDR-trials\limits-tests\test-limits.ps1` (fake APPDATA): 14/14 - newest file wins, reset ->
+0%, weekly limit, trailing `\` in config_dir, no data, NEXT, one notification not two, `-Once`
+silent; mutation (threshold 99) -> 5 FAIL, restored. Isolated session: `start next` ->
+`claude-2040` with `CLAUDE_CONFIG_DIR=...\2040`; `start 2030` -> no account. Both stopped at
+Claude's folder-trust question (never answered for the owner). `handoff` to a temp file filled
+every fact and refused to overwrite.
+**Found on the way:** the lab server, started from 2040's shell, passed 2040's
+`CLAUDE_CONFIG_DIR` into the `start 2030` pane (LESSONS #43); the owner's server has no such
+variable. A stray `pane run` typed into the lab Claudes' trust screens (they exited; lab only).
+**Lesson:** #42, #43.

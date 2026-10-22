@@ -245,5 +245,27 @@
         "copy": []
       }
     }
+  },
+  "accountNames": {
+    "claude": "2030"
+  },
+  "aliases": {
+    "2030": {
+      "profile": "claude",
+      "name": "claude-2030",
+      "note": "Claude Code on the main sign-in (the owner's main account, 2030)"
+    },
+    "2040": {
+      "profile": "claude",
+      "account": "2040",
+      "name": "claude-2040",
+      "note": "Claude Code on the mflma2040 Pro account"
+    },
+    "1984": {
+      "profile": "claude",
+      "account": "1984",
+      "name": "claude-1984",
+      "note": "Claude Code on the mflma1984 Pro account (third account, signed in 2026-10-22)"
+    }
   }
 }
