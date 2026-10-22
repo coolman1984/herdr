@@ -116,3 +116,6 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     to trust it (Codex: `[projects.'<path>'] trust_level = "trusted"` in `~\.codex\config.toml`).
     Claude Code's classifier will not let Claude itself turn other agents into auto-approvers
     or edit trust settings - the owner runs that change.
+35. **Antigravity `--mode auto` still asks before shell commands**; only
+    `--dangerously-skip-permissions` runs everything without asking. Its permission prompt
+    can chain several commands with `;` in one request.

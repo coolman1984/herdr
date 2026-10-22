@@ -34,8 +34,7 @@
       "modelFlag": "--model",
       "model": "gemini-4-argon-medium",
       "args": [
-        "--mode",
-        "auto"
+        "--dangerously-skip-permissions"
       ],
       "effortArgs": [
         "--effort",
@@ -48,8 +47,7 @@
       "modelFlag": "--model",
       "model": "gemini-3.8-flash-medium",
       "args": [
-        "--mode",
-        "auto"
+        "--dangerously-skip-permissions"
       ],
       "effortArgs": [
         "--effort",
@@ -112,8 +110,7 @@
       "modelFlag": "--model",
       "model": "",
       "args": [
-        "--mode",
-        "auto"
+        "--dangerously-skip-permissions"
       ],
       "effortArgs": [
         "--effort",

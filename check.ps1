@@ -42,7 +42,9 @@ try {
         $flags = @($a.args)
         # Owner decision 2026-10-22 (CLAUDE.md rule 3): no approval prompts, but nothing that
         # removes Codex's sandbox or skips every permission outright.
-        $hit = $flags | Where-Object { $_ -in $dangerous }
+        # Owner decision 2026-10-22 (HISTORY Phase 19): Antigravity may skip all permissions.
+        $hit = $flags | Where-Object { $_ -in $dangerous -and -not ($a.kind -eq 'agy' -and $_ -eq '--dangerously-skip-permissions') }
+        if ($a.kind -eq 'agy' -and $flags -contains '--dangerously-skip-permissions') { $flags += 'auto' }
         if ($hit) { Bad "agents.json '$($p.Name)' uses $hit - wider than the owner's decision (CLAUDE.md rule 3)" }
         $auto = @($flags | Where-Object { $_ -in @('auto', 'never', '--always-approve') })
         $i = [array]::IndexOf($flags, '--auto-approve')

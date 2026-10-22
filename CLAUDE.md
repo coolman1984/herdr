@@ -24,7 +24,9 @@ Then run `pwsh -File check.ps1` - it must pass.
 3. **Approval mode is the owner's decision.** Owner decision 2026-10-22 (HISTORY Phase 18):
    every profile in `agents.json` runs without approval prompts - Claude
    `--permission-mode auto`, Codex `-a never -s workspace-write` (still sandboxed to its
-   folder), Cline `--auto-approve true`, Antigravity `--mode auto`, Grok `--always-approve`.
+   folder), Cline `--auto-approve true`, Antigravity `--dangerously-skip-permissions` (its
+   `--mode auto` still asked before shell commands; owner's choice, Phase 19), Grok
+   `--always-approve`.
    The owner made this change; agents must not change approval or trust settings on their
    own, and must not widen them further (e.g. Codex's full sandbox bypass) unless the owner
    asks. Secrets, sign-ins and folder-trust questions still go to the owner.

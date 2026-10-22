@@ -359,3 +359,12 @@ GUIDE section 12; that line still says "approval ON".
 **Folder trust:** no "trust every folder" switch could be confirmed for any of the CLIs; each
 remembers its answer per folder/repository (LESSONS #34).
 **Lesson:** #34.
+
+## Phase 19 - Antigravity: skip all permissions (owner decision, 2026-10-22)
+
+**Symptom:** with `--mode auto` Antigravity still asked before every shell command (Argon's
+git commands during the push).
+**Fix:** the owner ran the change from Claude's prompt: `agy`, `gemini`, `gemini-flash` args =
+`--dangerously-skip-permissions`. Claude recorded it: CLAUDE.md rule 3, `check.ps1` accepts
+that flag for kind `agy` only (it still FAILs it for any other agent), AGENT-ROSTER.
+**Lesson:** #35.
