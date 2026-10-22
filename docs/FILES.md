@@ -15,6 +15,7 @@
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
 | `agents.json` | Agent profiles for the delegation tool |
 | `config/keys.toml` | Master copy of the key bindings added to Herdr's config |
+| `config/settings.toml` | Master copy of other settings added there (Windows notifications) |
 | `skills/herdr-team/`, `skills/herdr-workspace/` | Master copies of the Claude skills |
 | `sync-skills.ps1` | Copies `skills/` to `~/.claude/skills/` (`-Check` reports drift only) |
 | `check.ps1` | Verifies the whole setup |
@@ -31,7 +32,10 @@
 | `%USERPROFILE%\.herdr\`, `%LOCALAPPDATA%\Programs\Herdr\bin` | Herdr install (installer) |
 | HKCU `Environment\Path` | Herdr release dir (installer); this folder (`herdr-agents`) |
 | HKCU `...\App Paths\herdr.exe` | -> `Herdr.cmd` |
-| `%APPDATA%\herdr\config.toml` | key bindings (`config/keys.toml`) |
+| `%APPDATA%\herdr\config.toml` | key bindings (`config/keys.toml`), settings (`config/settings.toml`); backups `config.toml.<time>.bak` |
+| `%APPDATA%\herdr\agent-runs\` | every `ask` / `fanout` task and answer (Markdown, per day) |
+| `%APPDATA%\herdr\layouts\` | layout presets saved in the layout builder |
+| `~\.herdr\worktrees\<repo>\<branch>` | worktrees made by `herdr-agents start -Worktree` (removed by the owner after merging) |
 | `%APPDATA%\herdr\open-folder-last.txt` | last folder picked |
 | `%APPDATA%\herdr\herdr-agents-panes.json` | panes started by `herdr-agents` |
 | `%APPDATA%\herdr\layout-last.json` | last layout chosen in the layout builder |

@@ -34,6 +34,12 @@ pwsh -NoProfile -File $T <command> ...
 | See its screen / transcript | `pwsh -NoProfile -File $T read codex` (`-Visible` = screen now) |
 | Stop an agent I started | `pwsh -NoProfile -File $T stop codex` |
 | Start in an existing empty pane | `pwsh -NoProfile -File $T start codex -Pane <pane-id>` |
+| Agent on its own git branch (new space) | `pwsh -NoProfile -File $T start codex -Worktree <branch> -Cwd <repo>` |
+| Review what an agent changed | `pwsh -NoProfile -File $T diff <name>` (read-only) |
+| Same task to several agents at once | `pwsh -NoProfile -File $T fanout "<task>" -Agents codex,deepseek` |
+| Past tasks and answers | `pwsh -NoProfile -File $T history` / `history <n>` |
+| One-shot board of every agent | `pwsh -NoProfile -File $T watch -Once` |
+| Saved layout preset | `pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-layout.ps1" -Preset <name>` |
 | Open a multi-column layout | write a plan file, `pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-layout.ps1" -PlanFile <plan.json>` (format in its header; moving a running agent = Type "existing", Value = its pane id) |
 
 Agent profiles (command, model flag, default model, safety flags) are in
@@ -42,6 +48,14 @@ claude-opus-5-5, codex = gpt-6.1-sol, others use their CLI default. Names are
 unique (`codex`, `codex-2`, ...); `status` shows them.
 
 Exit codes of `ask`: 0 = DONE (answer printed), 1 = FAILED, 3 = BLOCKED.
+UNCONFIRMED (exit 0) = delivered but Herdr never saw it working: check the answer is complete.
+`fanout` exits 1 if any agent FAILED, else 3 if any is BLOCKED, else 0.
+Every `ask` / `fanout` is saved; the output ends with `--- saved: <file> ---`.
+
+Code changes by another agent: prefer `-Worktree <branch>` so the main checkout stays
+clean, review with `diff`, run the tests in the worktree, and leave merging and removing
+the worktree to the user unless they ask. A new repo's Codex starts BLOCKED on its trust
+question - the user answers it.
 
 ## 2. How to delegate well
 

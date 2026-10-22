@@ -159,3 +159,48 @@ still alive under its name, record updated to the new pane; the source space clo
 itself. Window opened and was screenshot-checked (4 rows, defaults = focused pane's
 folder). Test agents stopped, test space closed.
 **Lesson:** #18.
+
+## Phase 13 - Research: features from other agent managers (2026-10-22)
+
+**Symptom:** the owner asked for web research on more useful features, a plan, and the build.
+**Research:** agent-deck (status board, waiting/blocked alerts, worktree per session, cost,
+conductors), claude-squad / ccmanager / Parallel Code / Vibe Kanban (worktree per agent,
+diff review before merge), agentmaxxing / Code Agent Orchestra articles (parallel second
+opinions, review is the bottleneck, keep a record of tasks). Herdr 0.9.5 is the latest
+release; it already has Windows notifications (off by default) and a `worktree` command.
+**Plan and build:**
+1. Windows notifications: `[ui.toast] delivery = "system"` (new `config/settings.toml`,
+   checked by `check.ps1`) - LESSONS #22.
+2. `herdr-agents start <agent> -Worktree <branch>`: own branch + folder
+   (`~\.herdr\worktrees\<repo>\<branch>`) in a new space; `stop` keeps the worktree and
+   prints how to remove it after merging. Plain git, not `herdr worktree` (LESSONS #19).
+3. `herdr-agents diff <name>`: read-only review - status, commits since the base branch,
+   files changed.
+4. `herdr-agents fanout "<task>" -Agents a,b`: the same task to several agents in
+   parallel (thread jobs), one combined report.
+5. Every `ask` / `fanout` saved as Markdown in `%APPDATA%\herdr\agent-runs\<date>\`;
+   `herdr-agents history [<n>]` lists or shows them.
+6. `herdr-agents watch` - live board, blocked first, coloured; `ctrl+b a` opens it in a pane
+   below (`-OpenPane`).
+7. Layout presets: "Preset" list + "Save preset..." in the layout builder
+   (`%APPDATA%\herdr\layouts\<name>.json`), `herdr-layout.ps1 -Preset <name>` without a window.
+Not taken: cost tracking, Telegram/Slack conductors, Docker sandboxes, auto-merge (outward-
+facing or destructive; would need the owner's decision).
+**Incident:** the first probe, `herdr worktree create` on the owner's LIVE session, crashed
+the Herdr server (0xc0000409) - the owner's window closed and the agents in it stopped. The
+saved layout (`session.json`) comes back when Herdr is opened. Every later test ran in an
+isolated session (LESSONS #20); CLAUDE.md now requires that.
+**Bugs found by the tests:** a local `$lines` overwrote the `-Lines` parameter (PowerShell
+names ignore case) -> "invalid value for --lines"; renamed. One agent of a fan-out returned
+`agent_prompt_stalled` although it had answered -> now waits and shows the answer marked
+UNCONFIRMED (LESSONS #21).
+**Proof (isolated session):** worktree agent started on `feat-x` in a new space; Codex then
+showed its trust question and `watch -Once` listed it BLOCKED in red (LESSONS #23; not
+answered - owner's decision). Fan-out to two Codex agents: both DONE with "FAN2-OK 72",
+report saved; `history` listed both runs, `history 1` printed the report. `diff` on a
+worktree agent: 1 commit since main, 2 files changed, uncommitted `a.txt` shown. Preset of
+3 folders -> 3 equal columns (31/32/31) in HERDR / docs / skills; unknown preset -> error
+listing the saved ones. Window screenshot: Preset list and Save preset... button shown.
+`herdr config check` -> ok after adding the key and the setting (config backed up first).
+Test session stopped, test worktrees, preset and session folder removed.
+**Lesson:** #19, #20, #21, #22, #23.

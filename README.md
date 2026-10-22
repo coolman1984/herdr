@@ -30,7 +30,8 @@ Press `Ctrl+B`, let go, then the key.
 | `Ctrl+B` `T` | Same, with a team: Claude Code left + Codex (GPT-6.1-Sol) right |
 | `Ctrl+B` `V` | Split the pane in two, side by side |
 | `Ctrl+B` `Shift+V` | Split the pane into 4 equal columns, all in the same folder |
-| `Ctrl+B` `Shift+B` | **Layout builder**: 1-6 equal columns, each with its own folder and an empty PowerShell, a new agent (any model), or an already-running agent moved in |
+| `Ctrl+B` `Shift+B` | **Layout builder**: 1-6 equal columns, each with its own folder and an empty PowerShell, a new agent (any model), or an already-running agent moved in. **Save preset...** keeps a layout under a name; pick it next time from **Preset** |
+| `Ctrl+B` `A` | **Agent board** in a pane below: every agent, blocked ones first in red |
 | `Ctrl+B` `-` / `C` | Split down / new tab |
 | `Ctrl+B` `Q` | Detach (agents keep running) |
 | `Ctrl+B` `?` | All keys |
@@ -44,7 +45,15 @@ this bug, compare their fixes"*. Claude uses the `herdr-team` skill, which runs
 ```
 herdr-agents tools      # agents and models on this PC
 herdr-agents status     # who is running, working / blocked / idle
+herdr-agents watch      # the same as a live board (ctrl+b a)
+herdr-agents start codex -Worktree fix-login   # Codex on its own git branch, in a new space
+herdr-agents diff codex                        # what it changed, before you merge
+herdr-agents fanout "<question>" -Agents codex,deepseek   # same task to both, one report
+herdr-agents history    # every task and answer, kept as Markdown
 ```
+
+Windows notifications are on: when an agent in a space you are not looking at
+finishes or needs you, Windows tells you.
 
 ## Documents
 

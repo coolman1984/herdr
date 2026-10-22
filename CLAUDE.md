@@ -41,7 +41,12 @@ Then run `pwsh -File check.ps1` - it must pass.
 - Call Herdr by its stable path `%LOCALAPPDATA%\Programs\Herdr\bin\herdr.exe`,
   never bare `herdr`: old shells and panes do not have it on PATH (LESSONS #1).
 - Read IDs (workspace, pane, agent names) from Herdr's JSON; never guess them.
-- Test against the live Herdr in a **separate test workspace**, then close it.
+- Test in an **isolated Herdr session**, never the owner's: `herdr --session lab server`
+  (headless), point the CLI and scripts at it with
+  `$env:HERDR_SOCKET_PATH = "$env:APPDATA\herdr\sessions\lab\herdr.sock"`, and end it
+  with `herdr --session lab server stop` (LESSONS #20). A test once crashed the owner's
+  server and every agent in it (Phase 13). Use a test workspace in the live session
+  only for something the isolated session cannot show.
 - A tool reports DONE only after reading the result back (screen, file, JSON).
 - Skills: edit the master copy in `skills/`, then `pwsh -File sync-skills.ps1`.
 

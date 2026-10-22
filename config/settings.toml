@@ -1,0 +1,7 @@
+# Master copy of the Herdr settings this setup adds to %APPDATA%\herdr\config.toml
+# (besides the keys in keys.toml). check.ps1 verifies each line below is there.
+
+# Windows notifications: when an agent in a space you are NOT looking at finishes or
+# needs you (approval / question), Windows shows a notification. Herdr's default is off.
+[ui.toast]
+delivery = "system"

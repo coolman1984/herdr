@@ -8,21 +8,27 @@
 #     { "Where": 0|1, "Name": "work", "WorkspaceId": "w1" (Where 0 only),
 #       "Columns": [ { "Folder": "D:\\x", "Type": "shell|new|existing",
 #                      "Value": "<profile or pane id>", "Model": "" } ] }
+#   pwsh -File herdr-layout.ps1 -Preset morning      a preset saved in the window, no window
+#
+# Presets ("Save preset..." in the window) live in %APPDATA%\herdr\layouts\<name>.json and
+# hold folders and new agents only; a running agent is saved as an empty PowerShell.
 [CmdletBinding()]
-param([string]$PlanFile)
+param([string]$PlanFile, [string]$Preset)
 
 $ErrorActionPreference = "Stop"
-Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing, Microsoft.VisualBasic
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 $herdr = Join-Path $env:LOCALAPPDATA "Programs\Herdr\bin\herdr.exe"
 $agentsTool = Join-Path $PSScriptRoot "herdr-agents.ps1"
 $lastPath = Join-Path $env:APPDATA "herdr\layout-last.json"
+$presetDir = Join-Path $env:APPDATA "herdr\layouts"
 $panesState = Join-Path $env:APPDATA "herdr\herdr-agents-panes.json"
 $defaultFolder = "D:\WORK\Software Development\GitHub"
+$noWindow = [bool]($PlanFile -or $Preset)
 
 function Show-Message([string]$Text, [string]$Icon = "Error") {
-    if ($PlanFile) { Write-Output "$($Icon.ToUpper()): $Text"; return }
+    if ($noWindow) { Write-Output "$($Icon.ToUpper()): $Text"; return }
     [System.Windows.Forms.MessageBox]::Show($Text, "Herdr - layout", "OK", $Icon) | Out-Null
 }
 
@@ -68,10 +74,25 @@ if ($agentList.Ok) {
 $last = $null
 if (Test-Path -LiteralPath $lastPath) { try { $last = Get-Content -LiteralPath $lastPath -Raw | ConvertFrom-Json } catch { } }
 
+function Get-PresetNames {
+    @(Get-ChildItem -LiteralPath $presetDir -Filter *.json -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { $_.BaseName })
+}
+
 $plan = $null
 if ($PlanFile) {
     $plan = Get-Content -LiteralPath $PlanFile -Raw | ConvertFrom-Json
     if ($plan.PSObject.Properties["WorkspaceId"] -and $plan.WorkspaceId) { $workspaceId = $plan.WorkspaceId }
+} elseif ($Preset) {
+    $file = Join-Path $presetDir "$Preset.json"
+    if (-not (Test-Path -LiteralPath $file)) { Show-Message "No preset '$Preset'. Saved: $((Get-PresetNames) -join ', ')"; exit 1 }
+    $p = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+    $where = if ($workspaceId) { [int]$p.where } else { 1 }
+    $plan = [PSCustomObject]@{ Where = $where; Name = $p.name; Columns = @($p.columns | ForEach-Object {
+        [PSCustomObject]@{ Folder = $_.folder; Type = $(if ($_.runs) { "new" } else { "shell" }); Value = $_.runs; Model = $_.model }
+    }) }
+    foreach ($c in $plan.Columns) {
+        if (-not (Test-Path -LiteralPath $c.Folder -PathType Container)) { Show-Message "Preset '$Preset': folder not found: $($c.Folder)"; exit 1 }
+    }
 } else {
 # ---- The window ---------------------------------------------------------------
 $form =New-Object System.Windows.Forms.Form -Property @{
@@ -103,6 +124,16 @@ $nameBox = New-Object System.Windows.Forms.TextBox -Property @{ Left = 460; Top 
 if ($last -and $last.name) { $nameBox.Text = $last.name }
 $form.Controls.Add($nameBox)
 
+New-Label "Preset" 636 14 48 | Out-Null
+$presetBox = New-Object System.Windows.Forms.ComboBox -Property @{ Left = 686; Top = 14; Width = 160; DropDownStyle = "DropDownList" }
+[void]$presetBox.Items.Add("(none)")
+foreach ($n in Get-PresetNames) { [void]$presetBox.Items.Add($n) }
+$presetBox.SelectedIndex = 0
+$form.Controls.Add($presetBox)
+$savePreset = New-Object System.Windows.Forms.Button -Property @{ Text = "Save preset..."; Left = 852; Top = 13; Width = 112; Height = 28 }
+$form.Controls.Add($savePreset)
+$script:resetRows = $false
+
 $hint = New-Label "Running agents are MOVED into their column and keep running; their folder stays theirs." 16 46 900
 $hint.ForeColor = [System.Drawing.Color]::DimGray
 
@@ -125,7 +156,8 @@ function Update-RowState($row) {
 }
 
 function Build-Rows {
-    $keep = @($rows | ForEach-Object { @{ Folder = $_.Folder.Text; Runs = $_.Runs.SelectedIndex; Model = $_.Model.Text } })
+    $keep = if ($script:resetRows) { @() } else { @($rows | ForEach-Object { @{ Folder = $_.Folder.Text; Runs = $_.Runs.SelectedIndex; Model = $_.Model.Text } }) }
+    $script:resetRows = $false
     foreach ($r in $rows) { foreach ($c in $r.Controls) { $form.Controls.Remove($c); $c.Dispose() } }
     $rows.Clear()
     $n = [int]$count.Value
@@ -184,6 +216,40 @@ function Build-Rows {
 
 $count.Add_ValueChanged({ Build-Rows })
 Build-Rows
+
+# A preset fills the whole window the way the last layout does (same format).
+$presetBox.Add_SelectedIndexChanged({
+    if ($presetBox.SelectedIndex -le 0) { return }
+    $file = Join-Path $presetDir "$($presetBox.SelectedItem).json"
+    try { $p = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json } catch { Show-Message "Preset unreadable: $file"; return }
+    $script:last = $p
+    if ($where.Enabled) { $where.SelectedIndex = [int]$p.where }
+    $nameBox.Text = $p.name
+    $script:resetRows = $true
+    $n = [Math]::Min(6, [Math]::Max(1, [int]$p.count))
+    if ($count.Value -ne $n) { $count.Value = $n } else { Build-Rows }
+})
+
+$savePreset.Add_Click({
+    $default = if ($presetBox.SelectedIndex -gt 0) { [string]$presetBox.SelectedItem } else { $nameBox.Text.Trim() }
+    $form.TopMost = $false
+    $n = [Microsoft.VisualBasic.Interaction]::InputBox("Preset name (letters, digits, - and _):", "Save layout preset", $default)
+    $form.TopMost = $true
+    if (-not $n) { return }
+    if ($n -notmatch '^[A-Za-z0-9_-]{1,40}$') { Show-Message "Use letters, digits, - and _ only: $n"; return }
+    $hadRunning = $false
+    $cols = @($rows | ForEach-Object {
+        $opt = $options[$_.Runs.SelectedIndex]
+        if ($opt.Type -eq "existing") { $hadRunning = $true }
+        @{ folder = $_.Folder.Text; runs = $(if ($opt.Type -eq "new") { $opt.Value } else { "" }); model = $(if ($opt.Type -eq "new") { $_.Model.Text.Trim() } else { "" }) }
+    })
+    New-Item -ItemType Directory -Force -Path $presetDir | Out-Null
+    @{ count = $cols.Count; where = $where.SelectedIndex; name = $nameBox.Text.Trim(); columns = $cols } |
+        ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $presetDir "$n.json") -Encoding utf8
+    if (-not $presetBox.Items.Contains($n)) { [void]$presetBox.Items.Add($n) }
+    $note = if ($hadRunning) { "`nRunning agents are saved as an empty PowerShell in their folder." } else { "" }
+    Show-Message "Preset '$n' saved. Next time: pick it here, or run`nherdr-layout.ps1 -Preset $n$note" "Information"
+})
 
 $ok.Add_Click({
     $columns = @()

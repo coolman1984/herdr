@@ -16,7 +16,29 @@ herdr-agents ask <name> -TaskFile task.md
 herdr-agents read <name> [-Lines 200] [-Visible]
 herdr-agents stop <name>                   # only agents this tool started
 herdr-agents start <agent> -Pane <pane-id> # start in an existing empty shell pane
+herdr-agents start <agent> -Worktree <branch> [-Cwd REPO]   # own branch + folder, new space
+herdr-agents diff <name>                   # read-only: status, commits since base, files changed
+herdr-agents fanout "<task>" -Agents a,b   # same task to several agents in parallel
+herdr-agents history [<n>]                 # past tasks + answers (%APPDATA%\herdr\agent-runs)
+herdr-agents watch [-Once] [-OpenPane]     # live board; ctrl+b a opens it in a pane below
 ```
+
+## Worktrees: an agent on its own branch
+
+`-Worktree <branch>` makes `~\.herdr\worktrees\<repo>\<branch>` with `git worktree add`
+(new branch from the current one, or the existing branch), opens it in a new space and
+starts the agent there - it cannot touch the main checkout. Review with `diff <name>`,
+merge yourself, then remove the worktree (`stop` prints the command; it never deletes
+work). Codex asks once per repository whether to trust it (LESSONS #23). Herdr's own
+`herdr worktree create` is not used (LESSONS #19).
+
+## Fan-out and the run log
+
+`fanout` sends one task to every named agent at once and waits for all; the outputs are
+printed per agent and saved as one report. `ask` and `fanout` both save task + answer under
+`%APPDATA%\herdr\agent-runs\<date>\`; `history` lists the newest 20, `history 3` prints one.
+UNCONFIRMED = the prompt was delivered but Herdr never saw the agent working; the answer is
+shown - check it is complete (LESSONS #21).
 
 ## Layouts with agents
 
@@ -33,7 +55,9 @@ Moving the last pane out of a space closes that space (LESSONS #18).
 | `NOT READY` + screen | needs sign-in / model choice in its pane | 2 |
 | `DONE: <name> is idle/done` + transcript | task finished | 0 |
 | `BLOCKED` + screen | waits for approval or an answer - a person decides | 3 |
+| `UNCONFIRMED` + output | delivered, Herdr saw no working state; answer shown | 0 |
 | `FAILED (<code>)` | error; for timeouts read before resending | 1 |
+| `FANOUT a=DONE b=...` | fan-out summary: 1 if any FAILED, else 3 if any BLOCKED, else 0 | |
 
 `start` must run inside Herdr (`HERDR_ENV=1`): it splits the caller's pane, keeps
 focus where it is, and names the agent (`codex`, `codex-2`, ...).
@@ -55,8 +79,9 @@ Add an agent: a new entry with `kind` from LESSONS #14, its `command`, `modelFla
 
 ## Patterns
 
-- **Second opinion:** start two agents, `ask` both the same question, compare.
-- **Implement + review:** Codex implements, Claude reviews `git diff` and runs tests.
+- **Second opinion:** start two agents, `fanout` the question to both, compare.
+- **Implement + review:** Codex implements on `-Worktree <branch>`, Claude reviews with
+  `diff <name>` and runs the tests there before anything is merged.
 - **Cheap bulk work:** a Chinese model through Cline for drafts, Claude checks them.
 - **Long answers:** ask the agent to write Markdown to a file and reply with the path.
 

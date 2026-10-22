@@ -31,3 +31,9 @@ command = 'pwsh -NoProfile -WindowStyle Hidden -File "D:\WORK\Software Developme
 key = "prefix+shift+b"
 type = "shell"
 command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-layout.ps1"'
+
+# Agent board: ctrl+b then a -> live board of every agent (blocked first) in a pane below.
+[[keys.command]]
+key = "prefix+a"
+type = "shell"
+command = 'pwsh -NoProfile -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-agents.ps1" watch -OpenPane'

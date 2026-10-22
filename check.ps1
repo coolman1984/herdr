@@ -63,6 +63,14 @@ foreach ($m in [regex]::Matches($master, "(?m)^key = ""([^""]+)""\s*\r?\ntype = 
     else { Bad "key $key from config/keys.toml missing or different in $live" }
 }
 
+# 4b. Settings present in Herdr's live config (config/settings.toml)
+foreach ($line in (Get-Content -LiteralPath (Join-Path $root "config\settings.toml"))) {
+    $line = $line.Trim()
+    if (-not $line -or $line.StartsWith("#")) { continue }
+    if ($liveText.Contains($line)) { Ok "setting $line in Herdr config" }
+    else { Bad "setting '$line' from config/settings.toml missing in $live" }
+}
+
 # 5. Skills installed = master copies
 $sync = & pwsh -NoProfile -File (Join-Path $root "sync-skills.ps1") -Check
 foreach ($line in $sync) {

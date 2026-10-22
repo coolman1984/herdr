@@ -52,3 +52,21 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     (`.result.move_result.pane.pane_id`). Moving the last pane out of a space closes
     that space. To put a moved pane exactly in a placeholder's place: move it next
     to the placeholder, then `pane close` the placeholder - the sibling takes its rect.
+19. **`herdr worktree create` crashed the server once** (2026-10-22, Windows error
+    0xc0000409, 3 s after a successful create, no log line): every pane and agent in the
+    session died. Not reproduced in 3 tries in an isolated session. It also opens TWO
+    spaces when the repo has none (repo + worktree). Make worktrees with plain
+    `git worktree add` and open them with `workspace create --cwd`.
+20. **Isolated test session:** `herdr --session <name> server` runs a separate headless
+    server with its own socket (`%APPDATA%\herdr\sessions\<name>\herdr.sock`);
+    `HERDR_SOCKET_PATH` points every herdr CLI call (and our scripts) at it;
+    `herdr --session <name>` attaches a window; `herdr --session <name> server stop` ends it.
+21. **`agent prompt --wait` can return `agent_prompt_stalled` although the prompt was
+    delivered and answered** (seen on Codex's first prompt, two prompts in parallel):
+    Herdr saw no `working` within 5 s. Then `agent wait` + `agent read` gives the answer.
+22. **`[ui.toast] delivery = "system"` = Windows notifications** for agents that finish or
+    need attention in a space/tab you are not looking at (the active tab is suppressed);
+    the default is off. Sounds for background agents are on by default (`[ui.sound]`).
+23. **Codex asks "Trust this folder?" once per repository**; for a git worktree it asks
+    about the main repo root. A worktree agent of a new repo therefore starts BLOCKED
+    until the owner answers in its pane.
