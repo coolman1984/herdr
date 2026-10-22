@@ -1,12 +1,14 @@
 {
-  "_comment": "Agent CLIs that herdr-agents.ps1 can start in Herdr panes. kind = Herdr agent kind; modelFlag = how the CLI takes a model; args = always passed (safety first: tools need approval); model = default when -Model is not given (empty = the CLI's own default). Edit freely.",
+  "_comment": "Agent CLIs that herdr-agents.ps1 can start in Herdr panes. kind = Herdr agent kind; modelFlag = how the CLI takes a model; args = always passed (safety first: tools need approval); model = default when -Model is not given (empty = the CLI's own default); effortArgs = how -Effort is passed ({0} = the level); contextWindow = tokens the HUD divides by for 'ctx %'. Which agent suits which task, and what works now: docs/AGENT-ROSTER.md. Edit freely.",
   "agents": {
-    "claude":   { "kind": "claude",   "command": "claude",   "modelFlag": "--model", "model": "claude-opus-5-5", "args": [], "contextWindow": 1000000 },
-    "codex":    { "kind": "codex",    "command": "codex",    "modelFlag": "-m",      "model": "gpt-6.1-sol",     "args": [], "effortArgs": ["-c", "model_reasoning_effort={0}"] },
-    "cline":    { "kind": "cline",    "command": "cline",    "modelFlag": "-m",      "model": "",                "args": ["--tui", "--auto-approve", "false"], "providerFlag": "-P", "provider": "" },
-    "deepseek": { "kind": "cline",    "command": "cline",    "modelFlag": "-m",      "model": "",                "args": ["--tui", "--auto-approve", "false"], "providerFlag": "-P", "provider": "deepseek" },
-    "opencode": { "kind": "opencode", "command": "opencode", "modelFlag": "-m",      "model": "",                "args": [] },
-    "grok":     { "kind": "grok",     "command": "grok",     "modelFlag": "-m",      "model": "",                "args": [] },
-    "agy":      { "kind": "agy",      "command": "agy",      "modelFlag": "--model", "model": "",                "args": [] }
+    "claude":       { "kind": "claude",   "command": "claude",   "modelFlag": "--model", "model": "claude-opus-5-5",        "args": [], "contextWindow": 1000000 },
+    "codex":        { "kind": "codex",    "command": "codex",    "modelFlag": "-m",      "model": "gpt-6.1-sol",            "args": [], "effortArgs": ["-c", "model_reasoning_effort={0}"] },
+    "gemini":       { "kind": "agy",      "command": "agy",      "modelFlag": "--model", "model": "gemini-4-argon-medium",  "args": ["--mode", "plan"], "effortArgs": ["--effort", "{0}"] },
+    "gemini-flash": { "kind": "agy",      "command": "agy",      "modelFlag": "--model", "model": "gemini-3.8-flash-medium", "args": ["--mode", "plan"], "effortArgs": ["--effort", "{0}"] },
+    "cline":        { "kind": "cline",    "command": "cline",    "modelFlag": "-m",      "model": "",                       "args": ["--tui", "--auto-approve", "false"], "providerFlag": "-P", "provider": "", "effortArgs": ["--thinking", "{0}"] },
+    "deepseek":     { "kind": "cline",    "command": "cline",    "modelFlag": "-m",      "model": "",                       "args": ["--tui", "--auto-approve", "false"], "providerFlag": "-P", "provider": "deepseek", "effortArgs": ["--thinking", "{0}"] },
+    "opencode":     { "kind": "opencode", "command": "opencode", "modelFlag": "-m",      "model": "",                       "args": [] },
+    "grok":         { "kind": "grok",     "command": "grok",     "modelFlag": "-m",      "model": "",                       "args": [] },
+    "agy":          { "kind": "agy",      "command": "agy",      "modelFlag": "--model", "model": "",                       "args": [], "effortArgs": ["--effort", "{0}"] }
   }
 }

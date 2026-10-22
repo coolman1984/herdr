@@ -69,6 +69,11 @@ DeepSeek does Y ..."), ALWAYS run this routine:
    make the whole plan and the design; agents execute. They never guess: you decide the
    technologies, files, function names and signatures, data formats, UI layout, error
    handling and the checks. Research first (code, docs, web) when the design is unclear.
+   **Choose agents with `D:\WORK\Software Development\GitHub\HERDR\docs\AGENT-ROSTER.md`**
+   (what works now, strengths, cost, thinking levels, routing rules, edge cases). If the
+   owner names an agent that does not work now, say so and propose the closest working one.
+   More than 3 agents: `team` puts 4 per extra page in new tabs ("team 2" ...;
+   `-Overflow space` for new spaces) - start heavy agents in waves (rate limits).
 1. **Plan and specs.** Write the overall plan (goal, parts, order, who does what, how the
    parts fit). For each agent: profile, model, effort, provider, folder, and ONE spec file
    `tasks\<name>.md` filled from

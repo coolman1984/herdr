@@ -308,3 +308,33 @@ lead 48 / agents 36 + 36 columns, panes named `ta` / `tb`, both answered (`TA-OK
 the lead's folder. Key added to keys.toml + live config (backed up), `config check` ok,
 reload `applied`. Test session removed.
 **Lesson:** #29, #30, #31.
+
+## Phase 17 - Team pages for more than 3 agents; agent roster of this PC (2026-10-22)
+
+**Symptom:** (1) the owner asked that with more than 3 subagents the extra agents open on a
+new page, 4 columns per page, and so on; (2) the owner asked for a scan of every agent on the
+PC and research on what each is good at, its cost and thinking levels, so tasks go to the
+right agent.
+**Fix:**
+1. `herdr-agents team`: page 1 = the lead + up to 3 agents; then 4 agents per page in new tabs
+   of the lead's space ("team 2", "team 3" ...), or new spaces with `-Overflow space`; up to
+   16 agents.
+2. `docs/AGENT-ROSTER.md`: what is installed, whether it answers now, models, thinking
+   levels, strengths / weaknesses, cost, routing rules, edge cases, how to re-scan (web
+   research cited in the file). Skill section 1b chooses agents from it.
+3. `agents.json`: new profiles `gemini` (Gemini 4 Argon medium) and `gemini-flash` (Gemini
+   3.8 Flash) through Antigravity, both in read-only `--mode plan` (LESSONS #32);
+   `effortArgs` for Cline (`--thinking`) and Antigravity (`--effort`).
+**Scan result:** installed = Claude Code 2.1.308, Codex 0.163.0, Antigravity 1.4.0, Cline
+3.0.73, OpenCode 1.18.11, Grok 0.2.106 (+ Windsurf editor, LM Studio without models, GitHub
+CLI not signed in). Working with one tiny prompt: Claude, Codex, Antigravity (`AGY-OK`, 19 s).
+Not working: OpenCode (OpenAI 401, Zen error page), Cline (re-authentication; DeepSeek endpoint
+returned HTML = network block), Grok (not signed in) - LESSONS #33.
+**Note:** Codex `coder`, asked by the owner in its own pane, committed the pending work as
+`cd9779c` and is waiting for the owner to choose where to push; Claude did not answer for
+the owner.
+**Proof (isolated session):** 5 agents -> tab 1 `lead | a1 | a2 | a3`, tab `team 2`
+`a4 | a5`; 4 agents with `-Overflow space` -> space `lead2 team 2` with `b4`. Profile `gemini`
+started as "Gemini 4 Argon · medium" and stopped at Antigravity's trust question (owner's
+answer). Test session removed.
+**Lesson:** #32, #33.

@@ -7,7 +7,7 @@
 | `README.md` | Overview and quick start |
 | `CLAUDE.md`, `AGENTS.md` | Rules for AI agents working here |
 | `HISTORY.md`, `LESSONS.md` | What changed and why; numbered lessons |
-| `docs/` | GUIDE (complete user guide), SETUP, DELEGATION, this file |
+| `docs/` | GUIDE (complete user guide), AGENT-ROSTER (which agent for which task), SETUP, DELEGATION, this file |
 | `Herdr.cmd` | Launcher: Windows Terminal + Herdr in the current folder (App Path target) |
 | `herdr-open-folder.ps1` | Folder picker -> new workspace (+ Claude / + team) |
 | `herdr-layout.ps1` | Layout builder window (ctrl+b shift+b); `-PlanFile` builds without a window |

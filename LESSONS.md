@@ -103,3 +103,10 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 31. **Codex brings its own environment rules into our code** (it used a Chrome-launcher
     script from its skills for "open in browser"). Name the exact API in the spec and
     review for outside dependencies.
+32. **Antigravity (`agy`) starts in `accept-edits` mode** (edits files without asking) and asks
+    "Do you trust the contents of this project?" once per folder. `--mode plan` keeps it
+    read-only. `agy -p "<prompt>" --model <id>` is a quick headless health check.
+33. **"Installed" is not "usable"**: on 2026-10-22 OpenCode's OpenAI sign-in had expired (401)
+    and its Zen models returned an error page, Cline's provider needed re-authentication and
+    its DeepSeek endpoint returned an HTML page (network block), Grok was not signed in. Check
+    with one tiny prompt before planning work on an agent (docs/AGENT-ROSTER.md section 6).
