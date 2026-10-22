@@ -13,6 +13,7 @@
 | `herdr-layout.ps1` | Layout builder window (ctrl+b shift+b); `-PlanFile` builds without a window |
 | `herdr-help.ps1` | Shortcuts + guide window (ctrl+b i); `-List` prints the shortcuts. Written by Codex (Phase 16) |
 | `tasks/` | Task specs for subagents: `TEMPLATE.md` (the spec every agent gets) and past tasks |
+| `herdr-stop.ps1` | Stop Herdr for real, after asking (ctrl+b shift+q, Desktop "Stop Herdr"); `-Status` prints what runs |
 | `herdr-hud.ps1` | Pane HUD: name, path, model, context, tokens on every pane border + sidebar (runs in the background) |
 | `herdr-spaces.ps1` | Spaces side by side and separate again (ctrl+b shift+s) |
 | `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
@@ -45,6 +46,7 @@
 | `%APPDATA%\herdr\herdr-agents-panes.json` | panes started by `herdr-agents` |
 | `%APPDATA%\herdr\layout-last.json` | last layout chosen in the layout builder |
 | Desktop + Start menu `Herdr.lnk` | one-click start |
+| Desktop `Stop Herdr.lnk` | runs `herdr-stop.ps1` (asks first) |
 | `~/.claude/statusline.js` | owner-approved addition `shareCostWithHerdr`: writes `%APPDATA%\herdr\claude-cost\<session>.json` (backup `statusline.js.<time>.bak`) |
 | `%APPDATA%\herdr\claude-cost\` | Claude's cost per session, read by the HUD |
 | Startup folder `Herdr HUD.lnk` | starts `herdr-hud.ps1` hidden at sign-in (one copy; Herdr.cmd starts it too) |

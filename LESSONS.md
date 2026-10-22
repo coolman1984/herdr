@@ -119,3 +119,6 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 35. **Antigravity `--mode auto` still asks before shell commands**; only
     `--dangerously-skip-permissions` runs everything without asking. Its permission prompt
     can chain several commands with `;` in one request.
+36. **Closing Herdr's window only detaches**: the server is its own process (no living parent)
+    and keeps every pane and agent running. Only `herdr server stop`, sign-out or a restart
+    end them; after a restart Herdr restores the layout and resumes Claude/Codex sessions.

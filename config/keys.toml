@@ -50,3 +50,10 @@ command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Deve
 key = "prefix+i"
 type = "shell"
 command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-help.ps1"'
+
+# Stop Herdr for real: ctrl+b then shift+q -> asks first, then stops every agent and pane
+# (closing the window never stops anything).
+[[keys.command]]
+key = "prefix+shift+q"
+type = "shell"
+command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-stop.ps1"'

@@ -56,6 +56,7 @@ Press `Ctrl+B`, let go, then the key. `Ctrl+B` `?` shows them inside the app.
 | `A` | **Agent board** in a pane below: every agent, blocked first in red |
 | `Shift+S` | **Spaces side by side** / separate again (section 4) |
 | `I` | **All shortcuts** (type to filter) and this guide in one window |
+| `Shift+Q` | **Stop Herdr for real** (asks first): every agent and pane stops. Same as the Desktop icon **Stop Herdr** |
 
 ### Herdr's own
 
@@ -378,10 +379,17 @@ Files: `%APPDATA%\herdr\agent-runs\<date>\`.
 - Away from Herdr: a Windows notification tells you when an agent in another space
   finishes or needs you; `Ctrl+B` `O` jumps to it.
 
-### 13.15 Stop agents
-- One this tool started: `herdr-agents stop <name>`.
-- Any agent: go to its pane and exit it (`/exit` or `Ctrl+C`), or `Ctrl+B` `X`.
-- Everything, including the server: `herdr server stop` (rarely needed).
+### 13.15 Close Herdr without losing work, and stop it for real
+- **Closing the window never stops anything.** Herdr's server runs on its own; agents keep
+  working. Reopen Herdr (Desktop icon, `herdr` in Explorer) and they are still there.
+  `Ctrl+B` `Q` does the same (detach).
+- After a Windows restart or sign-out the server is gone; Herdr restores your spaces and
+  resumes Claude and Codex conversations, but a task that was running must be sent again.
+- **Stop everything for real:** `Ctrl+B` `Shift+Q`, or double-click **Stop Herdr** on the
+  Desktop. A window lists every agent (and warns about working ones); **No** is the
+  default. `pwsh -File herdr-stop.ps1 -Status` shows what is running.
+- One agent this tool started: `herdr-agents stop <name>`. Any agent: exit it in its pane
+  (`/exit` or `Ctrl+C`) or `Ctrl+B` `X`.
 
 ### 13.16 Use DeepSeek or another Chinese model (Cline)
 1. Once: in any pane run `cline auth deepseek` and paste your own API key there.

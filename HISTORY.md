@@ -368,3 +368,20 @@ git commands during the push).
 `--dangerously-skip-permissions`. Claude recorded it: CLAUDE.md rule 3, `check.ps1` accepts
 that flag for kind `agy` only (it still FAILs it for any other agent), AGENT-ROSTER.
 **Lesson:** #35.
+
+## Phase 20 - Closing Herdr never stops work; a real Stop with confirmation (2026-10-22)
+
+**Symptom:** the owner wanted running coding tasks to survive closing Herdr, and a separate,
+explicit way to stop everything; and asked how to open the shortcuts window.
+**Cause / finding:** already true by design - the Herdr server is a separate process (its
+parent process is gone; the window's client is a child of WindowsTerminal.exe), so closing the
+window only detaches. Not survivable: a Windows restart or sign-out; then Herdr restores the
+layout and resumes Claude/Codex conversations (`resume_agents_on_restore`, default true).
+**Fix:** `herdr-stop.ps1` - lists every agent, warns about working/blocked ones, "No" is the
+default button, then `herdr server stop`; `-Status` prints what runs. Bound to
+`ctrl+b shift+q` (keys.toml + live config, backed up; `config check` ok, reload applied) and a
+Desktop shortcut "Stop Herdr". README, GUIDE (keys table, 13.15) updated. The shortcuts
+window stays `ctrl+b i` (it lists the new key from keys.toml by itself).
+**Proof:** `-Status` listed claude / argon (working) and coder (idle); the dialog screenshot
+showed all three and the warning; it was closed unanswered and the server was still running.
+**Lesson:** #36.

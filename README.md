@@ -16,8 +16,9 @@ Herdr itself is the **official 0.9.5 build**, unmodified. Everything here is bui
 | Type `herdr` in File Explorer's address bar | Herdr opens in the folder you are looking at |
 | `Win + R` -> `herdr` | Herdr opens in the GitHub folder |
 
-Close the window any time: the agents keep running. Open Herdr again to come back.
-Stop everything: `herdr server stop`.
+Close the window any time: the agents keep running (Herdr's server runs on its own).
+Open Herdr again and they are still working. **Stop everything for real:** `Ctrl+B`
+`Shift+Q` or the Desktop icon **Stop Herdr** - both ask first. **All shortcuts:** `Ctrl+B` `I`.
 
 ## Keys inside Herdr
 
