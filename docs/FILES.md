@@ -48,6 +48,8 @@
 | Desktop + Start menu `Herdr.lnk` | one-click start |
 | Desktop `Stop Herdr.lnk` | runs `herdr-stop.ps1` (asks first) |
 | `~/.claude/statusline.js` | owner-approved addition `shareCostWithHerdr`: writes `%APPDATA%\herdr\claude-cost\<session>.json` (backup `statusline.js.<time>.bak`) |
+| `%USERPROFILE%\.herdr-accounts\<tool>\<name>` | separate sign-in folders made by `herdr-agents -Account` / `login` |
+| `D:\WORK\Software Development\GitHub\HERDR-trials\` | test projects for trying agents (Phase 22 GLM-5.3 Flash trial, hidden tests) |
 | `%APPDATA%\herdr\claude-cost\` | Claude's cost per session, read by the HUD |
 | Startup folder `Herdr HUD.lnk` | starts `herdr-hud.ps1` hidden at sign-in (one copy; Herdr.cmd starts it too) |
 | `~/.claude/skills/herdr-team`, `herdr-workspace` | Claude skills (from `skills/`) |

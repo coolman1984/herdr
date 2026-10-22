@@ -5,55 +5,55 @@
 [[keys.command]]
 key = "prefix+f"
 type = "shell"
-command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-open-folder.ps1"'
+command = 'conhost.exe --headless pwsh -NoProfile -STA -File "D:\WORK\Software Development\GitHub\HERDR\herdr-open-folder.ps1"'
 
 # Open folder + Claude: ctrl+b then shift+f -> same, then starts claude in it.
 [[keys.command]]
 key = "prefix+shift+f"
 type = "shell"
-command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-open-folder.ps1" -Agent claude'
+command = 'conhost.exe --headless pwsh -NoProfile -STA -File "D:\WORK\Software Development\GitHub\HERDR\herdr-open-folder.ps1" -Agent claude'
 
 # Team: ctrl+b then t -> pick folder -> Claude Code left + Codex (SOL 6.1) right.
 [[keys.command]]
 key = "prefix+t"
 type = "shell"
-command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-open-folder.ps1" -Agent team'
+command = 'conhost.exe --headless pwsh -NoProfile -STA -File "D:\WORK\Software Development\GitHub\HERDR\herdr-open-folder.ps1" -Agent team'
 
 # Columns: ctrl+b then shift+v -> split the focused pane into 4 equal columns (same folder).
 [[keys.command]]
 key = "prefix+shift+v"
 type = "shell"
-command = 'pwsh -NoProfile -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-columns.ps1" -Count 4'
+command = 'conhost.exe --headless pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-columns.ps1" -Count 4'
 
 # Layout builder: ctrl+b then shift+b -> window: N columns, each with its own folder and
 # an empty PowerShell, a new agent, or a running agent moved in.
 [[keys.command]]
 key = "prefix+shift+b"
 type = "shell"
-command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-layout.ps1"'
+command = 'conhost.exe --headless pwsh -NoProfile -STA -File "D:\WORK\Software Development\GitHub\HERDR\herdr-layout.ps1"'
 
 # Agent board: ctrl+b then a -> live board of every agent (blocked first) in a pane below.
 [[keys.command]]
 key = "prefix+a"
 type = "shell"
-command = 'pwsh -NoProfile -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-agents.ps1" watch -OpenPane'
+command = 'conhost.exe --headless pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-agents.ps1" watch -OpenPane'
 
 # Spaces side by side: ctrl+b then shift+s -> tick spaces -> one view with a column each;
 # "Separate again" puts them back in their own spaces.
 [[keys.command]]
 key = "prefix+shift+s"
 type = "shell"
-command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-spaces.ps1"'
+command = 'conhost.exe --headless pwsh -NoProfile -STA -File "D:\WORK\Software Development\GitHub\HERDR\herdr-spaces.ps1"'
 
 # Help: ctrl+b then i -> every shortcut (type to filter) and the full guide in one window.
 [[keys.command]]
 key = "prefix+i"
 type = "shell"
-command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-help.ps1"'
+command = 'conhost.exe --headless pwsh -NoProfile -STA -File "D:\WORK\Software Development\GitHub\HERDR\herdr-help.ps1"'
 
 # Stop Herdr for real: ctrl+b then shift+q -> asks first, then stops every agent and pane
 # (closing the window never stops anything).
 [[keys.command]]
 key = "prefix+shift+q"
 type = "shell"
-command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-stop.ps1"'
+command = 'conhost.exe --headless pwsh -NoProfile -STA -File "D:\WORK\Software Development\GitHub\HERDR\herdr-stop.ps1"'

@@ -96,3 +96,9 @@ Sources: [GPT-6.1 Sol pricing](https://emergent.sh/learn/gpt-6-1-sol-pricing),
 [Antigravity CLI vs Grok Build CLI](https://terminaltrove.com/compare/ai-coding-agents/antigravity-cli-vs-grok-build-cli/),
 [Gemini CLI -> Antigravity CLI](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/),
 [Grok Build](https://en.wikipedia.org/wiki/Grok_Build).
+
+## 7. Trials
+
+| Date | Agent | Task | Result |
+|---|---|---|---|
+| 2026-10-22 | GLM-5.3 Flash (Cline Pass, `cline-flash`, thinking xhigh) | 5 daily tasks on a small Python module (2 bug fixes, merge rule, new `to_csv`, input validation with line/column, refactor) | **16/16 hidden tests passed**, its own 13 tests pass, clean minimal code, honest list of doubts. Verdict: trusted for daily coding of this size, with the usual diff review. |

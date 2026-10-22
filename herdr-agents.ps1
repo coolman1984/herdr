@@ -20,6 +20,9 @@
 #     Page 1 = me + up to 3 agents; agents 4.. go 4 per page into new tabs "team 2", "team 3" ...
 #     (-Overflow space = new spaces instead). Up to 16 agents.
 #   herdr-agents collect -Agents coder,tester            wait for all, one report (like fanout)
+#   herdr-agents login codex -Account work2              sign a separate account in (owner finishes it)
+#   herdr-agents start codex -Account work2              agent on that account (own limits)
+#   herdr-agents accounts                                every separate account folder
 #
 # Approval: agents.json "args" set each agent's approval mode; since 2026-10-22 the owner
 # runs them all without approval prompts (CLAUDE.md rule 3). Secrets and trust stay the owner's.
@@ -27,12 +30,13 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory)]
-    [ValidateSet("tools", "start", "ask", "read", "status", "stop", "diff", "fanout", "history", "watch", "team", "collect")]
+    [ValidateSet("tools", "start", "ask", "read", "status", "stop", "diff", "fanout", "history", "watch", "team", "collect", "login", "accounts")]
     [string]$Command,
     [Parameter(Position = 1)] [string]$Target,
     [Parameter(Position = 2)] [string]$Task,
     [string]$Model,
     [string]$Effort,
+    [string]$Account,
     [string]$Provider,
     [string]$Name,
     [ValidateSet("right", "down")] [string]$Direction = "right",
@@ -163,6 +167,41 @@ function Save-Run([string]$Label, [string]$TaskText, [string]$Outcome, [string]$
     $file
 }
 
+# Separate accounts: a profile's "account" block in agents.json says how the CLI is pointed at
+# its own sign-in folder %USERPROFILE%\.herdr-accounts\<tool>\<name> (env vars and/or args,
+# {dir} = that folder). On first use the folder is created and the listed settings are copied
+# from the CLI's normal folder - never sign-in files (LESSONS #38).
+$accountsRoot = Join-Path $env:USERPROFILE ".herdr-accounts"
+$defaultHomes = @{ claude = (Join-Path $env:USERPROFILE ".claude"); codex = (Join-Path $env:USERPROFILE ".codex") }
+function Get-Account($Entry, [string]$AccountName) {
+    if (-not $Entry.PSObject.Properties["account"] -or -not $Entry.account) { Fail "This agent has no separate-account support (agents.json 'account')." }
+    if ($AccountName -notmatch '^[a-z0-9][a-z0-9_-]{0,23}$') { Fail "Account name must match [a-z0-9][a-z0-9_-]{0,23}: $AccountName" }
+    $spec = $Entry.account
+    $dir = Join-Path $accountsRoot (Join-Path $spec.tool $AccountName)
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $from = $defaultHomes[$spec.tool]
+        foreach ($item in @($spec.copy)) {
+            if ($from -and $item -and (Test-Path -LiteralPath (Join-Path $from $item))) {
+                Copy-Item -LiteralPath (Join-Path $from $item) -Destination (Join-Path $dir $item) -Recurse -Force
+            }
+        }
+    }
+    $envs = [ordered]@{}
+    foreach ($p in @($spec.env.PSObject.Properties)) { $envs[$p.Name] = $p.Value.Replace("{dir}", $dir) }
+    [PSCustomObject]@{
+        Name = $AccountName; Tool = $spec.tool; Dir = $dir; Env = $envs
+        Args = @($spec.args | Where-Object { $_ } | ForEach-Object { $_.Replace("{dir}", $dir) })
+        Login = ([string]$spec.login).Replace("{dir}", $dir)
+    }
+}
+
+function Get-EnvArgs($Acc) {
+    $out = @()
+    if ($Acc) { foreach ($k in $Acc.Env.Keys) { $out += @("--env", "$k=$($Acc.Env[$k])") } }
+    $out
+}
+
 function Invoke-Git([string]$Dir, [string[]]$Arguments) {
     $out = & git -C $Dir @Arguments 2>&1
     [PSCustomObject]@{ Ok = ($LASTEXITCODE -eq 0); Text = (($out | ForEach-Object { $_.ToString() }) -join "`n").TrimEnd() }
@@ -192,11 +231,13 @@ switch ($Command) {
         $a = $entryProfile.Value
         if (-not (Get-Command $a.command -ErrorAction SilentlyContinue)) { Fail "$($a.command) is not installed." }
 
+        $acc = if ($Account) { Get-Account $a $Account } else { $null }
         $live = @(Get-LiveAgents | ForEach-Object { $_.name } | Where-Object { $_ })
         if (-not $Name) {
-            $Name = $Target
+            $Name = if ($acc) { "$Target-$Account" } else { $Target }
+            $baseName = $Name
             $n = 2
-            while ($live -contains $Name) { $Name = "$Target-$n"; $n++ }
+            while ($live -contains $Name) { $Name = "$baseName-$n"; $n++ }
         } elseif ($live -contains $Name) {
             Fail "An agent named '$Name' is already running."
         }
@@ -213,6 +254,8 @@ switch ($Command) {
             if (-not $a.PSObject.Properties["effortArgs"]) { Fail "$Target has no effort setting in agents.json." }
             $agentArgs += @($a.effortArgs | ForEach-Object { $_ -f $Effort })
         }
+        if ($acc) { $agentArgs += $acc.Args }
+        $envArgs = @(Get-EnvArgs $acc)
 
         $repoRoot = $null; $baseBranch = $null
         if ($Worktree) {
@@ -231,13 +274,19 @@ switch ($Command) {
                    else { Invoke-Git $repoRoot @("worktree", "add", "-b", $Worktree, $wtPath) }
             if (-not $add.Ok) { Fail "git worktree add failed: $($add.Text)" }
             $Cwd = $wtPath
-            $ws = Invoke-Herdr @("workspace", "create", "--cwd", $wtPath, "--label", "$Name $Worktree", "--no-focus")
+            $ws = Invoke-Herdr (@("workspace", "create", "--cwd", $wtPath, "--label", "$Name $Worktree", "--no-focus") + $envArgs)
             if (-not $ws.Ok) { Fail "Worktree made at $wtPath, but Herdr could not open a space: $($ws.Text)" }
             $pane = $ws.Json.result.root_pane.pane_id
         } elseif ($Pane) {
             $pane = $Pane
+            if ($acc) {
+                # An existing pane already has its environment: set the account's variables in
+                # its PowerShell before the agent starts there.
+                $set = ($acc.Env.Keys | ForEach-Object { "`$env:$_='$($acc.Env[$_].Replace("'", "''"))'" }) -join "; "
+                if ($set) { [void](Invoke-Herdr @("pane", "run", $pane, $set)); Start-Sleep -Milliseconds 800 }
+            }
         } else {
-            $split = Invoke-Herdr @("pane", "split", $env:HERDR_PANE_ID, "--direction", $Direction, "--cwd", $Cwd, "--no-focus")
+            $split = Invoke-Herdr (@("pane", "split", $env:HERDR_PANE_ID, "--direction", $Direction, "--cwd", $Cwd, "--no-focus") + $envArgs)
             if (-not $split.Ok) { Fail "Could not open a pane: $($split.Text)" }
             $pane = $split.Json.result.pane.pane_id
         }
@@ -248,7 +297,8 @@ switch ($Command) {
 
         $state = @(Get-State | Where-Object { $_.name -ne $Name })
         $state += [PSCustomObject]@{ name = $Name; pane = $pane; agent = $Target; model = $mdl; cwd = $Cwd; started = (Get-Date).ToString("s")
-            repo = $repoRoot; branch = $(if ($Worktree) { $Worktree } else { $null }); base = $baseBranch }
+            repo = $repoRoot; branch = $(if ($Worktree) { $Worktree } else { $null }); base = $baseBranch
+            account = $(if ($acc) { $acc.Name } else { $null }); accountTool = $(if ($acc) { $acc.Tool } else { $null }); accountDir = $(if ($acc) { $acc.Dir } else { $null }) }
         Save-State $state
 
         if (-not $started.Ok) {
@@ -260,6 +310,7 @@ switch ($Command) {
             exit 2
         }
         $where = if ($Worktree) { " branch=$Worktree (from $baseBranch) space=new" } else { "" }
+        if ($acc) { $where += " account=$($acc.Name)" }
         Write-Output "STARTED name=$Name agent=$Target kind=$($a.kind) pane=$pane model=$(if ($mdl) { $mdl } else { '(CLI default)' }) cwd=$Cwd$where"
     }
 
@@ -363,7 +414,7 @@ switch ($Command) {
         for ($i = 0; $i -lt $members.Count; $i++) {
             $m = $members[$i]
             $startArgs = @("-NoProfile", "-File", $PSCommandPath, "start", $m.agent, "-Pane", $panes[$i], "-Cwd", (& $cwdOf $m))
-            foreach ($f in @("name", "model", "effort", "provider")) {
+            foreach ($f in @("name", "model", "effort", "provider", "account")) {
                 if ($m.PSObject.Properties[$f] -and $m.$f) { $startArgs += @("-$((Get-Culture).TextInfo.ToTitleCase($f))", $m.$f) }
             }
             $out = (& pwsh @startArgs 2>&1) -join "`n"
@@ -409,6 +460,41 @@ switch ($Command) {
         Write-Output "--- saved: $log ---"
         $worst = ($answers | Measure-Object -Property Exit -Maximum).Maximum
         exit $(if ($answers | Where-Object { $_.Outcome -eq "FAILED" }) { 1 } else { $worst })
+    }
+
+    "login" {
+        # Open a pane with the account's own folder and run the CLI's sign-in there; the owner
+        # completes it (browser / device code). Never types a key or password for them.
+        if ($env:HERDR_ENV -ne "1" -or -not $env:HERDR_PANE_ID) { Fail "login must run inside a Herdr pane (HERDR_ENV=1)." }
+        if (-not $Target -or -not $Account) { Fail "login needs a profile and -Account, e.g. herdr-agents login codex -Account work2" }
+        $entry = (Get-Registry).PSObject.Properties[$Target]
+        if (-not $entry) { Fail "Unknown agent '$Target'. See: herdr-agents tools" }
+        $acc = Get-Account $entry.Value $Account
+        $split = Invoke-Herdr (@("pane", "split", $env:HERDR_PANE_ID, "--direction", "right", "--cwd", $acc.Dir, "--no-focus") + @(Get-EnvArgs $acc))
+        if (-not $split.Ok) { Fail "Could not open a pane: $($split.Text)" }
+        $p = $split.Json.result.pane.pane_id
+        [void](Invoke-Herdr @("pane", "rename", $p, "login $($acc.Tool) $($acc.Name)"))
+        [void](Invoke-Herdr @("pane", "run", $p, $acc.Login))
+        Write-Output "LOGIN pane=$p tool=$($acc.Tool) account=$($acc.Name) folder=$($acc.Dir)"
+        Write-Output "The owner finishes the sign-in in that pane (browser / code), then closes it (ctrl+b x)."
+        Write-Output "Use it: herdr-agents start $Target -Account $($acc.Name)"
+    }
+
+    "accounts" {
+        # Every separate account folder, per tool, and the profiles that can use it.
+        $registry = Get-Registry
+        $byTool = @{}
+        foreach ($p in $registry.PSObject.Properties) {
+            if ($p.Value.PSObject.Properties["account"] -and $p.Value.account) { $byTool[$p.Value.account.tool] += @($p.Name) }
+        }
+        Write-Output "Account folders: $accountsRoot"
+        foreach ($tool in ($byTool.Keys | Sort-Object)) {
+            $names = @(Get-ChildItem -LiteralPath (Join-Path $accountsRoot $tool) -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+            Write-Output ("{0,-9} accounts: {1,-30} profiles: {2}" -f $tool, $(if ($names) { $names -join ', ' } else { "(none - default sign-in only)" }), ($byTool[$tool] -join ', '))
+        }
+        $none = @($registry.PSObject.Properties | Where-Object { -not ($_.Value.PSObject.Properties["account"] -and $_.Value.account) } | ForEach-Object { $_.Name })
+        if ($none) { Write-Output "No separate accounts: $($none -join ', ')" }
+        Write-Output "New account: herdr-agents login <profile> -Account <name>   then: herdr-agents start <profile> -Account <name>"
     }
 
     "history" {
@@ -505,7 +591,8 @@ switch ($Command) {
     "status" {
         $mine = Get-State
         foreach ($a in Get-LiveAgents) {
-            $tag = if ($mine | Where-Object { $_.pane -eq $a.pane_id }) { "started-by-tool" } else { "" }
+            $rec = $mine | Where-Object { $_.pane -eq $a.pane_id } | Select-Object -First 1
+            $tag = if ($rec) { "started-by-tool" + $(if ($rec.PSObject.Properties["account"] -and $rec.account) { " account=$($rec.account)" } else { "" }) } else { "" }
             Write-Output ("{0,-14} {1,-9} {2,-8} pane={3,-7} {4} {5}" -f ($(if ($a.name) { $a.name } else { "(unnamed)" })), $a.agent, $a.agent_status, $a.pane_id, $a.cwd, $tag)
         }
     }

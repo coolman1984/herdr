@@ -7,7 +7,8 @@
 #   pwsh -File herdr-layout.ps1 -PlanFile plan.json   no window (for agents and tests):
 #     { "Where": 0|1, "Name": "work", "WorkspaceId": "w1" (Where 0 only),
 #       "Columns": [ { "Folder": "D:\\x", "Type": "shell|new|existing",
-#                      "Value": "<profile or pane id>", "Model": "" } ] }
+#                      "Value": "<profile or pane id>", "Model": "", "Account": "" } ] }
+#   Account = a separate sign-in for a new agent (herdr-agents login <profile> -Account <name>).
 #   pwsh -File herdr-layout.ps1 -Preset morning      a preset saved in the window, no window
 #
 # Presets ("Save preset..." in the window) live in %APPDATA%\herdr\layouts\<name>.json and
@@ -88,7 +89,7 @@ if ($PlanFile) {
     $p = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
     $where = if ($workspaceId) { [int]$p.where } else { 1 }
     $plan = [PSCustomObject]@{ Where = $where; Name = $p.name; Columns = @($p.columns | ForEach-Object {
-        [PSCustomObject]@{ Folder = $_.folder; Type = $(if ($_.runs) { "new" } else { "shell" }); Value = $_.runs; Model = $_.model }
+        [PSCustomObject]@{ Folder = $_.folder; Type = $(if ($_.runs) { "new" } else { "shell" }); Value = $_.runs; Model = $_.model; Account = $(if ($_.PSObject.Properties["account"]) { $_.account } else { "" }) }
     }) }
     foreach ($c in $plan.Columns) {
         if (-not (Test-Path -LiteralPath $c.Folder -PathType Container)) { Show-Message "Preset '$Preset': folder not found: $($c.Folder)"; exit 1 }
@@ -99,7 +100,7 @@ $form =New-Object System.Windows.Forms.Form -Property @{
     Text = "Herdr - open side-by-side columns"; StartPosition = "CenterScreen"; TopMost = $true
     FormBorderStyle = "FixedDialog"; MaximizeBox = $false; MinimizeBox = $false
     Font = New-Object System.Drawing.Font("Segoe UI", 9.5); AutoScaleMode = "Dpi"
-    ClientSize = New-Object System.Drawing.Size(980, 200)
+    ClientSize = New-Object System.Drawing.Size(1100, 200)
 }
 
 function New-Label($text, $x, $y, $w = 90) {
@@ -148,15 +149,15 @@ function Update-RowState($row) {
     $opt = $options[$row.Runs.SelectedIndex]
     if ($opt.Type -eq "existing") {
         $row.Folder.Text = $opt.Cwd
-        $row.Folder.Enabled = $false; $row.Browse.Enabled = $false; $row.Model.Enabled = $false
+        $row.Folder.Enabled = $false; $row.Browse.Enabled = $false; $row.Model.Enabled = $false; $row.Account.Enabled = $false
     } else {
         $row.Folder.Enabled = $true; $row.Browse.Enabled = $true
-        $row.Model.Enabled = ($opt.Type -eq "new")
+        $row.Model.Enabled = ($opt.Type -eq "new"); $row.Account.Enabled = ($opt.Type -eq "new")
     }
 }
 
 function Build-Rows {
-    $keep = if ($script:resetRows) { @() } else { @($rows | ForEach-Object { @{ Folder = $_.Folder.Text; Runs = $_.Runs.SelectedIndex; Model = $_.Model.Text } }) }
+    $keep = if ($script:resetRows) { @() } else { @($rows | ForEach-Object { @{ Folder = $_.Folder.Text; Runs = $_.Runs.SelectedIndex; Model = $_.Model.Text; Account = $_.Account.Text } }) }
     $script:resetRows = $false
     foreach ($r in $rows) { foreach ($c in $r.Controls) { $form.Controls.Remove($c); $c.Dispose() } }
     $rows.Clear()
@@ -169,12 +170,13 @@ function Build-Rows {
         $runs = New-Object System.Windows.Forms.ComboBox -Property @{ Left = 510; Top = $y; Width = 330; DropDownStyle = "DropDownList" }
         foreach ($o in $options) { [void]$runs.Items.Add($o.Text) }
         $model = New-Object System.Windows.Forms.TextBox -Property @{ Left = 848; Top = $y; Width = 116; PlaceholderText = "model (optional)" }
+        $acct = New-Object System.Windows.Forms.TextBox -Property @{ Left = 970; Top = $y; Width = 114; PlaceholderText = "account (optional)" }
 
         # Defaults: what this row had, else the last layout, else the current folder.
         $folder.Text = $startFolder
         $runs.SelectedIndex = 0
         if ($i -lt $keep.Count) {
-            $folder.Text = $keep[$i].Folder; $runs.SelectedIndex = [Math]::Min($keep[$i].Runs, $options.Count - 1); $model.Text = $keep[$i].Model
+            $folder.Text = $keep[$i].Folder; $runs.SelectedIndex = [Math]::Min($keep[$i].Runs, $options.Count - 1); $model.Text = $keep[$i].Model; $acct.Text = $keep[$i].Account
         } elseif ($last -and $last.columns -and $i -lt @($last.columns).Count) {
             $col = @($last.columns)[$i]
             if ($col.folder -and (Test-Path -LiteralPath $col.folder)) { $folder.Text = $col.folder }
@@ -186,9 +188,10 @@ function Build-Rows {
                 $runs.SelectedIndex = $match
             }
             if ($col.model) { $model.Text = $col.model }
+            if ($col.PSObject.Properties["account"] -and $col.account) { $acct.Text = $col.account }
         }
 
-        $row = [PSCustomObject]@{ Folder = $folder; Browse = $browse; Runs = $runs; Model = $model; Controls = @($label, $folder, $browse, $runs, $model) }
+        $row = [PSCustomObject]@{ Folder = $folder; Browse = $browse; Runs = $runs; Model = $model; Account = $acct; Controls = @($label, $folder, $browse, $runs, $model, $acct) }
         $browse.Add_Click({
             param($sender, $e)
             $target = $rows | Where-Object { $_.Browse -eq $sender } | Select-Object -First 1
@@ -209,9 +212,9 @@ function Build-Rows {
         Update-RowState $row
     }
     $bottom = 80 + $n * 38 + 12
-    $ok.Left = 740; $ok.Top = $bottom
-    $cancel.Left = 866; $cancel.Top = $bottom
-    $form.ClientSize = New-Object System.Drawing.Size(980, ($bottom + 48))
+    $ok.Left = 860; $ok.Top = $bottom
+    $cancel.Left = 986; $cancel.Top = $bottom
+    $form.ClientSize = New-Object System.Drawing.Size(1100, ($bottom + 48))
 }
 
 $count.Add_ValueChanged({ Build-Rows })
@@ -241,7 +244,7 @@ $savePreset.Add_Click({
     $cols = @($rows | ForEach-Object {
         $opt = $options[$_.Runs.SelectedIndex]
         if ($opt.Type -eq "existing") { $hadRunning = $true }
-        @{ folder = $_.Folder.Text; runs = $(if ($opt.Type -eq "new") { $opt.Value } else { "" }); model = $(if ($opt.Type -eq "new") { $_.Model.Text.Trim() } else { "" }) }
+        @{ folder = $_.Folder.Text; runs = $(if ($opt.Type -eq "new") { $opt.Value } else { "" }); model = $(if ($opt.Type -eq "new") { $_.Model.Text.Trim() } else { "" }); account = $(if ($opt.Type -eq "new") { $_.Account.Text.Trim() } else { "" }) }
     })
     New-Item -ItemType Directory -Force -Path $presetDir | Out-Null
     @{ count = $cols.Count; where = $where.SelectedIndex; name = $nameBox.Text.Trim(); columns = $cols } |
@@ -263,7 +266,8 @@ $ok.Add_Click({
         } elseif (-not (Test-Path -LiteralPath $r.Folder.Text -PathType Container)) {
             Show-Message "Column $($i + 1): folder not found:`n$($r.Folder.Text)"; return
         }
-        $columns += [PSCustomObject]@{ Folder = $r.Folder.Text; Type = $opt.Type; Value = $opt.Value; Model = $r.Model.Text.Trim() }
+        if ($r.Account.Enabled -and $r.Account.Text.Trim() -and $r.Account.Text.Trim() -notmatch '^[a-z0-9][a-z0-9_-]{0,23}$') { Show-Message "Column $($i + 1): account names use a-z, 0-9, - and _ only."; return }
+        $columns += [PSCustomObject]@{ Folder = $r.Folder.Text; Type = $opt.Type; Value = $opt.Value; Model = $r.Model.Text.Trim(); Account = $r.Account.Text.Trim() }
     }
     $script:plan = [PSCustomObject]@{ Where = $where.SelectedIndex; Name = $nameBox.Text.Trim(); Columns = $columns }
     $form.DialogResult = "OK"
@@ -278,7 +282,7 @@ $form.Dispose()
 @{
     count = $plan.Columns.Count; where = $plan.Where; name = $plan.Name
     columns = @($plan.Columns | ForEach-Object {
-        @{ folder = $_.Folder; runs = $(if ($_.Type -eq "new") { $_.Value } else { "" }); model = $_.Model }
+        @{ folder = $_.Folder; runs = $(if ($_.Type -eq "new") { $_.Value } else { "" }); model = $_.Model; account = $(if ($_.Type -eq "new") { $_.Account } else { "" }) }
     })
 } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $lastPath -Encoding utf8
 }
@@ -314,6 +318,7 @@ for ($i = 0; $i -lt $cols.Count; $i++) {
         "new" {
             $startArgs = @("-NoProfile", "-File", $agentsTool, "start", $col.Value, "-Pane", $panes[$i], "-Cwd", $col.Folder)
             if ($col.Model) { $startArgs += @("-Model", $col.Model) }
+            if ($col.PSObject.Properties["Account"] -and $col.Account) { $startArgs += @("-Account", $col.Account) }
             $result = (& pwsh @startArgs 2>&1) -join "`n"
             if ($LASTEXITCODE -ne 0) { $problems += "Column $($i + 1) ($($col.Value)): $result" }
         }

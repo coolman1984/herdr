@@ -44,6 +44,11 @@ Then run `pwsh -File check.ps1` - it must pass.
 
 - PowerShell 7 (`pwsh`) only; scripts must also work when started by Herdr
   (`cmd.exe /d /c ...`, no console, detached).
+- **Nothing may flash a console window** (owner's rule, Phase 22): every key command,
+  shortcut and background start is `conhost.exe --headless pwsh -NoProfile ...` (dialogs
+  still show; LESSONS #39). Never `-WindowStyle Hidden` alone, never a VBS hidden launcher.
+- **Tests stay invisible**: never open a terminal window for a test session (it cannot
+  attach from inside a Herdr pane and only shows the owner an error - LESSONS #24).
 - Call Herdr by its stable path `%LOCALAPPDATA%\Programs\Herdr\bin\herdr.exe`,
   never bare `herdr`: old shells and panes do not have it on PATH (LESSONS #1).
 - Read IDs (workspace, pane, agent names) from Herdr's JSON; never guess them.

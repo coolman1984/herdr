@@ -406,3 +406,20 @@ shows Herdr's own key list.
 - Update Herdr: `herdr update`, then run the check.
 - Restore an older config: `%APPDATA%\herdr\config.toml.<time>.bak` (copy it over
   `config.toml`, then reload).
+
+### 13.19 Use several accounts of the same tool (beat the 5-hour limits)
+Each pane can run an agent on its own sign-in, so a second Codex / Claude / Cline Pass /
+Grok / OpenCode subscription (another email) has its own limits.
+1. Once per account, sign it in: `herdr-agents login codex -Account work2` - a pane opens
+   with that account's own folder and runs the tool's sign-in; finish it there (browser or
+   code), then close the pane (`Ctrl+B` `X`).
+2. Use it: `herdr-agents start codex -Account work2` (the agent is named `codex-work2`), or
+   type `work2` in the **account** box of a column in the layout builder (`Ctrl+B`
+   `Shift+B`), or `"account": "work2"` in a team plan.
+3. See them all: `herdr-agents accounts`. The border shows `account work2`.
+- Account folders: `%USERPROFILE%\.herdr-accounts\<tool>\<name>`; your normal sign-in is
+  untouched. A new account gets a copy of your settings (Claude/Codex config, skills), never
+  your sign-in.
+- Works for: Claude, Codex, Cline (all Cline Pass profiles share the `cline` accounts), OpenCode,
+  Grok. Not for Antigravity (its sign-in cannot be separated).
+- Check each provider's terms for using several accounts.

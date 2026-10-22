@@ -1,5 +1,5 @@
 {
-  "_comment": "Agent CLIs that herdr-agents.ps1 can start in Herdr panes. kind = Herdr agent kind; modelFlag = how the CLI takes a model; args = always passed (safety first: tools need approval); model = default when -Model is not given (empty = the CLI's own default); effortArgs = how -Effort is passed ({0} = the level); contextWindow = tokens the HUD divides by for 'ctx %'. Which agent suits which task, and what works now: docs/AGENT-ROSTER.md. Edit freely.",
+  "_comment": "Agent CLIs that herdr-agents.ps1 can start in Herdr panes. kind = Herdr agent kind; modelFlag = how the CLI takes a model; args = always passed (safety first: tools need approval); model = default when -Model is not given (empty = the CLI's own default); effortArgs = how -Effort is passed ({0} = the level); contextWindow = tokens the HUD divides by for 'ctx %'. Which agent suits which task, and what works now: docs/AGENT-ROSTER.md. Edit freely. account = how -Account <name> gives a profile its own sign-in folder (%USERPROFILE%\\.herdr-accounts\\<tool>\\<name>): env vars / args with {dir}, the login command, and settings copied from the default folder (never sign-in files). Antigravity has no account support (its sign-in is not in a folder we can move).",
   "agents": {
     "claude": {
       "kind": "claude",
@@ -10,7 +10,21 @@
         "--permission-mode",
         "auto"
       ],
-      "contextWindow": 1000000
+      "contextWindow": 1000000,
+      "account": {
+        "tool": "claude",
+        "env": {
+          "CLAUDE_CONFIG_DIR": "{dir}"
+        },
+        "args": [],
+        "login": "claude auth login",
+        "copy": [
+          "settings.json",
+          "CLAUDE.md",
+          "statusline.js",
+          "skills"
+        ]
+      }
     },
     "codex": {
       "kind": "codex",
@@ -26,7 +40,20 @@
       "effortArgs": [
         "-c",
         "model_reasoning_effort={0}"
-      ]
+      ],
+      "account": {
+        "tool": "codex",
+        "env": {
+          "CODEX_HOME": "{dir}"
+        },
+        "args": [],
+        "login": "codex login",
+        "copy": [
+          "config.toml",
+          "AGENTS.md",
+          "skills"
+        ]
+      }
     },
     "gemini": {
       "kind": "agy",
@@ -69,7 +96,19 @@
       "effortArgs": [
         "--thinking",
         "{0}"
-      ]
+      ],
+      "account": {
+        "tool": "cline",
+        "env": {},
+        "args": [
+          "--config",
+          "{dir}",
+          "--data-dir",
+          "{dir}\\data"
+        ],
+        "login": "cline auth cline-pass --config \"{dir}\" --data-dir \"{dir}\\data\"",
+        "copy": []
+      }
     },
     "deepseek": {
       "kind": "cline",
@@ -86,14 +125,36 @@
       "effortArgs": [
         "--thinking",
         "{0}"
-      ]
+      ],
+      "account": {
+        "tool": "cline",
+        "env": {},
+        "args": [
+          "--config",
+          "{dir}",
+          "--data-dir",
+          "{dir}\\data"
+        ],
+        "login": "cline auth cline-pass --config \"{dir}\" --data-dir \"{dir}\\data\"",
+        "copy": []
+      }
     },
     "opencode": {
       "kind": "opencode",
       "command": "opencode",
       "modelFlag": "-m",
       "model": "",
-      "args": []
+      "args": [],
+      "account": {
+        "tool": "opencode",
+        "env": {
+          "XDG_DATA_HOME": "{dir}\\data",
+          "XDG_CONFIG_HOME": "{dir}\\config"
+        },
+        "args": [],
+        "login": "opencode auth login",
+        "copy": []
+      }
     },
     "grok": {
       "kind": "grok",
@@ -102,7 +163,16 @@
       "model": "",
       "args": [
         "--always-approve"
-      ]
+      ],
+      "account": {
+        "tool": "grok",
+        "env": {
+          "GROK_HOME": "{dir}"
+        },
+        "args": [],
+        "login": "grok login",
+        "copy": []
+      }
     },
     "agy": {
       "kind": "agy",
@@ -132,7 +202,19 @@
       "effortArgs": [
         "--thinking",
         "{0}"
-      ]
+      ],
+      "account": {
+        "tool": "cline",
+        "env": {},
+        "args": [
+          "--config",
+          "{dir}",
+          "--data-dir",
+          "{dir}\\data"
+        ],
+        "login": "cline auth cline-pass --config \"{dir}\" --data-dir \"{dir}\\data\"",
+        "copy": []
+      }
     },
     "kimi": {
       "kind": "cline",
@@ -149,7 +231,19 @@
       "effortArgs": [
         "--thinking",
         "{0}"
-      ]
+      ],
+      "account": {
+        "tool": "cline",
+        "env": {},
+        "args": [
+          "--config",
+          "{dir}",
+          "--data-dir",
+          "{dir}\\data"
+        ],
+        "login": "cline auth cline-pass --config \"{dir}\" --data-dir \"{dir}\\data\"",
+        "copy": []
+      }
     }
   }
 }

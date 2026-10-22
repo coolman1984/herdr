@@ -73,16 +73,20 @@ function Find-SessionFile([string]$Kind, [string]$Id) {
     $key = "$Kind/$Id"
     if ($fileCache.ContainsKey($key) -and $fileCache[$key] -and (Test-Path -LiteralPath $fileCache[$key])) { return $fileCache[$key] }
     $file = $null
+    # Separate accounts (herdr-agents -Account) keep their logs in their own folders.
+    $accounts = Join-Path $env:USERPROFILE ".herdr-accounts"
     if ($Kind -eq "codex") {
-        $root = Join-Path $env:USERPROFILE ".codex\sessions"
-        if (Test-Path -LiteralPath $root) {
+        $roots = @(Join-Path $env:USERPROFILE ".codex\sessions") + @(Get-ChildItem -LiteralPath (Join-Path $accounts "codex") -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName "sessions" })
+        foreach ($root in $roots | Where-Object { Test-Path -LiteralPath $_ }) {
             $file = Get-ChildItem -LiteralPath $root -Recurse -Filter "*$Id.jsonl" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+            if ($file) { break }
         }
     } elseif ($Kind -eq "claude") {
-        $root = Join-Path $env:USERPROFILE ".claude\projects"
-        if (Test-Path -LiteralPath $root) {
+        $roots = @(Join-Path $env:USERPROFILE ".claude\projects") + @(Get-ChildItem -LiteralPath (Join-Path $accounts "claude") -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName "projects" })
+        foreach ($root in $roots | Where-Object { Test-Path -LiteralPath $_ }) {
             $file = Get-ChildItem -LiteralPath $root -Directory | ForEach-Object { Join-Path $_.FullName "$Id.jsonl" } |
                 Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+            if ($file) { break }
         }
     }
     $fileCache[$key] = $file
@@ -123,6 +127,14 @@ function Get-ClaudeUsage([string]$File, [double]$Window) {
     $s.Data
 }
 
+function Get-PaneAccounts {
+    $map = @{}
+    if (Test-Path -LiteralPath $panesState) {
+        try { foreach ($e in @(Get-Content -LiteralPath $panesState -Raw | ConvertFrom-Json)) { if ($e.PSObject.Properties["account"] -and $e.account) { $map[$e.pane] = $e.account } } } catch { }
+    }
+    $map
+}
+
 function Get-StartedModels {
     $map = @{}
     if (Test-Path -LiteralPath $panesState) {
@@ -148,6 +160,7 @@ function Update-Panes {
     $names = @{}
     foreach ($p in $panes) { if ($p.PSObject.Properties["label"] -and $p.label) { $names[$p.pane_id] = $p.label } }
     $started = Get-StartedModels
+    $paneAccounts = Get-PaneAccounts
     $now = Get-Date
     foreach ($p in $panes) {
         $space = $labels[$p.workspace_id]
@@ -194,6 +207,8 @@ function Update-Panes {
                 if ($usage.out) { $parts += "out $(Format-Tokens $usage.out)"; $tokens.out = Format-Tokens $usage.out }
             }
         }
+        # Which separate account the agent runs on (herdr-agents -Account).
+        if ($paneAccounts[$p.pane_id]) { $parts += "account $($paneAccounts[$p.pane_id])"; $tokens.account = $paneAccounts[$p.pane_id] }
         $title = $parts -join " · "
         $sig = "$title|$(($tokens.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join '|')"
         if ($Once) { Write-Output ("{0,-8} {1}" -f $p.pane_id, $title) }

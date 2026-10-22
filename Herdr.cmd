@@ -16,7 +16,7 @@ if not exist "%HERDR_EXE%" (
 )
 
 rem Pane HUD (name, path, model, context on every pane border); one copy only.
-start "" /min pwsh -NoProfile -WindowStyle Hidden -File "%~dp0herdr-hud.ps1"
+start "" conhost.exe --headless pwsh -NoProfile -File "%~dp0herdr-hud.ps1"
 
 where wt.exe >nul 2>&1
 if %errorlevel%==0 (

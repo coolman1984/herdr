@@ -29,6 +29,7 @@ pwsh -NoProfile -File $T <command> ...
 | ... Cline, any provider | `pwsh -NoProfile -File $T start cline -Provider <id> -Model <model>` |
 | ... a second Claude | `pwsh -NoProfile -File $T start claude -Name reviewer` |
 | ... below instead of right | add `-Direction down` |
+| ... on a separate account (own limits) | add `-Account <name>`; sign it in once with `login <profile> -Account <name>` (owner finishes it); list: `accounts` |
 | ... with reasoning effort | add `-Effort medium` (codex; agents.json `effortArgs`) |
 | A whole team in columns, tasks sent | `pwsh -NoProfile -File $T team -PlanFile team.json` (section 1b) |
 | Wait for the team, one report | `pwsh -NoProfile -File $T collect -Agents a,b,c` |

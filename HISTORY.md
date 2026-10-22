@@ -406,3 +406,32 @@ new `kimi` (Kimi K3, hard problems); AGENT-ROSTER updated. Also this phase: Sol 
 dumps 109 MB, pip 27 MB, Recycle Bin); G-MES credential store, profiles and CDP Profile
 verified present afterwards.
 **Lesson:** #37.
+
+## Phase 22 - GLM-5.3 Flash trial; separate accounts per pane; no console pop-ups (2026-10-22)
+
+**Symptom:** (1) the owner asked to try GLM-5.3 Flash on real coding tasks (thinking switched to
+xhigh mid-way); (2) asked for agent panes on separate subscriptions/emails of the same tool to
+get around per-account limits; (3) a test window showed "nested herdr is disabled", and the
+owner asked that no CMD window ever pops up.
+**Trial:** `HERDR-trials\flash-trial` (Python module with 2 seeded bugs, 5 daily tasks) and 16
+hidden tests kept outside its folder. `cline-flash` (Cline Pass GLM-5.3 Flash, `-Effort xhigh`)
+did all 5 tasks: hidden 16/16 pass, its own 13 tests pass, clean diff, honest doubts. Restarted
+once from a git reset when the owner asked for xhigh. Cline's "Cline Desktop" promo appeared
+again at start (LESSONS #12).
+**Accounts:** `agents.json` `account` per profile (env / args with `{dir}`, login command,
+settings to copy - never sign-in files); `herdr-agents -Account`, `login`, `accounts`; team
+plans (`account`) and a new **account** box per column in the layout builder; HUD finds Codex
+and Claude logs in account folders and shows `account <name>`. Proof: each CLI reported "not
+logged in" in an empty folder while the normal Codex stayed "Logged in using ChatGPT"; in an
+isolated session `start codex -Account trial` opened Codex's own "Sign in with ChatGPT" screen
+(LESSONS #38). Antigravity could not be separated (no support). Test account and folders removed.
+**Pop-ups:** the error window was Claude's own test window - opening `herdr --session lab` from
+inside a Herdr pane is refused as nesting; the earlier "attach a window" advice (LESSONS #24)
+was wrong and is corrected, and CLAUDE.md now forbids test windows. Every Herdr key command,
+`Herdr.cmd`'s HUD start, the Startup HUD shortcut and the Stop Herdr icon now run
+`conhost.exe --headless pwsh ...`. Tried first: a VBS hidden launcher - no console, but the
+dialogs stayed invisible (`visible=False`), even after showing a throwaway window first; dropped.
+Proof: layout builder and Stop dialog `visible=True` with no ConsoleWindowClass window; keys
+(9) switched in keys.toml + live config (backed up), `config check` ok, reload applied. Left:
+`herdr` typed in Explorer still runs `Herdr.cmd`, which flashes a console for a moment.
+**Lesson:** #24 (corrected), #38, #39.

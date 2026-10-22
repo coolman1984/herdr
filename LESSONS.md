@@ -74,9 +74,10 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     until the owner answers in its pane.
 24. **`pane move <id> --new-workspace --label <text>` gives a pane its own space again**
     (agents keep running). Workspace ids are never reused: a space rebuilt this way has a
-    new id, so find spaces by label, not by a remembered id. A headless server with no
-    window attached can fail splits with `ghostty error -1`; attach a window
-    (`herdr --session <name>`) before testing layouts.
+    new id, so find spaces by label, not by a remembered id. Test sessions work headless: once,
+    right after the server started, a split failed with `ghostty error -1` - wait for
+    `status: running` and retry. Never open a window on a test session from inside a Herdr
+    pane: Herdr refuses nesting ("nested herdr is disabled") and the owner sees an error window.
 25. **The sidebar is configurable** (`[ui.sidebar.agents] rows`, `[ui.sidebar.spaces] rows`):
     built-in tokens `state_icon`, `workspace`, `tab`, `pane`, `agent`, `branch`, `git_status`
     ..., plus `$name` custom tokens set by `pane report-metadata --token name=value`; a missing
@@ -125,3 +126,14 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 37. **Cline Pass model ids need the `cline-pass/` prefix** (`-P cline-pass -m cline-pass/glm-5.3`);
     a bare id fails with "Expected format: modelType/model". A retired model answers 404 with
     its replacement's name. Each headless `cline` run spends ~60 s before the first token.
+38. **Separate accounts per CLI** (verified 2026-10-22: each reported "not logged in" in an
+    empty folder while the normal sign-in stayed): Claude `CLAUDE_CONFIG_DIR`, Codex
+    `CODEX_HOME`, Grok `GROK_HOME`, OpenCode `XDG_DATA_HOME` + `XDG_CONFIG_HOME`, Cline
+    `--config <dir> --data-dir <dir>\data`. Antigravity: `ANTIGRAVITY_GEMINI_DIR` did NOT
+    separate its sign-in - no account support. Herdr gives a pane its own variables with
+    `pane split --env K=V` / `workspace create --env`.
+39. **No console pop-ups:** Herdr runs `[[keys.command]]` through `cmd.exe /d /c` without a
+    console, so a `pwsh` started there opens its own console window, and `-WindowStyle Hidden`
+    still flashes it. A program started hidden (VBS `Run ..., 0`) also gets its FIRST window
+    hidden - dialogs stayed invisible, even after showing a throwaway window first. What works:
+    `conhost.exe --headless pwsh ...` - no console at all, and dialogs show normally.
