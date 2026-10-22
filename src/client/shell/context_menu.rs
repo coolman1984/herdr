@@ -168,10 +168,11 @@ impl ClientShellState {
     }
 
     pub(super) fn move_context_menu_selection(&mut self, delta: isize) {
+        let custom_count = self.custom_menu_entries().len();
         let Some(ClientShellOverlay::ContextMenu(menu)) = self.overlay.as_mut() else {
             return;
         };
-        let item_count = menu.items().len();
+        let item_count = menu.items().len() + custom_count;
         if item_count == 0 {
             return;
         }
@@ -187,6 +188,12 @@ impl ClientShellState {
         let Some(ClientShellOverlay::ContextMenu(menu)) = self.overlay.take() else {
             return;
         };
+        let builtin_count = menu.items().len();
+        if index >= builtin_count {
+            self.activate_custom_menu_entry(index - builtin_count, outcome);
+            outcome.repaint = true;
+            return;
+        }
         let Some(action) = menu.items().get(index).map(|item| item.action) else {
             outcome.repaint = true;
             return;

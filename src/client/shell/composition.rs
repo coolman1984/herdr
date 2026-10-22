@@ -642,11 +642,21 @@ impl ClientShellState {
         if let Some(bar) = mode_bar {
             occlusion.cover(bar);
         }
+        let custom_menu = match self.overlay {
+            Some(ClientShellOverlay::ContextMenu(_) | ClientShellOverlay::GlobalMenu(_)) => {
+                self.custom_menu_labels()
+            }
+            _ => Vec::new(),
+        };
         if let Some(overlay) = self.overlay.as_ref() {
             let mut composed = frame.to_ratatui_buffer()?;
             let cursor = if let ClientShellOverlay::ContextMenu(menu) = overlay {
-                let rendered =
-                    render::render_context_menu(&mut composed, menu, &self.config.palette)?;
+                let rendered = render::render_context_menu(
+                    &mut composed,
+                    menu,
+                    &custom_menu,
+                    &self.config.palette,
+                )?;
                 occlusion.cover(rendered.area);
                 self.hits.context_menu_rows = rendered.menu_rows;
                 None
@@ -656,6 +666,7 @@ impl ClientShellState {
                     self.hits.global_launcher,
                     menu,
                     snapshot,
+                    &custom_menu,
                     &self.config.palette,
                 )?;
                 occlusion.cover(rendered.area);

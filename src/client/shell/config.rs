@@ -271,6 +271,7 @@ impl ClientShellConfig {
                             description: command.description.clone(),
                             width: None,
                             height: None,
+                            menu: None,
                         })
                     })
                     .collect();

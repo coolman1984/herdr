@@ -965,3 +965,78 @@ fn resize_mode_reuses_endpoint_resize_and_stays_active_until_done() {
     assert!(state.handle_input_bytes(b"\r").actions.is_empty());
     assert_eq!(state.mode, ClientShellMode::Terminal);
 }
+
+#[test]
+fn custom_commands_with_menu_labels_run_from_global_and_context_menus() {
+    let config: Config = toml::from_str(concat!(
+        "[[keys.command]]\nkey = \"prefix+f\"\ntype = \"shell\"\ncommand = \"echo open\"\n",
+        "menu = \"Open folder...\"\n",
+        "[[keys.command]]\nkey = \"prefix+g\"\ntype = \"shell\"\ncommand = \"echo hidden\"\n",
+    ))
+    .unwrap();
+    assert!(config.collect_diagnostics().is_empty());
+    let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+    let app = crate::app::App::new(
+        &config,
+        crate::app::AppPolicy::TEST,
+        None,
+        api_rx,
+        crate::api::EventHub::default(),
+    );
+    let mut projection = snapshot();
+    projection.revision = 1;
+    projection.commands = app.client_shell_command_manifest();
+    let menu_command_id = projection
+        .commands
+        .iter()
+        .find(|command| command.binding_label == "prefix+f")
+        .expect("menu command in manifest")
+        .command_id
+        .clone();
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(projection));
+    state.set_pane_surface(surface());
+
+    // Only the command with a menu label is listed.
+    assert_eq!(state.custom_menu_labels(), vec!["Open folder...".to_string()]);
+
+    let expect_invocation = |outcome: &ClientShellInput| {
+        let [ClientShellAction::Endpoint { request, .. }] = &outcome.actions[..] else {
+            panic!("expected command invocation: {:?}", outcome.actions);
+        };
+        let crate::api::schema::Method::CommandInvoke(params) = &request.method else {
+            panic!("expected command.invoke");
+        };
+        assert_eq!(params.command_id, menu_command_id);
+    };
+
+    // Global menu: custom entries follow the built-in items.
+    state.toggle_global_menu();
+    let builtin = super::super::global_menu::global_menu_items(state.snapshot.as_deref().unwrap())
+        .len();
+    let mut outcome = ClientShellInput::default();
+    state.activate_global_menu_item(builtin, &mut outcome);
+    expect_invocation(&outcome);
+    assert!(state.overlay.is_none());
+
+    // Pane right-click menu: same entry after the built-in items.
+    state.open_pane_context_menu("pane_1".into(), 5, 5);
+    let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
+        panic!("expected pane context menu");
+    };
+    let builtin = menu.items().len();
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(builtin, &mut outcome);
+    expect_invocation(&outcome);
+
+    // An index past the custom entries does nothing.
+    state.open_pane_context_menu("pane_1".into(), 5, 5);
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(builtin + 1, &mut outcome);
+    assert!(outcome.actions.is_empty());
+
+    // The menus draw the custom label.
+    state.toggle_global_menu();
+    state.compose(106, 40).expect("composed frame");
+    assert!(!state.hits.global_menu_rows.is_empty());
+}

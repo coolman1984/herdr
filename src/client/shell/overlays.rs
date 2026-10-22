@@ -88,6 +88,7 @@ pub(crate) fn render_global_menu(
     launcher: Rect,
     menu: &ClientGlobalMenuOverlay,
     snapshot: &ClientShellSnapshot,
+    custom: &[String],
     palette: &Palette,
 ) -> Option<OverlayRender> {
     let items = super::super::global_menu::global_menu_items(snapshot);
@@ -100,11 +101,12 @@ pub(crate) fn render_global_menu(
                     snapshot, *action,
                 )) * 2
         })
+        .chain(custom.iter().map(|label| display_width(label)))
         .max()
         .unwrap_or(8)
         .saturating_add(4)
         .min(screen.width.max(1));
-    let height = (items.len() as u16)
+    let height = ((items.len() + custom.len()) as u16)
         .saturating_add(2)
         .min(screen.height.max(1));
     let x = launcher
@@ -155,6 +157,18 @@ pub(crate) fn render_global_menu(
         }
         rows.push((row, index));
     }
+    for (offset, label) in custom.iter().enumerate() {
+        let index = items.len() + offset;
+        let row_y = inner.y.saturating_add(index as u16);
+        if row_y >= inner.bottom() {
+            break;
+        }
+        let row = Rect::new(inner.x, row_y, inner.width, 1);
+        let style = menu_row_style(index == menu.highlighted, palette);
+        buffer.set_style(row, style);
+        put_text(buffer, row.x, row.y, row.width, &format!(" {label}"), style);
+        rows.push((row, index));
+    }
     Some(OverlayRender {
         area: rect,
         menu_rows: rows,
@@ -162,9 +176,21 @@ pub(crate) fn render_global_menu(
     })
 }
 
+fn menu_row_style(highlighted: bool, palette: &Palette) -> Style {
+    if highlighted {
+        Style::default()
+            .fg(panel_contrast_fg(palette))
+            .bg(palette.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(palette.text).bg(palette.panel_bg)
+    }
+}
+
 pub(crate) fn render_context_menu(
     buffer: &mut Buffer,
     menu: &ClientContextMenuOverlay,
+    custom: &[String],
     palette: &Palette,
 ) -> Option<OverlayRender> {
     let items = menu.items();
@@ -172,13 +198,14 @@ pub(crate) fn render_context_menu(
     let max_item_width = items
         .iter()
         .map(|item| display_width(item.label))
+        .chain(custom.iter().map(|label| display_width(label)))
         .max()
         .unwrap_or(0);
     let width = max_item_width
         .saturating_add(4)
         .max(14)
         .min(screen.width.max(1));
-    let height = (items.len() as u16)
+    let height = ((items.len() + custom.len()) as u16)
         .saturating_add(2)
         .min(screen.height.max(1));
     let x = menu
@@ -209,6 +236,18 @@ pub(crate) fn render_context_menu(
         };
         buffer.set_style(row, style);
         put_text(buffer, row.x, row.y, row.width, item.label, style);
+        rows.push((row, index));
+    }
+    for (offset, label) in custom.iter().enumerate() {
+        let index = items.len() + offset;
+        let row_y = inner.y.saturating_add(index as u16);
+        if row_y >= inner.bottom() {
+            break;
+        }
+        let row = Rect::new(inner.x, row_y, inner.width, 1);
+        let style = menu_row_style(index == menu.highlighted, palette);
+        buffer.set_style(row, style);
+        put_text(buffer, row.x, row.y, row.width, label, style);
         rows.push((row, index));
     }
     Some(OverlayRender {

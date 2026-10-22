@@ -64,7 +64,7 @@ impl BindingConfig {
         Self::One(String::new())
     }
 
-    fn values(&self) -> Vec<&str> {
+    pub(crate) fn values(&self) -> Vec<&str> {
         match self {
             Self::One(value) => vec![value.as_str()],
             Self::Many(values) => values.iter().map(String::as_str).collect(),
@@ -134,6 +134,9 @@ pub struct CommandKeybindConfig {
     pub width: Option<PopupSize>,
     /// Optional popup height as cells or a percentage string when type = "popup".
     pub height: Option<PopupSize>,
+    /// Optional label that also lists this command in the global menu and the
+    /// space, tab and pane right-click menus of the local client.
+    pub menu: Option<String>,
 }
 
 impl Default for CommandKeybindConfig {
@@ -145,6 +148,7 @@ impl Default for CommandKeybindConfig {
             description: None,
             width: None,
             height: None,
+            menu: None,
         }
     }
 }
