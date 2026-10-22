@@ -1,0 +1,7 @@
+# Upstream Herdr source: its own git repository
+/herdr/
+# Never commit secrets or machine state
+*.key
+*.env
+auth*.json
+*.bak

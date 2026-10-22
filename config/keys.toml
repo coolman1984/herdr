@@ -1,0 +1,20 @@
+# Master copy of the key bindings this setup adds to %APPDATA%\herdr\config.toml.
+# check.ps1 verifies each key below is present there. Apply edits with: herdr server reload-config
+
+# Open folder: ctrl+b then f -> Windows folder picker -> new workspace there.
+[[keys.command]]
+key = "prefix+f"
+type = "shell"
+command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-open-folder.ps1"'
+
+# Open folder + Claude: ctrl+b then shift+f -> same, then starts claude in it.
+[[keys.command]]
+key = "prefix+shift+f"
+type = "shell"
+command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-open-folder.ps1" -Agent claude'
+
+# Team: ctrl+b then t -> pick folder -> Claude Code left + Codex (SOL 6.1) right.
+[[keys.command]]
+key = "prefix+t"
+type = "shell"
+command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-open-folder.ps1" -Agent team'
