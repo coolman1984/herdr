@@ -59,6 +59,7 @@ finishes or needs you, Windows tells you.
 
 | File | What it is |
 |---|---|
+| [docs/GUIDE.md](docs/GUIDE.md) | **The complete guide**: every key, feature, recipe and trick |
 | [CLAUDE.md](CLAUDE.md) | Rules for any AI agent working on this folder - read first |
 | [HISTORY.md](HISTORY.md) | Every change: Symptom / Cause / Fix / Lesson |
 | [LESSONS.md](LESSONS.md) | Numbered lessons about Herdr, the CLIs and Windows |
