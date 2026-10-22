@@ -51,6 +51,7 @@ Press `Ctrl+B`, let go, then the key. `Ctrl+B` `?` shows them inside the app.
 | `Shift+V` | Split the pane into 4 equal columns, same folder |
 | `Shift+B` | **Layout builder** window (section 4) |
 | `A` | **Agent board** in a pane below: every agent, blocked first in red |
+| `Shift+S` | **Spaces side by side** / separate again (section 4) |
 
 ### Herdr's own
 
@@ -97,6 +98,20 @@ its menu, scroll to read back.
 - `Ctrl+B` `Shift+V`: four equal columns, all in the current folder.
 - Pressing `V` repeatedly halves the pane each time (1/2, 1/4, 1/8) - use `Shift+V`
   or the layout builder for equal columns.
+
+### Several spaces side by side (`Ctrl+B` `Shift+S`)
+Herdr shows one space at a time. To watch e.g. `Digital- Factory`, `MR.Park` and
+`opening-nerp-tcode` together:
+1. `Ctrl+B` `Shift+S` -> a window lists every space, all ticked. Untick what you do not
+   want; the top one becomes the left column.
+2. **Side by side** -> a new space `side by side` opens with one equal column per space.
+   Each space's panes move in (a space with 2 panes gets both, stacked in its column);
+   the agents keep running and keep their names. The emptied spaces leave the sidebar.
+3. Done? `Ctrl+B` `Shift+S` -> **Separate again**: every group goes back to its own space
+   with its old name, and `side by side` closes itself.
+
+Without the window: `pwsh -File herdr-spaces.ps1 -Spaces "MR.Park,opening-nerp-tcode"` and
+`pwsh -File herdr-spaces.ps1 -Separate`. Only the active tab of each space moves.
 
 ### The layout builder (`Ctrl+B` `Shift+B`)
 A window where you choose:

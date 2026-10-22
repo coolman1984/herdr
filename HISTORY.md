@@ -204,3 +204,33 @@ listing the saved ones. Window screenshot: Preset list and Save preset... button
 `herdr config check` -> ok after adding the key and the setting (config backed up first).
 Test session stopped, test worktrees, preset and session folder removed.
 **Lesson:** #19, #20, #21, #22, #23.
+
+## Phase 14 - Spaces side by side (2026-10-22)
+
+**Symptom:** the owner wanted the spaces in the sidebar (`Digital- Factory`, `MR.Park`,
+`opening-nerp-tcode`) shown side by side at the same time.
+**Cause:** Herdr shows one space at a time; the layout builder only moves agents, one
+pane each, into a new layout.
+**Fix:** `herdr-spaces.ps1` (`ctrl+b shift+s`): a window lists every space (all ticked);
+**Side by side** opens a new space `side by side` with N equal placeholder columns, moves
+each space's first active-tab pane into its column and closes the placeholder
+(LESSONS #18), then stacks that space's other panes inside its own column (down-ratios
+1/2, 2/3, 3/4 ... = equal rows). Emptied spaces close. `%APPDATA%\herdr\side-by-side.json`
+records the groups; **Separate again** moves each group back with
+`pane move --new-workspace --label <old name>` (LESSONS #24). herdr-agents' pane record
+follows every move. `-Spaces "a,b"` / `-Separate` do the same without a window.
+A first version used the first space as the host and split its rightmost pane; a space
+with 2 panes then got its second pane stacked across two columns - replaced by the
+placeholder method.
+**Also fixed:** the UNCONFIRMED fallback of Phase 13 returned while Codex was still working
+(Herdr said idle, `agent wait` returned at once) - it now polls `agent get` up to 30 s for
+`working` before waiting (LESSONS #21, updated).
+**Proof (isolated session, window attached):** spaces Digital- Factory (HERDR), MR.Park (2
+panes), opening-nerp-tcode -> `side by side`: columns x=0/40/80, width 40 each, MR.Park's two
+panes at y=0 and y=20 inside column 2, folders right; the three spaces closed. Separate ->
+the three spaces back under their names with 1 / 2 / 1 panes and the right folders,
+`side by side` closed, record removed. With Codex `sbs` running in a space: joined and
+separated, still alive under its name, pane record updated each time, `stop sbs` closed the
+right pane. Window screenshot checked. Key added to `config/keys.toml` and the live config
+(backed up), `config check` ok, reload `applied`. Test session removed.
+**Lesson:** #21 (updated), #24.

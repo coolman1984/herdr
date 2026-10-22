@@ -111,10 +111,21 @@ function Complete-Ask([string]$AgentName, $Result) {
             }
             return [PSCustomObject]@{ Name = $AgentName; Outcome = "FAILED"; Exit = 1; Text = ($out -join "`n") }
         }
-        # The prompt was delivered but Herdr saw no "working" within 5 s (LESSONS #21):
-        # wait for the agent to settle, then show what it answered - marked unconfirmed.
-        $w = Invoke-Herdr @("agent", "wait", $AgentName, "--timeout", ($TimeoutSec * 1000).ToString())
-        $status = if ($w.Json -and $w.Json.result.agent) { $w.Json.result.agent.agent_status } else { "unknown" }
+        # The prompt was delivered but Herdr saw no "working" within 5 s (LESSONS #21). Its
+        # state can lag behind the agent, so "idle" right now proves nothing: watch the state
+        # for up to 30 s; once it shows working, wait until it settles.
+        $deadline = (Get-Date).AddSeconds(30)
+        $status = "unknown"
+        while ((Get-Date) -lt $deadline) {
+            $g = Invoke-Herdr @("agent", "get", $AgentName)
+            $status = if ($g.Json -and $g.Json.result.agent) { $g.Json.result.agent.agent_status } else { "unknown" }
+            if ($status -in @("working", "blocked")) {
+                $w = Invoke-Herdr @("agent", "wait", $AgentName, "--timeout", ($TimeoutSec * 1000).ToString())
+                $status = if ($w.Json -and $w.Json.result.agent) { $w.Json.result.agent.agent_status } else { "unknown" }
+                break
+            }
+            Start-Sleep -Seconds 2
+        }
         $outcome = "UNCONFIRMED"
         $out.Add("UNCONFIRMED: Herdr did not see $AgentName start working; it is now $status. Check the answer below is complete.")
     }

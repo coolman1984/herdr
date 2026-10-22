@@ -37,3 +37,10 @@ command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Deve
 key = "prefix+a"
 type = "shell"
 command = 'pwsh -NoProfile -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-agents.ps1" watch -OpenPane'
+
+# Spaces side by side: ctrl+b then shift+s -> tick spaces -> one view with a column each;
+# "Separate again" puts them back in their own spaces.
+[[keys.command]]
+key = "prefix+shift+s"
+type = "shell"
+command = 'pwsh -NoProfile -STA -WindowStyle Hidden -File "D:\WORK\Software Development\GitHub\HERDR\herdr-spaces.ps1"'

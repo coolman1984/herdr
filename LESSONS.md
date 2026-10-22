@@ -63,10 +63,17 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     `herdr --session <name>` attaches a window; `herdr --session <name> server stop` ends it.
 21. **`agent prompt --wait` can return `agent_prompt_stalled` although the prompt was
     delivered and answered** (seen on Codex's first prompt, two prompts in parallel):
-    Herdr saw no `working` within 5 s. Then `agent wait` + `agent read` gives the answer.
+    Herdr saw no `working` within 5 s. Its state can lag: right after, `agent get` may
+    still say `idle` while the agent works, and `agent wait` then returns at once. Poll
+    `agent get` until it shows `working`, then `agent wait`, then `agent read`.
 22. **`[ui.toast] delivery = "system"` = Windows notifications** for agents that finish or
     need attention in a space/tab you are not looking at (the active tab is suppressed);
     the default is off. Sounds for background agents are on by default (`[ui.sound]`).
 23. **Codex asks "Trust this folder?" once per repository**; for a git worktree it asks
     about the main repo root. A worktree agent of a new repo therefore starts BLOCKED
     until the owner answers in its pane.
+24. **`pane move <id> --new-workspace --label <text>` gives a pane its own space again**
+    (agents keep running). Workspace ids are never reused: a space rebuilt this way has a
+    new id, so find spaces by label, not by a remembered id. A headless server with no
+    window attached can fail splits with `ghostty error -1`; attach a window
+    (`herdr --session <name>`) before testing layouts.
