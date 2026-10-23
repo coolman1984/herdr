@@ -6,6 +6,7 @@
 #   herdr-agents start codex -Effort medium              reasoning effort (agents.json effortArgs)
 #   herdr-agents ask <name> "<task>" [-TimeoutSec 900] [-Lines 200]   send a task, wait, print the answer
 #   herdr-agents ask <name> -TaskFile task.md                          long task from a file
+#   herdr-agents ask codex -Fresh -TaskFile t.md   fresh conversation first (LESSONS #45)
 #   herdr-agents read <name> [-Lines 200] [-Visible]                   what is on its screen
 #   herdr-agents status                                  every live agent and its state
 #   herdr-agents stop <name>                             close a pane this tool started
@@ -55,6 +56,7 @@ param(
     [int]$Lines = 200,
     [int]$IntervalSec = 2,
     [switch]$Visible,
+    [switch]$Fresh,
     [switch]$Once,
     [switch]$OpenPane
 )
@@ -91,6 +93,31 @@ function Format-Screen([string]$Text) {
 function Fail([string]$Message) {
     Write-Output "ERROR: $Message"
     exit 1
+}
+
+function Start-FreshConversation([string]$AgentName) {
+    $sent = Invoke-Herdr @('agent', 'prompt', $AgentName, '/new')
+    if (-not $sent.Ok) { Fail "Could not open a fresh conversation: $($sent.Text)" }
+    # Measured live: menu ~2 s, fresh screen ~21 s after Enter, each read ~3.5 s (LESSONS #48).
+    $deadline = (Get-Date).AddSeconds(60)
+    $answered = $false
+    while ((Get-Date) -lt $deadline) {
+        $read = Invoke-Herdr @('agent', 'read', $AgentName, '--source', 'visible')
+        if ($read.Ok) {
+            $menu = $read.Text.Contains('Where should the new conversation run?')
+            if ($menu -and -not $answered) {
+                $key = Invoke-Herdr @('agent', 'send-keys', $AgentName, 'Enter')
+                if (-not $key.Ok) { Fail "Could not select the current worktree: $($key.Text)" }
+                $answered = $true
+            } elseif (-not $menu -and $read.Text.Contains('>_ OpenAI Codex') -and
+                $read.Text.Contains('Ask Codex to do anything') -and
+                $read.Text -notmatch '(?m)^\s*• ' -and -not $read.Text.Contains('Worked for')) {
+                return $true
+            }
+        }
+        Start-Sleep -Seconds 1
+    }
+    Fail "Codex did not open a fresh conversation in 60 s; see: herdr-agents read $AgentName -Visible"
 }
 
 function Get-Registry {
@@ -261,6 +288,7 @@ function Invoke-Git([string]$Dir, [string[]]$Arguments) {
     [PSCustomObject]@{ Ok = ($LASTEXITCODE -eq 0); Text = (($out | ForEach-Object { $_.ToString() }) -join "`n").TrimEnd() }
 }
 
+if ($Fresh -and $Command -ne 'ask') { Fail "-Fresh is valid only for ask." }
 if (-not (Test-Path -LiteralPath $herdr)) { Fail "Herdr is not installed at $herdr." }
 
 switch ($Command) {
@@ -431,6 +459,12 @@ switch ($Command) {
         if (-not $Target) { Fail "ask needs an agent name. See: herdr-agents status" }
         if ($TaskFile) { $Task = Get-Content -LiteralPath $TaskFile -Raw }
         if (-not $Task) { Fail "ask needs a task (text or -TaskFile)." }
+        if ($Fresh) {
+            $live = Invoke-Herdr @('agent', 'get', $Target)
+            if (-not $live.Ok) { Fail "Could not read agent ${Target}: $($live.Text)" }
+            if ($live.Json.result.agent.agent -ne 'codex') { Fail "-Fresh is for Codex agents only." }
+            [void](Start-FreshConversation $Target)
+        }
         $r = Invoke-Herdr @("agent", "prompt", $Target, $Task, "--wait", "--timeout", ($TimeoutSec * 1000).ToString())
         $done = Complete-Ask $Target $r
         $log = Save-Run $Target $Task $done.Outcome $done.Text

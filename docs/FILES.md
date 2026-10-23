@@ -22,6 +22,7 @@
 | `herdr-spaces.ps1` | Spaces side by side and separate again (ctrl+b shift+s) |
 | `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
+| `herdr-trial.ps1` | Run one model trial, grade it and append results.csv; leave the agent for review |
 | `agents.json` | Agent profiles for the delegation tool |
 | `config/keys.toml` | Master copy of the key bindings added to Herdr's config |
 | `config/settings.toml` | Master copy of other settings added there (Windows notifications) |
@@ -29,6 +30,9 @@
 | `sync-skills.ps1` | Copies `skills/` to `~/.claude/skills/` (`-Check` reports drift only) |
 | `check.ps1` | Verifies the whole setup |
 | `tests/test-batch-a.ps1` | Offline regression tests for delegation, Claude limits and setup checks; `-SourceRoot` tests baseline script copies |
+| `tests/test-round2-agents.ps1` | Offline fresh Codex conversation and model trial tests; `-SourceRoot` / `-OnlyA` test baseline copies |
+| `tests/test-hud-cline.ps1` | Offline tests for the HUD's Cline session, model and token values |
+| `docs/TEAM-PLAYBOOK.md` | How the lead solves hard problems with the agent team: strategies, control cards, verification ladder, loops |
 | `tests/test-batch-b.ps1` | Offline regression tests for installer, launchers, folder team model, spaces and Stop; `-SourceRoot` tests baseline copies, including the launcher binary |
 | `install.cmd`, `install.ps1` | Official installers as reviewed (Phase 2) |
 | `install-custom-build.ps1` | Installs a self-built Herdr (parked, Phase 8) |

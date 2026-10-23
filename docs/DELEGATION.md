@@ -112,6 +112,10 @@ Add an agent: a new entry with `kind` from LESSONS #14, its `command`, `modelFla
 
 ## Patterns
 
+Use `herdr-agents ask codex -Fresh -TaskFile t.md` to open a fresh Codex conversation
+before sending a task (LESSONS #45). `-Fresh` is valid only for `ask` on a live Codex
+agent; it selects the current Git worktree if asked and waits up to 20 seconds for readiness.
+
 - **Second opinion:** start two agents, `fanout` the question to both, compare.
 - **Implement + review:** Codex implements on `-Worktree <branch>`, Claude reviews with
   `diff <name>` and runs the tests there before anything is merged.

@@ -165,7 +165,7 @@ of the old settings is `agents.json.bak`.
   - ctx = how full the agent's context window is (like Claude's and Codex's own status lines)
   - out = tokens the agent has written in this session
   - Codex shows model + effort (`gpt-6.1-sol medium`); Claude its model; others the model
-    they were started with.
+    they were started with (Cline reads the model of its own session, below).
 - **Sidebar, agents:** row 1 = state + the agent's own name + its space; row 2 = CLI and
   model; row 3 = context. In a "side by side" view each agent keeps the name of the space
   it came from.
@@ -175,6 +175,12 @@ of the old settings is `agents.json.bak`.
 - Updated every 5 s by `herdr-hud.ps1`, which starts at sign-in and with Herdr. Claude's
   dollar cost appears after its status line writes that session's cost file under
   `%APPDATA%\herdr\claude-cost\`; it is the session's cumulative cost.
+- **Cline panes** show the model of the session the pane is running and `in 12k · out 3.1k`:
+  `in` = the fresh tokens the model read (input minus cache reads), `out` = the tokens it wrote
+  this session. Cline keeps no context window in that data, so there is no `ctx` part. The numbers
+  come from `%USERPROFILE%\.cline\data\sessions\<id>\<id>.json` (usage fields only; a Cline run on
+  a separate account keeps its own under `%USERPROFILE%\.herdr-accounts\cline\<account>\`), found
+  by the pane's own processes, else by the newest running session in the pane's folder.
 
 ### Reading an agent at a glance
 The sidebar shows each agent's state. `Ctrl+B` `A` opens the board; `Ctrl+B` `G` jumps to

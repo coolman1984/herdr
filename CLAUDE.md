@@ -7,6 +7,18 @@ This folder is the owner's personal Herdr setup: the tools that let Claude Code 
 the other agent CLIs on this PC. It touches the owner's Claude settings, PATH,
 registry and agent CLIs, so mistakes reach outside the folder.
 
+## 0. The first rule: every experience goes into the docs
+
+Owner's first rule (2026-10-23): whenever an agent learns something new - a CLI or Herdr
+behaviour, a bug and its real cause, a model's strength or failure, a technique that worked, a
+trap - it writes it into the docs at once, by itself, without being asked: durable facts in
+LESSONS.md, behaviour changes in HISTORY.md, agent strengths and steering in
+docs/AGENT-ROSTER.md and docs/TEAM-PLAYBOOK.md, delegate rules in AGENTS.md. Nothing valuable
+stays only in a chat.
+
+**Agent panes (owner's rule, 2026-10-23):** only Codex, Antigravity and Claude agents get panes,
+split vertically to the right of the lead. Cline models run headless with no pane (LESSONS #47).
+
 ## 1. The update rule
 
 **Every change of behaviour gets a HISTORY.md entry in the same commit**

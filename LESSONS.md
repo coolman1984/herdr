@@ -165,3 +165,31 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     (`%APPDATA%\herdr\herdr.sock`), while `[[keys.command]]` commands and older tools have none.
     Both mean the same (default) server: compare server identities after mapping the default
     socket path to "default", or the same server looks like two.
+47. **Cline runs headless and reports exactly when it is done:** `cline -P cline-pass -m <model>
+    --thinking high --auto-approve true -c <folder> --json -t <seconds> "<prompt>"` works the task
+    and exits (exit 0); its last JSON line is `{"type":"run_result","finishReason":"completed",
+    "usage":{"inputTokens","outputTokens","cacheReadTokens",...}}` (verified 2026-10-23, Cline
+    3.0.73, DeepSeek V4.1 Flash, 59 s for a small task). No pane, no idle/done guessing (#41).
+    Trap: for cline `-p` is PLAN mode, not "prompt".
+48. **Codex creates a new conversation id only with the first message after `/new`:** Herdr's
+    `agent_session.value` stayed the same 33 s after `/new` (Codex 0.163). A fresh conversation is
+    visible on screen instead: the `>_ OpenAI Codex` banner and NO transcript lines (`• ...`,
+    `Worked for ...`); an old one always shows them. Measured timing (live): worktree menu after ~2 s,
+    fresh screen ~21 s after Enter, each `agent read` ~3.5 s - wait up to 60 s.
+49. **Cline's session `pid` is the shared `cline-hub-daemon`**, not the pane's process: matching a
+    pane to its Cline session by pid rarely works; match by folder and newest live session
+    (found by DeepSeek, 2026-10-23). Session `status` values seen: idle, completed, failed, exited, done.
+50. **`Start-Process -ArgumentList @(...)` does not quote elements**: a path with spaces splits into
+    several arguments. Pass one pre-quoted string, or run the script directly as a background job.
+51. **Codex has a monthly credit limit on this plan** (`/status`: 3,795 of 5,875 used on
+    2026-10-23, resets on the 1st; one round-2 task = 61 credits). Route volume to Cline Pass.
+52. **Models that write code well can still review badly:** Gemini 4 Argon High scored 41/41 on the
+    trial kit (9.4 min) but, like GLM-5.3 Flash, stated a wrong cause for a review bug without
+    running it; DeepSeek V4.1 Flash ran it and was right. Require proof for review claims.
+53. **A new Claude account shows startup dialogs that swallow the first prompt:** on account 2040,
+    Claude Code 2.1.309 opened with "Yes, use my browser / Enter to confirm - Esc to keep browser
+    tools off". A prompt sent then was lost, and its Enter likely CONFIRMED the dialog (owner's
+    choice, not ours). Before the first prompt, read the screen and treat any dialog (trust,
+    browser, sign-in, model pick) as BLOCKED for the owner (2026-10-23).
+54. **`usage` data can be a day old:** it showed account 2040 at 51% weekly (data age 1450 min)
+    while Claude itself said 90%. Check the data age column; an old row means "unknown", not "free".

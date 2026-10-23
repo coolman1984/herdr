@@ -39,6 +39,8 @@ pwsh -NoProfile -File $T <command> ...
 | Wait for the team, one report | `pwsh -NoProfile -File $T collect -Agents a,b,c` |
 | Give a task, wait, get answer | `pwsh -NoProfile -File $T ask codex "<task>" -TimeoutSec 900` |
 | Long task | write it to a .md file, then `ask codex -TaskFile <path>` |
+| Fresh Codex conversation before a task (LESSONS #45) | `pwsh -NoProfile -File $T ask codex -Fresh -TaskFile <path>` |
+| Run and grade a model trial, keep the agent for review | `pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-trial.ps1" -Profile ds-flash [-Model <id>] [-Effort high] [-Run <name>]` |
 | See its screen / transcript | `pwsh -NoProfile -File $T read codex` (`-Visible` = screen now) |
 | Stop an agent I started | `pwsh -NoProfile -File $T stop codex` |
 | Start in an existing empty pane | `pwsh -NoProfile -File $T start codex -Pane <pane-id>` |

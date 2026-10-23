@@ -8,6 +8,9 @@
 #          token_count (last input = context used, model_context_window, total output)
 #   Claude ~\.claude\projects\*\<session>.jsonl : assistant usage (input + cache = context,
 #          output summed per message id), model; window from agents.json "contextWindow"
+#   Cline  ~\.cline\data\sessions\<id>\<id>.json (also under ~\.herdr-accounts\cline\<account>\)
+#          metadata.usage: inputTokens - cacheReadTokens = fresh input, outputTokens = out, model.
+#          Found by the pane's own pids, else by the newest live session for the pane's folder.
 #   Others the model herdr-agents started them with, else the profile's default.
 #   Claude's account and its 5-hour limit ("5h N%", token $limit): claude-limits.ps1; at 95%
 #          one Herdr notification per account and window (HISTORY Phase 24).
@@ -130,6 +133,97 @@ function Get-ClaudeUsage([string]$File, [double]$Window) {
     $s.Data
 }
 
+# Cline keeps one session file per run: <root>\<id>\<id>.json (usage fields only - never the
+# *.messages.json / *.compaction.json next to it). Tests point $clineSessionRoots elsewhere.
+$clineSessionRoots = $null
+function Get-ClineSessionRoots {
+    if ($clineSessionRoots) { return @($clineSessionRoots) }
+    $accounts = Join-Path $env:USERPROFILE ".herdr-accounts\cline"
+    @(Join-Path $env:USERPROFILE ".cline\data\sessions") +
+        @(Get-ChildItem -LiteralPath $accounts -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName "data\sessions" })
+}
+
+# The pids the pane runs: its foreground processes and its shell. Empty when Herdr cannot say.
+function Get-ClinePids([string]$PaneId) {
+    $r = Invoke-Herdr @("pane", "process-info", "--pane", $PaneId)
+    if (-not $r.Ok -or -not $r.Json -or -not $r.Json.result.process_info) { return }
+    $info = $r.Json.result.process_info
+    $pids = @()
+    foreach ($fp in @($info.foreground_processes)) { if ($fp.pid) { $pids += [int]$fp.pid } }
+    if ($info.shell_pid) { $pids += [int]$info.shell_pid }
+    $pids | Sort-Object -Unique
+}
+
+$script:clineSessionCache = @{}
+# A session we may show: still running (not exited/done/completed/failed) and in the pane's folder.
+function Test-ClineLive($Session, [string]$Want) {
+    $Session.cwd -and ([string]$Session.cwd).TrimEnd('\') -ieq $Want -and
+        [string]$Session.status -notin @("exited", "done", "completed", "failed")
+}
+# 1) a session whose pid is the pane's wins (newest first), 2) else the newest live session
+# whose cwd is the pane's folder, 3) else $null. Only files touched in the last 7 days.
+# The cache is kept only while the pids, the folder and the file are unchanged and no newer live
+# session showed up for that folder: Cline starts a new session in the same pane (same pids, the
+# daemon pid is shared) when it is restarted. Times are compared first, newer files are parsed.
+function Find-ClineSession([int[]]$Pids, [string]$Cwd, [string]$PaneId) {
+    if (-not $script:clineSessionCache) { $script:clineSessionCache = @{} }
+    $key = (@($Pids) | Sort-Object) -join ","
+    $want = $Cwd.TrimEnd('\')
+    $cutoff = (Get-Date).AddDays(-7)
+    $files = @()
+    foreach ($root in @(Get-ClineSessionRoots) | Where-Object { Test-Path -LiteralPath $_ }) {
+        foreach ($dir in Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue) {
+            $f = Join-Path $dir.FullName "$($dir.Name).json"
+            $item = Get-Item -LiteralPath $f -ErrorAction SilentlyContinue
+            if ($item -and $item.LastWriteTime -ge $cutoff) { $files += $item }
+        }
+    }
+    $cached = $null
+    if ($PaneId) {
+        $c = $script:clineSessionCache[$PaneId]
+        if ($c -and $c.Pids -eq $key -and $c.Cwd -eq $want -and $c.File -and
+            (Test-Path -LiteralPath $c.File)) { $cached = $c.File }
+    }
+    if ($cached) {
+        $cachedTime = (Get-Item -LiteralPath $cached).LastWriteTime
+        $newer = @($files | Where-Object { $_.FullName -ne $cached -and $_.LastWriteTime -gt $cachedTime })
+        foreach ($item in @($newer | Sort-Object LastWriteTime -Descending)) {
+            $o = $null
+            try { $o = Get-Content -LiteralPath $item.FullName -Raw | ConvertFrom-Json } catch { continue }
+            if ($o -and (Test-ClineLive $o $want)) { $cached = $item.FullName; break }
+        }
+        if ($PaneId) { $script:clineSessionCache[$PaneId] = @{ File = $cached; Pids = $key; Cwd = $want } }
+        return $cached
+    }
+    $fallback = $null
+    foreach ($item in @($files | Sort-Object LastWriteTime -Descending)) {
+        $o = $null
+        try { $o = Get-Content -LiteralPath $item.FullName -Raw | ConvertFrom-Json } catch { continue }
+        if (-not $o) { continue }
+        if ($o.pid -and $Pids -contains [int]$o.pid) {
+            if ($PaneId) { $script:clineSessionCache[$PaneId] = @{ File = $item.FullName; Pids = $key; Cwd = $want } }
+            return $item.FullName
+        }
+        if (-not $fallback -and (Test-ClineLive $o $want)) { $fallback = $item.FullName }
+    }
+    if ($PaneId) { $script:clineSessionCache[$PaneId] = @{ File = $fallback; Pids = $key; Cwd = $want } }
+    $fallback
+}
+
+# Fresh input = what the model actually read (input minus the cache read) and the tokens it wrote.
+function Get-ClineUsage([string]$File) {
+    $o = $null
+    try { $o = Get-Content -LiteralPath $File -Raw | ConvertFrom-Json } catch { return $null }
+    if (-not $o) { return $null }
+    $fresh = $null; $out = $null
+    if ($o.metadata -and $o.metadata.usage) {
+        $fresh = [double]$o.metadata.usage.inputTokens - [double]$o.metadata.usage.cacheReadTokens
+        $out = [double]$o.metadata.usage.outputTokens
+    }
+    [pscustomobject]@{ model = $o.model; fresh = $fresh; out = $out }
+}
+
 function Get-PaneAccounts {
     $map = @{}
     if (Test-Path -LiteralPath $panesState) {
@@ -203,11 +297,26 @@ function Update-Panes {
                     } catch { $usage = $null }
                 }
             }
-            $model = if ($usage -and $usage.model) { $usage.model } elseif ($started[$p.pane_id]) { $started[$p.pane_id] }
+            # Cline: the pane's own pids find its session file, else the newest one for its folder.
+            $cline = $null
+            if ($kind -eq "cline") {
+                try {
+                    $cf = Find-ClineSession (Get-ClinePids $p.pane_id) ([string]$p.cwd) $p.pane_id
+                    if ($cf) { $cline = Get-ClineUsage $cf }
+                } catch { $cline = $null }
+            }
+            $model = if ($cline -and $cline.model) { $cline.model }
+                     elseif ($usage -and $usage.model) { $usage.model } elseif ($started[$p.pane_id]) { $started[$p.pane_id] }
                      elseif ($registry.PSObject.Properties[$kind] -and $registry.$kind.model) { $registry.$kind.model } else { $kind }
             if ($usage -and $usage.effort) { $model = "$model $($usage.effort)" }
             $parts += $model
             $tokens.model = $model
+            # Cline has no context window of ours to show: only fresh input and output, in that order.
+            if ($cline -and $null -ne $cline.fresh -and $null -ne $cline.out) {
+                $parts += "in $(Format-Tokens ([double]$cline.fresh)) · out $(Format-Tokens ([double]$cline.out))"
+                $tokens.in = Format-Tokens ([double]$cline.fresh)
+                $tokens.out = Format-Tokens ([double]$cline.out)
+            }
             # Claude's dollar cost and its account's 5-hour limit: written by
             # ~\.claude\statusline.js for its session (config_dir names the account).
             if ($kind -eq "claude" -and $sid) {

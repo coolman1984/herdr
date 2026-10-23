@@ -607,3 +607,32 @@ Other sockets (isolated sessions) stay separate.
 default socket; a new record saves "default"): 48/48 pass, S1 fails on the previous code. Live:
 `stop ds-push` -> STOPPED; `status` marks Codex started-by-tool again.
 **Lesson:** #46. Test with the environment a real pane has, not only an empty one.
+
+## Phase 29 - Round 2: fresh Codex conversations, model trials, Cline in the HUD, team rules (2026-10-23)
+
+**Symptom:** long Codex conversations were rejected by the company gateway (LESSONS #45) and needed
+a hand-typed `/new`; model trials were run by hand; the HUD showed nothing for Cline agents; every
+spec repeated the same delegate rules; the owner asked for an always-on documentation rule and
+for panes only for Codex, Antigravity and Claude.
+**Fix:**
+- `herdr-agents ask <codex> -Fresh` (Codex GPT-6-Astra medium): `/new`, answers the worktree menu,
+  waits for the fresh screen (banner, no transcript lines), then the task. The lead's first design
+  (wait for a new session id) failed live: Codex makes the id only with the first message
+  (LESSONS #48). Timeout 60 s after a live trace (menu ~2 s, fresh ~21 s).
+- `herdr-trial.ps1` (Astra): copy the trial kit, start a profile, prompt, wait for a stable
+  REPORT.md, grade, read Cline tokens, append `results.csv`. `-Profile` is an alias of
+  `-AgentProfile` (no automatic `$PROFILE` shadowing).
+- HUD (DeepSeek V4.1 Flash): Cline panes show the session model and `in <fresh> · out <out>`;
+  the session is found by folder (Cline's session pid is the shared hub daemon, LESSONS #49);
+  completed/failed/exited/done sessions skipped; a newer live session replaces a cached one.
+- `agents.json`: Claude profile gets `effortArgs` (`--effort {0}`).
+- `AGENTS.md`: 9 delegate rules every agent reads at startup (deliver verified work, stay in scope,
+  prove claims, tests fail on old code, no silent failure, style, safety, no loops, answer format).
+- `CLAUDE.md` section 0: the owner's first rule (every experience into the docs at once) and the
+  pane rule (Cline headless).
+- `docs/TEAM-PLAYBOOK.md`: strategies, control cards, team-size rules, verification ladder, loops,
+  from web research + our measurements. Roster: Argon High and Astra medium results.
+**Proof:** suites: round2 18/18, HUD 11/11, batch A 48/48, batch B 18/18; new tests fail on the
+previous code (reported by the agents, A tests rechecked by the lead). Live: `ask astra -Fresh`
+-> `FRESH-OK` (69 s); HUD functions read a real Cline session (DeepSeek, read-only).
+**Lesson:** #47-#54. Mocked tests passed a wrong design twice; only the live check caught it.
