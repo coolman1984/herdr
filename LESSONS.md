@@ -153,3 +153,11 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     without an account (e.g. alias `2030`) inherits `CLAUDE_CONFIG_DIR` if the server was
     started from an account's shell. Account folders hold COPIES of skills and settings made
     when the account was created: `sync-skills.ps1` updates only `~\.claude\skills`.
+44. **`agent prompt --wait` can return `done` within seconds while the agent has just
+    started working** (seen with Codex 0.163, 2026-10-23); confirm with `agent get` before trusting it.
+45. **The company web gateway (Skyhigh) can reject one long Codex conversation** with `403 Forbidden`
+    and its HTML notification page (`url: https://chatgpt.com/backend-api/codex/responses`) while
+    chatgpt.com and the API still answer (2026-10-23, conversation at ~200k tokens). Codex retries 5
+    times, then stops. A fresh conversation (`/new`) with the task in a spec file worked at once.
+    Keep Codex conversations short: one task per conversation, context in a file. Do not try to get
+    around the gateway itself.

@@ -9,7 +9,7 @@
 #   herdr-agents read <name> [-Lines 200] [-Visible]                   what is on its screen
 #   herdr-agents status                                  every live agent and its state
 #   herdr-agents stop <name>                             close a pane this tool started
-#   herdr-agents start <agent> -Worktree <branch> [-Cwd REPO]   own git worktree + new space
+#   herdr-agents start <agent> -Worktree <branch> [-Cwd REPO]   own git worktree beside caller
 #   herdr-agents diff <name>                             what the agent changed (git, read-only)
 #   herdr-agents fanout "<task>" -Agents codex,deepseek  same task to several agents in parallel
 #   herdr-agents history [<n>]                           past tasks and answers (n = show one)
@@ -114,40 +114,69 @@ function Save-State($Items) {
     ConvertTo-Json -InputObject @($Items) -Depth 4 | Set-Content -LiteralPath $statePath -Encoding utf8
 }
 
+function Get-ServerIdentity {
+    if ($env:HERDR_SOCKET_PATH) { return $env:HERDR_SOCKET_PATH.ToLowerInvariant() }
+    "default"
+}
+
+function Get-RecordServer($Record) {
+    if ($Record.PSObject.Properties['server'] -and $Record.server) { return ([string]$Record.server).ToLowerInvariant() }
+    "default"
+}
+
 # Turn the result of "agent prompt --wait" into DONE / BLOCKED / FAILED with the text to show.
 function Complete-Ask([string]$AgentName, $Result) {
     # Not "$lines": PowerShell names ignore case, and $Lines is a parameter.
     $out = New-Object System.Collections.Generic.List[string]
     $status = if ($Result.Json -and $Result.Json.result.agent) { $Result.Json.result.agent.agent_status } else { $null }
     $outcome = "DONE"
+    # A settled prompt result can precede the turn's first working state (LESSONS #44).
+    if ($Result.Ok -and $status -in @("done", "idle")) {
+        $began = Get-Date
+        $deadline = $began.AddSeconds([Math]::Min(10, $TimeoutSec))
+        while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+            $g = Invoke-Herdr @("agent", "get", $AgentName)
+            $observed = if ($g.Ok -and $g.Json.result.agent) { $g.Json.result.agent.agent_status } else { "unknown" }
+            if ($observed -in @("working", "blocked")) {
+                $remaining = [Math]::Max(1, [int](($TimeoutSec - ((Get-Date) - $began).TotalSeconds) * 1000))
+                $Result = Invoke-Herdr @("agent", "wait", $AgentName, "--timeout", $remaining.ToString())
+                $status = if ($Result.Json.result.agent) { $Result.Json.result.agent.agent_status } else { "unknown" }
+                break
+            }
+        }
+    }
     if (-not $Result.Ok) {
         $errCode = if ($Result.Json -and $Result.Json.error) { $Result.Json.error.code } else { "error" }
-        if ($errCode -ne "agent_prompt_stalled") {
+        if ($errCode -eq "agent_blocked") {
+            $status = "blocked"
+        } elseif ($errCode -ne "agent_prompt_stalled") {
             $out.Add("FAILED ($errCode): $($Result.Text)")
-            if ($errCode -in @("agent_blocked", "timeout")) {
+            if ($errCode -eq "timeout") {
                 $out.Add("--- screen of $AgentName ---")
                 $out.Add((Format-Screen (Invoke-Herdr @("agent", "read", $AgentName, "--source", "visible")).Text))
                 $out.Add("--- Do not resend blindly: a timeout does not prove the task was not delivered. ---")
             }
             return [PSCustomObject]@{ Name = $AgentName; Outcome = "FAILED"; Exit = 1; Text = ($out -join "`n") }
-        }
-        # The prompt was delivered but Herdr saw no "working" within 5 s (LESSONS #21). Its
-        # state can lag behind the agent, so "idle" right now proves nothing: watch the state
-        # for up to 30 s; once it shows working, wait until it settles.
-        $deadline = (Get-Date).AddSeconds(30)
-        $status = "unknown"
-        while ((Get-Date) -lt $deadline) {
-            $g = Invoke-Herdr @("agent", "get", $AgentName)
-            $status = if ($g.Json -and $g.Json.result.agent) { $g.Json.result.agent.agent_status } else { "unknown" }
-            if ($status -in @("working", "blocked")) {
-                $w = Invoke-Herdr @("agent", "wait", $AgentName, "--timeout", ($TimeoutSec * 1000).ToString())
-                $status = if ($w.Json -and $w.Json.result.agent) { $w.Json.result.agent.agent_status } else { "unknown" }
-                break
+        } else {
+            # The prompt was delivered but Herdr saw no "working" within 5 s (LESSONS #21). Its
+            # state can lag behind the agent, so "idle" right now proves nothing: watch the state
+            # for up to 30 s; once it shows working, wait until it settles.
+            $deadline = (Get-Date).AddSeconds(30)
+            $status = "unknown"
+            while ((Get-Date) -lt $deadline) {
+                $g = Invoke-Herdr @("agent", "get", $AgentName)
+                $status = if ($g.Json -and $g.Json.result.agent) { $g.Json.result.agent.agent_status } else { "unknown" }
+                if ($status -in @("working", "blocked")) {
+                    $w = Invoke-Herdr @("agent", "wait", $AgentName, "--timeout", ($TimeoutSec * 1000).ToString())
+                    $status = if ($w.Json -and $w.Json.result.agent) { $w.Json.result.agent.agent_status } else { "unknown" }
+                    break
+                }
+                Start-Sleep -Seconds 2
             }
-            Start-Sleep -Seconds 2
+            $outcome = "UNCONFIRMED"
+            $out.Add("UNCONFIRMED: Herdr did not see $AgentName start working; it is now $status. Check the answer below is complete.")
         }
-        $outcome = "UNCONFIRMED"
-        $out.Add("UNCONFIRMED: Herdr did not see $AgentName start working; it is now $status. Check the answer below is complete.")
     }
     if ($status -eq "blocked") {
         $out.Add("BLOCKED: $AgentName is asking for approval or an answer. Show this to the user; do not approve on their behalf.")
@@ -155,9 +184,17 @@ function Complete-Ask([string]$AgentName, $Result) {
         $out.Add((Format-Screen (Invoke-Herdr @("agent", "read", $AgentName, "--source", "visible")).Text))
         return [PSCustomObject]@{ Name = $AgentName; Outcome = "BLOCKED"; Exit = 3; Text = ($out -join "`n") }
     }
+    $read = Invoke-Herdr @("agent", "read", $AgentName, "--source", "recent-unwrapped", "--lines", $Lines.ToString())
+    if (-not $read.Ok) {
+        if ($read.Json.error.code -eq "agent_not_idle") {
+            return [PSCustomObject]@{ Name = $AgentName; Outcome = "UNCONFIRMED"; Exit = 0
+                Text = "UNCONFIRMED: $AgentName is still working; read it later with: herdr-agents read $AgentName" }
+        }
+        return [PSCustomObject]@{ Name = $AgentName; Outcome = "FAILED"; Exit = 1; Text = "FAILED reading ${AgentName}: $($read.Text)" }
+    }
     if ($outcome -eq "DONE") { $out.Add("DONE: $AgentName is $status") }
     $out.Add("--- recent output of $AgentName ---")
-    $out.Add((Format-Screen (Invoke-Herdr @("agent", "read", $AgentName, "--source", "recent-unwrapped", "--lines", $Lines.ToString())).Text))
+    $out.Add((Format-Screen $read.Text))
     [PSCustomObject]@{ Name = $AgentName; Outcome = $outcome; Exit = 0; Text = ($out -join "`n") }
 }
 
@@ -165,7 +202,14 @@ function Complete-Ask([string]$AgentName, $Result) {
 function Save-Run([string]$Label, [string]$TaskText, [string]$Outcome, [string]$Body) {
     $day = Join-Path $runsPath (Get-Date -Format "yyyy-MM-dd")
     New-Item -ItemType Directory -Force -Path $day | Out-Null
-    $file = Join-Path $day ("{0}-{1}.md" -f (Get-Date -Format "HHmmss"), $Label)
+    $stem = "{0}-{1}" -f (Get-Date -Format "HHmmss"), $Label
+    $n = 1
+    while ($true) {
+        $suffix = if ($n -eq 1) { "" } else { "-$n" }
+        $file = Join-Path $day "$stem$suffix.md"
+        try { New-Item -ItemType File -Path $file -ErrorAction Stop | Out-Null; break }
+        catch { if (-not (Test-Path -LiteralPath $file)) { throw }; $n++ }
+    }
     $text = "# $Label - $Outcome`n`nTime: $((Get-Date).ToString('s'))`n`n## Task`n`n$TaskText`n`n## Answer`n`n$Body`n"
     Set-Content -LiteralPath $file -Value $text -Encoding utf8
     $file
@@ -230,8 +274,13 @@ switch ($Command) {
         # HERDR_ACTIVE_PANE_ID / _CWD instead of the caller's HERDR_PANE_ID.
         if (-not $env:HERDR_PANE_ID -and $env:HERDR_ACTIVE_PANE_ID) {
             $env:HERDR_PANE_ID = $env:HERDR_ACTIVE_PANE_ID; $env:HERDR_ENV = "1"
-            if (-not $Cwd -and $env:HERDR_ACTIVE_PANE_CWD) { $Cwd = $env:HERDR_ACTIVE_PANE_CWD }
+            if (-not $Pane -and -not $Cwd -and $env:HERDR_ACTIVE_PANE_CWD) { $Cwd = $env:HERDR_ACTIVE_PANE_CWD }
         }
+        if ($Cwd) {
+            if (-not (Test-Path -LiteralPath $Cwd -PathType Container)) { Fail "Folder not found: $Cwd" }
+            $Cwd = (Resolve-Path -LiteralPath $Cwd).ProviderPath
+        }
+        $explicitName = [bool]$Name
         # Short names (agents.json "aliases"): e.g. "2040" = profile claude on account 2040.
         $aliases = (Get-Content -LiteralPath $registryPath -Raw | ConvertFrom-Json).aliases
         # "next" = Claude on the account with the least 5-hour use, below the limit.
@@ -259,16 +308,29 @@ switch ($Command) {
 
         $acc = if ($Account) { Get-Account $a $Account } else { $null }
         $live = @(Get-LiveAgents | ForEach-Object { $_.name } | Where-Object { $_ })
-        if (-not $Name) {
-            $Name = if ($acc) { "$Target-$Account" } else { $Target }
+        if (-not $explicitName) {
+            if (-not $Name) { $Name = if ($acc) { "$Target-$Account" } else { $Target } }
             $baseName = $Name
             $n = 2
             while ($live -contains $Name) { $Name = "$baseName-$n"; $n++ }
         } elseif ($live -contains $Name) {
             Fail "An agent named '$Name' is already running."
         }
-        if ($Name -notmatch '^[a-z][a-z0-9_-]{0,31}$') { Fail "Name must match [a-z][a-z0-9_-]{0,31}: $Name" }
-        if (-not $Cwd) { $Cwd = (Get-Location).ProviderPath }
+        if ($Name -cnotmatch '^[a-z][a-z0-9_-]{0,31}$') { Fail "Name must match [a-z][a-z0-9_-]{0,31}: $Name" }
+        if ($Pane -and -not $Worktree) {
+            $p = Invoke-Herdr @("pane", "get", $Pane)
+            if (-not $p.Ok -or -not $p.Json.result.pane.cwd) { Fail "Could not read pane ${Pane}: $($p.Text)" }
+            $paneCwd = [string]$p.Json.result.pane.cwd
+            if ($Cwd -and -not [string]::Equals([IO.Path]::TrimEndingDirectorySeparator($Cwd), [IO.Path]::TrimEndingDirectorySeparator($paneCwd), [StringComparison]::OrdinalIgnoreCase)) {
+                Fail "-Cwd differs from pane $Pane's folder $paneCwd."
+            }
+            $Cwd = $paneCwd
+        }
+        if (-not $Cwd) {
+            $Cwd = (Get-Location).ProviderPath
+            if (-not (Test-Path -LiteralPath $Cwd -PathType Container)) { Fail "Folder not found: $Cwd" }
+            $Cwd = (Resolve-Path -LiteralPath $Cwd).ProviderPath
+        }
 
         $agentArgs = @($a.args)
         $prov = if ($Provider) { $Provider } elseif ($a.PSObject.Properties["provider"]) { $a.provider } else { "" }
@@ -283,11 +345,10 @@ switch ($Command) {
         if ($acc) { $agentArgs += $acc.Args }
         $envArgs = @(Get-EnvArgs $acc)
 
-        $repoRoot = $null; $baseBranch = $null
+        $repoRoot = $null; $baseBranch = $null; $createdPane = $false; $createdSpace = $false
         if ($Worktree) {
-            # The agent gets its own branch and folder (git worktree) in a new space, so it
-            # cannot step on the main checkout. Plain git + workspace create: Herdr's own
-            # "worktree create" crashed the server once (LESSONS #19).
+            # The agent gets its own branch and folder beside the caller. Plain git:
+            # Herdr's own "worktree create" crashed the server once (LESSONS #19).
             $top = Invoke-Git $Cwd @("rev-parse", "--show-toplevel")
             if (-not $top.Ok) { Fail "-Worktree needs a git repository; $Cwd is not one." }
             $repoRoot = [System.IO.Path]::GetFullPath($top.Text)
@@ -300,9 +361,17 @@ switch ($Command) {
                    else { Invoke-Git $repoRoot @("worktree", "add", "-b", $Worktree, $wtPath) }
             if (-not $add.Ok) { Fail "git worktree add failed: $($add.Text)" }
             $Cwd = $wtPath
-            $ws = Invoke-Herdr (@("workspace", "create", "--cwd", $wtPath, "--label", "$Name $Worktree", "--no-focus") + $envArgs)
-            if (-not $ws.Ok) { Fail "Worktree made at $wtPath, but Herdr could not open a space: $($ws.Text)" }
-            $pane = $ws.Json.result.root_pane.pane_id
+            if ($env:HERDR_ENV -eq "1" -and $env:HERDR_PANE_ID) {
+                $split = Invoke-Herdr (@("pane", "split", $env:HERDR_PANE_ID, "--direction", $Direction, "--cwd", $wtPath, "--no-focus") + $envArgs)
+                if (-not $split.Ok) { Fail "Worktree made at $wtPath, but Herdr could not open a pane: $($split.Text)" }
+                $pane = $split.Json.result.pane.pane_id
+            } else {
+                $ws = Invoke-Herdr (@("workspace", "create", "--cwd", $wtPath, "--label", "$Name $Worktree", "--no-focus") + $envArgs)
+                if (-not $ws.Ok) { Fail "Worktree made at $wtPath, but Herdr could not open a space: $($ws.Text)" }
+                $pane = $ws.Json.result.root_pane.pane_id
+                $createdSpace = $true
+            }
+            $createdPane = $true
         } elseif ($Pane) {
             $pane = $Pane
             if ($acc) {
@@ -315,17 +384,26 @@ switch ($Command) {
             $split = Invoke-Herdr (@("pane", "split", $env:HERDR_PANE_ID, "--direction", $Direction, "--cwd", $Cwd, "--no-focus") + $envArgs)
             if (-not $split.Ok) { Fail "Could not open a pane: $($split.Text)" }
             $pane = $split.Json.result.pane.pane_id
+            $createdPane = $true
         }
 
         $startArgs = @("agent", "start", $Name, "--kind", $a.kind, "--pane", $pane, "--timeout", "120000")
         if ($agentArgs.Count -gt 0) { $startArgs += @("--") + $agentArgs }
         $started = Invoke-Herdr $startArgs
 
-        $state = @(Get-State | Where-Object { $_.name -ne $Name })
-        $state += [PSCustomObject]@{ name = $Name; pane = $pane; agent = $Target; model = $mdl; cwd = $Cwd; started = (Get-Date).ToString("s")
-            repo = $repoRoot; branch = $(if ($Worktree) { $Worktree } else { $null }); base = $baseBranch
-            account = $(if ($acc) { $acc.Name } else { $null }); accountTool = $(if ($acc) { $acc.Tool } else { $null }); accountDir = $(if ($acc) { $acc.Dir } else { $null }) }
-        Save-State $state
+        $recordPane = $createdPane -or $started.Ok
+        if (-not $recordPane -and $Pane) {
+            # Herdr keeps the identity even when sign-in or trust prevents readiness.
+            $recordPane = [bool](Get-LiveAgents | Where-Object { $_.name -eq $Name -and $_.pane_id -eq $pane } | Select-Object -First 1)
+        }
+        if ($recordPane) {
+            $server = Get-ServerIdentity
+            $state = @(Get-State | Where-Object { $_.name -ne $Name -or (Get-RecordServer $_) -ne $server })
+            $state += [PSCustomObject]@{ name = $Name; pane = $pane; agent = $Target; agentKind = $a.kind; server = $server; model = $mdl; cwd = $Cwd; started = (Get-Date).ToString("s")
+                repo = $repoRoot; branch = $(if ($Worktree) { $Worktree } else { $null }); base = $baseBranch
+                account = $(if ($acc) { $acc.Name } else { $null }); accountTool = $(if ($acc) { $acc.Tool } else { $null }); accountDir = $(if ($acc) { $acc.Dir } else { $null }) }
+            Save-State $state
+        }
 
         if (-not $started.Ok) {
             $screen = (Invoke-Herdr @("pane", "read", $pane, "--source", "visible")).Text
@@ -335,7 +413,8 @@ switch ($Command) {
             Write-Output "--- If it asks to sign in or pick a model, the USER must do that in the pane. ---"
             exit 2
         }
-        $where = if ($Worktree) { " branch=$Worktree (from $baseBranch) space=new" } else { "" }
+        $where = if ($Worktree) { " branch=$Worktree (from $baseBranch)" } else { "" }
+        if ($createdSpace) { $where += " space=new" }
         if ($acc) { $where += " account=$($acc.Name)" }
         Write-Output "STARTED name=$Name agent=$Target kind=$($a.kind) pane=$pane model=$(if ($mdl) { $mdl } else { '(CLI default)' }) cwd=$Cwd$where"
     }
@@ -395,11 +474,11 @@ switch ($Command) {
         $registry = Get-Registry
         foreach ($m in $members) {
             if (-not $registry.PSObject.Properties[$m.agent]) { Fail "Unknown agent '$($m.agent)' for '$($m.name)'. See: herdr-agents tools" }
-            if ($m.name -and $m.name -notmatch '^[a-z][a-z0-9_-]{0,31}$') { Fail "Name must match [a-z][a-z0-9_-]{0,31}: $($m.name)" }
+            if ($m.name -and $m.name -cnotmatch '^[a-z][a-z0-9_-]{0,31}$') { Fail "Name must match [a-z][a-z0-9_-]{0,31}: $($m.name)" }
         }
         # Agents without a "cwd" work in the lead pane's folder.
         $lead = (Invoke-Herdr @("pane", "get", $env:HERDR_PANE_ID)).Json.result.pane
-        $here = if ($lead -and $lead.cwd) { ([string]$lead.cwd).TrimEnd('\') } else { (Get-Location).ProviderPath }
+        $here = if ($lead -and $lead.cwd) { [string]$lead.cwd } else { (Get-Location).ProviderPath }
         $cwdOf = { param($m) if ($m.PSObject.Properties["cwd"] -and $m.cwd) { $m.cwd } else { $here } }
         $fmt = { param($v) [string]::Format([cultureinfo]::InvariantCulture, "{0:0.####}", $v) }
         # Split $First into $Count equal columns to its right... (ratio 1/remaining, LESSONS #17).
@@ -557,7 +636,7 @@ switch ($Command) {
     }
 
     "history" {
-        $files = @(Get-ChildItem -LiteralPath $runsPath -Recurse -Filter *.md -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)
+        $files = @(Get-ChildItem -LiteralPath $runsPath -Recurse -Filter *.md -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc, FullName -Descending)
         if (-not $files) { Write-Output "No runs saved yet ($runsPath)."; break }
         if ($Target) {
             $i = 0
@@ -580,7 +659,7 @@ switch ($Command) {
         # Read-only review gate: what the agent changed in its folder.
         if (-not $Target) { Fail "diff needs an agent name." }
         $agent = Get-LiveAgents | Where-Object { $_.name -eq $Target } | Select-Object -First 1
-        $entry = Get-State | Where-Object { $_.name -eq $Target } | Select-Object -First 1
+        $entry = Get-State | Where-Object { $_.name -eq $Target -and (Get-RecordServer $_) -eq (Get-ServerIdentity) } | Select-Object -First 1
         $dir = if ($agent) { $agent.cwd } elseif ($entry) { $entry.cwd } else { $null }
         if (-not $dir) { Fail "No agent '$Target' running or recorded." }
         $top = Invoke-Git $dir @("rev-parse", "--show-toplevel")
@@ -648,7 +727,7 @@ switch ($Command) {
     }
 
     "status" {
-        $mine = Get-State
+        $mine = @(Get-State | Where-Object { (Get-RecordServer $_) -eq (Get-ServerIdentity) })
         foreach ($a in Get-LiveAgents) {
             $rec = $mine | Where-Object { $_.pane -eq $a.pane_id } | Select-Object -First 1
             $tag = if ($rec) { "started-by-tool" + $(if ($rec.PSObject.Properties["account"] -and $rec.account) { " account=$($rec.account)" } else { "" }) } else { "" }
@@ -659,12 +738,40 @@ switch ($Command) {
     "stop" {
         if (-not $Target) { Fail "stop needs an agent name." }
         $state = @(Get-State)
-        $entry = $state | Where-Object { $_.name -eq $Target } | Select-Object -First 1
+        $server = Get-ServerIdentity
+        $entry = $state | Where-Object { $_.name -eq $Target -and (Get-RecordServer $_) -eq $server } | Select-Object -First 1
         if (-not $entry) { Fail "'$Target' was not started by this tool; close it yourself in Herdr." }
-        $r = Invoke-Herdr @("pane", "close", $entry.pane)
-        Save-State @($state | Where-Object { $_.name -ne $Target })
-        if (-not $r.Ok) { Fail "Could not close pane $($entry.pane): $($r.Text)" }
-        Write-Output "STOPPED $Target (pane $($entry.pane) closed)"
+        $live = @(Get-LiveAgents)
+        $agent = $live | Where-Object { $_.name -eq $Target } | Select-Object -First 1
+        $pane = $entry.pane
+        $gone = $false
+        if ($agent) {
+            if ($entry.PSObject.Properties['agentKind'] -and $entry.agentKind -ne $agent.agent) {
+                Fail "Agent '$Target' now has another kind; not closing it."
+            }
+            $pane = $agent.pane_id
+        } else {
+            if ($live | Where-Object { $_.pane_id -eq $pane }) { Fail "Pane $pane now holds another agent; not closing it." }
+            $p = Invoke-Herdr @("pane", "get", $pane)
+            if (-not $p.Ok) {
+                $list = Invoke-Herdr @("pane", "list")
+                if (-not $list.Ok -or $null -eq $list.Json.result.panes -or ($list.Json.result.panes | Where-Object { $_.pane_id -eq $pane })) {
+                    Fail "Could not inspect pane ${pane}: $($p.Text)"
+                }
+                $gone = $true
+            }
+        }
+        if (-not $gone) {
+            $r = Invoke-Herdr @("pane", "close", $pane)
+            if (-not $r.Ok) {
+                $list = Invoke-Herdr @("pane", "list")
+                if (-not $list.Ok -or $null -eq $list.Json.result.panes -or ($list.Json.result.panes | Where-Object { $_.pane_id -eq $pane })) {
+                    Fail "Could not close pane ${pane}: $($r.Text)"
+                }
+            }
+        }
+        Save-State @($state | Where-Object { $_.name -ne $Target -or (Get-RecordServer $_) -ne $server })
+        Write-Output "STOPPED $Target (pane $pane closed or gone)"
         if ($entry.PSObject.Properties["branch"] -and $entry.branch) {
             # Never deleted automatically: the branch may hold work nobody has merged yet.
             Write-Output "Worktree kept: $($entry.cwd) (branch $($entry.branch)). After merging it:"

@@ -44,6 +44,12 @@ try {
         # removes Codex's sandbox or skips every permission outright.
         # Owner decision 2026-10-22 (HISTORY Phase 19): Antigravity may skip all permissions.
         $hit = $flags | Where-Object { $_ -in $dangerous -and -not ($a.kind -eq 'agy' -and $_ -eq '--dangerously-skip-permissions') }
+        if ($a.kind -eq 'codex') {
+            for ($j = 0; $j -lt $flags.Count; $j++) {
+                if (($flags[$j] -in @('-s', '--sandbox') -and $j + 1 -lt $flags.Count -and $flags[$j + 1] -eq 'danger-full-access') -or
+                    $flags[$j] -match '^(?:-s|--sandbox)=danger-full-access$') { $hit += @('danger-full-access') }
+            }
+        }
         if ($a.kind -eq 'agy' -and $flags -contains '--dangerously-skip-permissions') { $flags += 'auto' }
         if ($hit) { Bad "agents.json '$($p.Name)' uses $hit - wider than the owner's decision (CLAUDE.md rule 3)" }
         $auto = @($flags | Where-Object { $_ -in @('auto', 'never', '--always-approve') })
@@ -58,13 +64,30 @@ try {
 }
 
 # 4. Key bindings present in Herdr's live config
+function Get-KeyCommands([string]$Text, [string]$Source) {
+    $map = @{}
+    foreach ($b in [regex]::Matches($Text, '(?ms)^[ \t]*\[\[keys\.command\]\][ \t]*(?:#[^\r\n]*)?\r?\n(.*?)(?=^[ \t]*\[|\z)')) {
+        $values = @{}
+        foreach ($m in [regex]::Matches($b.Groups[1].Value, '(?m)^\s*(key|type|command)\s*=\s*(?:"((?:\\.|[^"\\])*)"|''([^'']*)'')\s*(?:#.*)?$')) {
+            # Double-quoted TOML strings use JSON-compatible escapes in these configs.
+            $value = if ($m.Groups[2].Success) { ('"' + $m.Groups[2].Value + '"') | ConvertFrom-Json } else { $m.Groups[3].Value }
+            $values[$m.Groups[1].Value] = $value
+        }
+        $key = $values['key']
+        if (-not $key) { Bad "$Source has a keys.command block without a key"; continue }
+        if ($map.ContainsKey($key)) { Bad "duplicate key $key in $Source"; continue }
+        $map[$key] = $values
+    }
+    return ,$map
+}
 $live = Join-Path $env:APPDATA "herdr\config.toml"
 $master = Get-Content -LiteralPath (Join-Path $root "config\keys.toml") -Raw
 $liveText = if (Test-Path -LiteralPath $live) { Get-Content -LiteralPath $live -Raw } else { "" }
-foreach ($m in [regex]::Matches($master, "(?m)^key = ""([^""]+)""\s*\r?\ntype = ""([^""]+)""\s*\r?\ncommand = '([^']+)'")) {
-    $key = $m.Groups[1].Value
-    $block = "key = ""$key"""
-    if ($liveText.Contains($block) -and $liveText.Contains($m.Groups[3].Value)) { Ok "key $key in Herdr config" }
+$masterKeys = Get-KeyCommands $master 'config/keys.toml'
+$liveKeys = Get-KeyCommands $liveText $live
+foreach ($key in $masterKeys.Keys) {
+    if ($liveKeys.ContainsKey($key) -and $masterKeys[$key]['type'] -and $masterKeys[$key]['command'] -and
+        $liveKeys[$key]['type'] -ceq $masterKeys[$key]['type'] -and $liveKeys[$key]['command'] -ceq $masterKeys[$key]['command']) { Ok "key $key in Herdr config" }
     else { Bad "key $key from config/keys.toml missing or different in $live" }
 }
 
@@ -104,8 +127,9 @@ if (Test-Path -LiteralPath $herdr) {
 # 7. Documentation agrees with the folder
 $files = Get-Content -LiteralPath (Join-Path $root "docs\FILES.md") -Raw
 $inFolder = ($files -split '## Outside this folder')[0]
-foreach ($m in [regex]::Matches($inFolder, '\|\s*`([^`]+)`')) {
-    foreach ($name in ($m.Groups[1].Value -split '`, `')) {
+foreach ($row in [regex]::Matches($inFolder, '(?m)^\|([^|]*)\|')) {
+    foreach ($m in [regex]::Matches($row.Groups[1].Value, '`([^`]+)`')) {
+        $name = $m.Groups[1].Value
         $path = Join-Path $root ($name.TrimEnd('/') -replace '/', '\')
         if (-not (Test-Path -LiteralPath $path)) { Bad "docs/FILES.md lists '$name' but it does not exist" }
     }

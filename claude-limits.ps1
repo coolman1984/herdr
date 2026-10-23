@@ -64,9 +64,10 @@ function Get-ClaudeLimits {
         if ($n) {
             foreach ($w in @(@("five_hour", "FiveHour", "FiveResets"), @("seven_day", "SevenDay", "SevenResets"))) {
                 $r = $n.Data.rate_limits.($w[0])
-                if (-not $r) { continue }
+                if (-not $r -or $r.used_percentage -isnot [ValueType] -or $r.used_percentage -is [bool] -or
+                    -not [double]::IsFinite([double]$r.used_percentage)) { continue }
                 $reset = if ($r.resets_at) { [DateTimeOffset]::FromUnixTimeSeconds([long]$r.resets_at) } else { $null }
-                $row[$w[1]] = if ($reset -and $reset -le $now) { 0 } else { [int]$r.used_percentage }
+                $row[$w[1]] = if ($reset -and $reset -le $now) { [double]0 } else { [double]$r.used_percentage }
                 $row[$w[2]] = if ($reset) { $reset.LocalDateTime } else { $null }
             }
             $row.AgeMin = [int]((Get-Date).ToUniversalTime() - $n.Time).TotalMinutes
@@ -79,13 +80,13 @@ function Get-ClaudeLimits {
 # Text table (herdr-agents usage, handoff files): one line per account, then NEXT.
 function Format-ClaudeLimits($Limits) {
     $t = "ddd HH:mm"
-    "{0,-8} {1,-6} {2,-12} {3,-7} {4,-12} {5,-9} {6}" -f "account", "5h", "5h resets", "weekly", "week resets", "cost today", "data age"
+    "{0,-8} {1,-6} {2,-12} {3,-7} {4,-12} {5,-28} {6}" -f "account", "5h", "5h resets", "weekly", "week resets", "session cost (updated today)", "data age"
     foreach ($l in $Limits) {
         $name = if ($l.Main) { "$($l.Account)*" } else { $l.Account }
         if (-not $l.HasData) { "{0,-8} no data (open it once)" -f $name; continue }
-        $five = if ($null -ne $l.FiveHour) { "$($l.FiveHour)%" } else { "-" }
-        $week = if ($null -ne $l.SevenDay) { "$($l.SevenDay)%" } else { "-" }
-        $line = "{0,-8} {1,-6} {2,-12} {3,-7} {4,-12} {5,-9} {6}" -f $name, $five,
+        $five = if ($null -ne $l.FiveHour) { "{0:0}%" -f $l.FiveHour } else { "?" }
+        $week = if ($null -ne $l.SevenDay) { "{0:0}%" -f $l.SevenDay } else { "-" }
+        $line = "{0,-8} {1,-6} {2,-12} {3,-7} {4,-12} {5,-28} {6}" -f $name, $five,
             $(if ($l.FiveResets) { $l.FiveResets.ToString($t) } else { "-" }), $week,
             $(if ($l.SevenResets) { $l.SevenResets.ToString($t) } else { "-" }),
             ([string]::Format([cultureinfo]::InvariantCulture, '${0:0.00}', $l.CostToday)), "$($l.AgeMin) min"
@@ -100,5 +101,5 @@ function Format-ClaudeLimits($Limits) {
 # The account to continue on: below the threshold, lowest 5-hour use (then lowest weekly).
 # Accounts without data are not chosen (their use is unknown) - open one once to give it data.
 function Get-ClaudeNextAccount($Limits) {
-    @($Limits | Where-Object { $_.HasData -and -not $_.Limit } | Sort-Object FiveHour, SevenDay) | Select-Object -First 1
+    @($Limits | Where-Object { $_.HasData -and $null -ne $_.FiveHour -and -not $_.Limit } | Sort-Object FiveHour, SevenDay) | Select-Object -First 1
 }

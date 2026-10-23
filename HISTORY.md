@@ -505,3 +505,43 @@ every fact and refused to overwrite.
 `CLAUDE_CONFIG_DIR` into the `start 2030` pane (LESSONS #43); the owner's server has no such
 variable. A stray `pane run` typed into the lab Claudes' trust screens (they exited; lab only).
 **Lesson:** #42, #43.
+
+## Phase 25 - Audit batch A: delegation tool, limits, check (2026-10-23)
+
+**Symptom:** ask reported DONE before Codex started its turn; ownership records could close
+another server's pane or a replacement agent, and failed closes lost their retry record.
+The audit also reproduced misleading usage selection and setup checks accepting bad config.
+**Cause:** settled state and read errors were trusted, pane records lacked server/kind identity,
+and checks compared rounded or incomplete data and strings outside their own blocks.
+**Fix:**
+
+- M1: confirm successful done/idle results for up to 10 seconds, wait on observed activity with the remaining timeout, and report a non-idle answer read as UNCONFIRMED.
+- M2: worktrees split beside the caller with the requested direction; only callers outside a pane create a new space, and STARTED reports that accurately.
+- M3: reject missing cwd folders before creating anything and resolve supplied relative paths.
+- M4: record server/kind, track pane creation, follow live agents by name after moves, and refuse changed kinds while preserving legacy records.
+- F01: scope ownership lookups and record replacement/removal to the normalized socket identity; absent legacy identities mean default.
+- F02: reserve run files exclusively with numeric collision suffixes and list history by write time.
+- F03: failed starts in supplied panes save no ownership; stop refuses a different agent occupying the recorded pane.
+- F06: reject Codex danger-full-access sandbox options in separate-value and equals forms.
+- F07: compare each key's command and type within its own block, tolerate comments/order/quoting, and reject duplicate keys in master or live config.
+- F08: check every backtick path in the first FILES table cell, ignoring description-column examples.
+- F09: label usage as session cost (updated today); the corresponding GUIDE definition is reserved for batch B.
+- F10: unknown five-hour percentages display as ? and cannot become NEXT; expired numeric windows still count as known zero.
+- F11: classify agent_blocked before failures, return BLOCKED/3, and show the visible screen.
+- F12: require a successful answer read before DONE; other read errors return FAILED/1.
+- F13: treat alias names as suffixable bases while rejecting explicit duplicate names.
+- F14: read supplied panes' cwd and reject a conflicting explicit cwd before agent start.
+- F15: retain the lead's complete drive-root cwd when building a team.
+- F16: remove ownership only after close success or a successful pane listing confirms absence; preserve it on close/discovery failure.
+- F24: retain double percentages for limit decisions and round only table output.
+- F29: validate start and team names with case-sensitive lowercase matching before opening panes.
+- R1/R2 (lead review): NOT READY starts in supplied panes lost their stop record because only successful starts were recorded; record them when agent list confirms both name and pane, preserving no-identity refusal. Key starts also inherited the focused pane's cwd before checking a supplied pane; apply that fallback only without -Pane. Regression tests reproduce both failures and reject mismatched identities; suite 46/46 passes, HEAD baseline fails 46/46, all 16 PowerShell scripts parse, and check.ps1 retains only the three known worktree failures.
+
+**Proof:** `tests/test-batch-a.ps1` uses AST-loaded definitions and command branches with fake
+Herdr, time, filesystem and child commands: 43/43 pass. The same suite against temporary
+`git show HEAD:<file>` copies fails all 43 tests, covering all 20 item IDs. No live session
+was mutated. All PowerShell scripts parse; `check.ps1` retains only the three audit-baseline
+worktree failures (two skill newline/hash differences and the absent untracked `herdr/`
+clone), plus the existing PATH warning. Pre-existing untracked audit/spec inputs are retained.
+**Found on the way:** the company gateway returned 403 to the long fix conversation of Codex; a fresh conversation worked (LESSONS #45).
+**Lesson:** #44, #45. Read the answer before claiming completion; confirm ownership before closing.
