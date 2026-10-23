@@ -243,6 +243,17 @@ try {
         $null = Run-Branch start
         $script:savedState.Count -eq 2 -and @($script:savedState | Where-Object server -eq other).Count -eq 1
     }
+    Check 'S1 default socket in a pane equals legacy and key-started records' {
+        $defaultSocket = Join-Path $env:APPDATA 'herdr\herdr.sock'
+        Reset-Fixture; $env:HERDR_SOCKET_PATH = $defaultSocket.ToUpperInvariant()
+        $script:records = @([pscustomobject]@{ name = 'codex'; pane = 'old'; cwd = 'C:\pane' }); $legacy = Run-Branch stop
+        Reset-Fixture; $env:HERDR_SOCKET_PATH = $defaultSocket
+        $script:records = @([pscustomobject]@{ name = 'codex'; pane = 'old'; server = 'default'; cwd = 'C:\pane' }); $keyStarted = Run-Branch stop
+        Reset-Fixture; $env:HERDR_SOCKET_PATH = ''
+        $script:records = @([pscustomobject]@{ name = 'codex'; pane = 'old'; server = $defaultSocket.ToLowerInvariant(); cwd = 'C:\pane' }); $paneStarted = Run-Branch stop
+        Reset-Fixture; $env:HERDR_SOCKET_PATH = $defaultSocket; $null = Run-Branch start; $saved = $script:savedState[0].server
+        $legacy.Error -eq '' -and $keyStarted.Error -eq '' -and $paneStarted.Error -eq '' -and $saved -eq 'default'
+    }
     Check 'F01 legacy default records stay on default server' {
         Reset-Fixture; $legacy = [pscustomobject]@{ name = 'codex'; pane = 'old'; cwd = 'C:\pane' }
         $script:records = @($legacy); $wrongServer = Run-Branch stop

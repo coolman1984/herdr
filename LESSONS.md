@@ -161,3 +161,7 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     times, then stops. A fresh conversation (`/new`) with the task in a spec file worked at once.
     Keep Codex conversations short: one task per conversation, context in a file. Do not try to get
     around the gateway itself.
+46. **Every Herdr pane has `HERDR_SOCKET_PATH`** = the default socket
+    (`%APPDATA%\herdr\herdr.sock`), while `[[keys.command]]` commands and older tools have none.
+    Both mean the same (default) server: compare server identities after mapping the default
+    socket path to "default", or the same server looks like two.

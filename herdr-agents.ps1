@@ -114,13 +114,19 @@ function Save-State($Items) {
     ConvertTo-Json -InputObject @($Items) -Depth 4 | Set-Content -LiteralPath $statePath -Encoding utf8
 }
 
-function Get-ServerIdentity {
-    if ($env:HERDR_SOCKET_PATH) { return $env:HERDR_SOCKET_PATH.ToLowerInvariant() }
-    "default"
+# Herdr gives every pane HERDR_SOCKET_PATH = the default socket, while key commands and old
+# records have none: both mean the default server (LESSONS #46).
+function ConvertTo-ServerId([string]$Socket) {
+    if (-not $Socket -or $Socket -eq "default") { return "default" }
+    $id = $Socket.Trim().ToLowerInvariant()
+    if ($id -eq (Join-Path $env:APPDATA "herdr\herdr.sock").ToLowerInvariant()) { return "default" }
+    $id
 }
 
+function Get-ServerIdentity { ConvertTo-ServerId $env:HERDR_SOCKET_PATH }
+
 function Get-RecordServer($Record) {
-    if ($Record.PSObject.Properties['server'] -and $Record.server) { return ([string]$Record.server).ToLowerInvariant() }
+    if ($Record.PSObject.Properties['server']) { return (ConvertTo-ServerId ([string]$Record.server)) }
     "default"
 }
 

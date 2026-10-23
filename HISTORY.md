@@ -590,3 +590,20 @@ coding and reviews.
 no flag): 47/47 pass; E1 fails on the previous code. In the trial, the same model and flags
 (`--thinking high`, read back from the process arguments) scored 41/41.
 **Lesson:** a model goes into a profile only after a measured trial.
+
+## Phase 28 - Default server identity: pane socket path = "default" (2026-10-23)
+
+**Symptom:** right after the merge, `herdr-agents stop ds-push` (started by the pre-merge tool a
+minute earlier) said "'ds-push' was not started by this tool"; `status` no longer marked Codex
+as started-by-tool. Every older record was unmanageable from inside a pane.
+**Cause:** Phase 25 (F01) scoped records by `HERDR_SOCKET_PATH`, else "default". Herdr sets that
+variable in every pane to the DEFAULT socket, so a pane saw "c:\...\herdr.sock" while legacy
+records and key-started records said "default" - one server, two identities. The lead's spec
+designed it; the batch A tests never set the variable to the default socket.
+**Fix:** `ConvertTo-ServerId` maps empty, "default" and the default socket path
+(`%APPDATA%\herdr\herdr.sock`, any case) to "default"; used for the caller and for records.
+Other sockets (isolated sessions) stay separate.
+**Proof:** new test S1 (legacy, key-started and pane-started records all stop from a pane on the
+default socket; a new record saves "default"): 48/48 pass, S1 fails on the previous code. Live:
+`stop ds-push` -> STOPPED; `status` marks Codex started-by-tool again.
+**Lesson:** #46. Test with the environment a real pane has, not only an empty one.
