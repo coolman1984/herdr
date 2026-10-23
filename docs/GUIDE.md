@@ -142,8 +142,10 @@ It remembers the last layout you opened. Without the window:
 |---|---|---|
 | `claude` | Claude Code | claude-opus-5-5 |
 | `codex` | Codex | gpt-6.1-sol |
-| `cline` | Cline, any provider | Cline's choice |
-| `deepseek` | Cline on DeepSeek | chosen at `cline auth deepseek` |
+| `cline` | Cline Pass | cline-pass/glm-5.3 |
+| `cline-flash` | Cline Pass | cline-pass/glm-5.3-flash |
+| `deepseek` | Cline Pass | cline-pass/deepseek-v4-pro |
+| `kimi` | Cline Pass | cline-pass/kimi-k3 |
 | `opencode`, `grok`, `agy` | their CLIs | their default |
 
 All run **without approval prompts** (your decision of 2026-10-22): Claude in auto mode,
@@ -152,8 +154,9 @@ Antigravity auto mode, Grok always-approve. Change it in `agents.json` (`args`);
 of the old settings is `agents.json.bak`.
 
 ### First-time sign-ins (you, once)
-- DeepSeek / other Chinese models through Cline: in any pane run `cline auth deepseek`
-  and paste YOUR key there (never into a chat).
+- The four Cline Pass profiles: in any pane run `cline auth cline-pass` and finish
+  the sign-in yourself. Direct providers remain available with `-Provider <id>` and
+  `-Model <model>` after your own provider sign-in (e.g. `cline auth deepseek`).
 - Codex asks **"Trust this folder?"** once per repository - answer in its pane.
 
 ### What every pane and the sidebar show (ours)
@@ -170,7 +173,8 @@ of the old settings is `agents.json.bak`.
   arrows: `↑2` = 2 commits made here that are not pushed yet; `↓3` = 3 commits on GitHub
   you have not pulled yet. No arrow = in sync.
 - Updated every 5 s by `herdr-hud.ps1`, which starts at sign-in and with Herdr. Claude's
-  dollar cost is not shown (only Claude Code itself knows it - see its own status line).
+  dollar cost appears after its status line writes that session's cost file under
+  `%APPDATA%\herdr\claude-cost\`; it is the session's cumulative cost.
 
 ### Reading an agent at a glance
 The sidebar shows each agent's state. `Ctrl+B` `A` opens the board; `Ctrl+B` `G` jumps to
@@ -193,7 +197,7 @@ Claude uses the `herdr-team` skill, which runs `herdr-agents`. You can run it yo
 | `herdr-agents watch` | The same as a live board (`-Once` = print once) |
 | `herdr-agents start codex` | Codex in a new pane next to you |
 | `... -Model <m>` / `-Provider <p>` / `-Name reviewer` / `-Direction down` / `-Cwd <dir>` | Choose model, provider, name, side, folder |
-| `herdr-agents start codex -Worktree fix-login` | Codex on its **own git branch and folder**, in a new space - your main copy stays untouched |
+| `herdr-agents start codex -Worktree fix-login` | Codex on its **own git branch and folder**, beside your pane (new space only outside Herdr) - your main copy stays untouched |
 | `herdr-agents ask codex "<task>"` | Send a task, wait, print the answer |
 | `herdr-agents ask codex -TaskFile task.md` | Long task from a file |
 | `herdr-agents fanout "<task>" -Agents codex,deepseek` | Same task to several agents at once, one report |
@@ -366,7 +370,8 @@ then press `X`. Commands can be typed in any pane (PowerShell).
 
 ### 13.12 Let an agent change code safely (own branch)
 1. In the project: `herdr-agents start codex -Worktree fix-login -Cwd <repo folder>`.
-   A new space opens on branch `fix-login` in its own folder.
+   A pane opens beside you on branch `fix-login` in its own folder (a new space only
+   when called outside Herdr).
 2. Codex may ask "Trust this folder?" - answer it in its pane (once per repository).
 3. Give the task: `herdr-agents ask codex "Fix the login timeout; run the tests"`.
 4. Review: `herdr-agents diff codex` (commits and files changed).
@@ -396,9 +401,12 @@ Files: `%APPDATA%\herdr\agent-runs\<date>\`.
   (`/exit` or `Ctrl+C`) or `Ctrl+B` `X`.
 
 ### 13.16 Use DeepSeek or another Chinese model (Cline)
-1. Once: in any pane run `cline auth deepseek` and paste your own API key there.
-2. `herdr-agents start deepseek -Model <model-id>` (or pick `New: deepseek` in the layout
-   builder). Cline starts with auto-approve (your setting).
+1. Once: in any pane run `cline auth cline-pass` and finish the sign-in yourself.
+2. `herdr-agents start deepseek` uses `cline-pass/deepseek-v4-pro` (or pick `New: deepseek`
+   in the layout builder). `cline`, `cline-flash`, `kimi` use GLM-5.3, GLM-5.3 Flash,
+   Kimi K3 through the same Cline Pass sign-in. Cline starts with auto-approve (your setting).
+3. For direct DeepSeek instead: sign in yourself with `cline auth deepseek`, then
+   `herdr-agents start cline -Provider deepseek -Model <direct-model-id>`.
 
 ### 13.17 Show all shortcuts
 `Ctrl+B` `I`: a window with every shortcut (type to filter) and this guide. `Ctrl+B` `?`
@@ -431,8 +439,10 @@ Grok / OpenCode subscription (another email) has its own limits.
 ### 13.20 Claude's usage limits and switching accounts (2030 / 2040 / 1984)
 Claude accounts have names: **2030** = your main sign-in, **2040** and **1984** = the separate
 accounts. Each has its own 5-hour and weekly limit.
-1. See them: `herdr-agents usage` - per account the 5-hour %, weekly %, reset times, cost
-   today and how old the numbers are; `LIMIT` = 95% or more; last line `NEXT: <account>` = the
+1. See them: `herdr-agents usage` - per account the 5-hour %, weekly %, reset times,
+   session cost (updated today) and how old the numbers are. This cost adds the cumulative
+   costs of sessions whose status-line files were updated today, including their earlier
+   days; it is not today's spending. `LIMIT` = 95% or more; last line `NEXT: <account>` = the
    one with the least 5-hour use. "no data (open it once)": start Claude on it once.
 2. The border of every Claude pane shows `5h N%` and `account <name>`.
 3. At 95%, Herdr shows one notification: "<account> at 96% - switch: Ctrl+B Shift+C".

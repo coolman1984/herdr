@@ -19,9 +19,11 @@ rem Pane HUD (name, path, model, context on every pane border); one copy only.
 start "" conhost.exe --headless pwsh -NoProfile -File "%~dp0herdr-hud.ps1"
 
 where wt.exe >nul 2>&1
-if %errorlevel%==0 (
-    start "" wt.exe -d "%START_DIR%" --title Herdr "%HERDR_EXE%"
-) else (
+if not %errorlevel%==0 (
     cd /d "%START_DIR%"
     start "Herdr" "%HERDR_EXE%"
+    exit /b
 )
+rem Escape a trailing backslash only for the quoted native argument (LESSONS #40).
+if "%START_DIR:~-1%"=="\" set "START_DIR=%START_DIR%\"
+start "" wt.exe -d "%START_DIR%" --title Herdr "%HERDR_EXE%"

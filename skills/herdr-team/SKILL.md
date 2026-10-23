@@ -25,7 +25,7 @@ pwsh -NoProfile -File $T <command> ...
 | Who is running, their state | `pwsh -NoProfile -File $T status` |
 | Start an agent next to me | `pwsh -NoProfile -File $T start codex` |
 | ... with another model | `pwsh -NoProfile -File $T start codex -Model <model>` |
-| ... Cline on DeepSeek | `pwsh -NoProfile -File $T start deepseek -Model <deepseek-model-id>` |
+| ... Cline Pass on DeepSeek | `pwsh -NoProfile -File $T start deepseek` |
 | ... Cline, any provider | `pwsh -NoProfile -File $T start cline -Provider <id> -Model <model>` |
 | ... a second Claude | `pwsh -NoProfile -File $T start claude -Name reviewer` |
 | ... below instead of right | add `-Direction down` |
@@ -41,7 +41,7 @@ pwsh -NoProfile -File $T <command> ...
 | See its screen / transcript | `pwsh -NoProfile -File $T read codex` (`-Visible` = screen now) |
 | Stop an agent I started | `pwsh -NoProfile -File $T stop codex` |
 | Start in an existing empty pane | `pwsh -NoProfile -File $T start codex -Pane <pane-id>` |
-| Agent on its own git branch (new space) | `pwsh -NoProfile -File $T start codex -Worktree <branch> -Cwd <repo>` |
+| Agent on its own git branch beside me (new space outside Herdr) | `pwsh -NoProfile -File $T start codex -Worktree <branch> -Cwd <repo>` |
 | Review what an agent changed | `pwsh -NoProfile -File $T diff <name>` (read-only) |
 | Same task to several agents at once | `pwsh -NoProfile -File $T fanout "<task>" -Agents codex,deepseek` |
 | Past tasks and answers | `pwsh -NoProfile -File $T history` / `history <n>` |
@@ -51,7 +51,12 @@ pwsh -NoProfile -File $T <command> ...
 
 Agent profiles (command, model flag, default model, safety flags) are in
 `D:\WORK\Software Development\GitHub\HERDR\agents.json`. Defaults: claude =
-claude-opus-5-5, codex = gpt-6.1-sol, others use their CLI default. Names are
+claude-opus-5-5, codex = gpt-6.1-sol; Cline Pass: cline = cline-pass/glm-5.3,
+cline-flash = cline-pass/glm-5.3-flash, deepseek = cline-pass/deepseek-v4-pro,
+kimi = cline-pass/kimi-k3. Gemini profiles also set explicit models in agents.json;
+profiles without a model use their CLI default. The owner signs Cline Pass in with
+`cline auth cline-pass`; direct providers use `-Provider <id> -Model <model>` after
+the owner's provider sign-in. Names are
 unique (`codex`, `codex-2`, ...); `status` shows them.
 
 Exit codes of `ask`: 0 = DONE (answer printed), 1 = FAILED, 3 = BLOCKED.

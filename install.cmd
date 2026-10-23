@@ -15,7 +15,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PATH%" %*
+where pwsh.exe >nul 2>&1
+if %errorlevel%==0 (
+    pwsh.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PATH%" %*
+) else (
+    echo PowerShell 7 not found - using Windows PowerShell.
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PATH%" %*
+)
 set "INSTALLER_EXIT=%ERRORLEVEL%"
 del /f /q "%INSTALLER_PATH%" >nul 2>&1
 exit /b %INSTALLER_EXIT%

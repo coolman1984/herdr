@@ -23,8 +23,25 @@ build; everything else there is ours.
   from its `--help`, safety args so tools need approval), `herdr-agents tools`, then
   test `start` / `ask` / `stop` in a test workspace and close it.
 - Skills: edit `skills/<name>/SKILL.md`, then `pwsh -NoProfile -File sync-skills.ps1`.
-- Live tests: create a workspace with `workspace create --no-focus --label <test>`,
-  set `HERDR_ENV=1` and `HERDR_PANE_ID` to its pane, test, then `workspace close` it.
+- Tests: use the isolated session from CLAUDE.md section 3 (LESSONS #20, #24).
+  Call the absolute executable path and start the lab server headless:
+  ```powershell
+  $herdr = "$env:LOCALAPPDATA\Programs\Herdr\bin\herdr.exe"
+  $oldSocket = $env:HERDR_SOCKET_PATH
+  $serverCommand = '"& ''{0}'' --session lab server"' -f $herdr.Replace("'", "''")
+  Start-Process "$env:SystemRoot\System32\conhost.exe" -WindowStyle Hidden -ArgumentList @(
+      '--headless', 'pwsh', '-NoProfile', '-Command', $serverCommand)
+  try {
+      $env:HERDR_SOCKET_PATH = "$env:APPDATA\herdr\sessions\lab\herdr.sock"
+      # Wait for status: running; create a test workspace with --no-focus.
+      # Read its pane id from JSON; set HERDR_ENV=1 and HERDR_PANE_ID in the test process.
+      # Run tests here without attaching a terminal window.
+  } finally {
+      & $herdr --session lab server stop
+      $env:HERDR_SOCKET_PATH = $oldSocket
+  }
+  ```
+  Use a test workspace in the live session only for what the lab cannot show.
   Never split or close the owner's own panes.
 
 ## After the change
@@ -40,5 +57,5 @@ build; everything else there is ours.
 
 Handle API keys or passwords; approve an agent's tool request for the owner; run
 `herdr integration install ...` or edit `~/.claude/settings.json` yourself (give the
-owner the `!` command); `herdr server stop`; edit files under `herdr/` (upstream clone)
+owner the `!` command); stop the owner's server; edit files under `herdr/` (upstream clone)
 for a quick fix.

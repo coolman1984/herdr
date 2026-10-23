@@ -56,7 +56,7 @@ Research date: **2026-10-22** · Target environment: **Cline CLI v3.0.73 on Wind
   ```powershell
   cline -P cline-pass -m cline-pass/glm-5.3 "Your task"
   ```
-* **Note on `cline auth` flag:** In Cline CLI `3.0.73` (`cline auth --help`), the model flag for the `auth` subcommand is `-m, --modelid <id>`, whereas for top-level `cline` runs (`cline --help`) it is `-m, --model <model-id>`. *(Whether the `api.cline.bot` gateway also strips or accepts bare slugs without `cline-pass/` when `-P cline-pass` is set could not be live-tested on this PC because `cline-pass` currently requires interactive owner re-authentication; always pass the documented `cline-pass/<slug>` ID).*
+* **Note on `cline auth` flag:** In Cline CLI `3.0.73` (`cline auth --help`), the model flag for the `auth` subcommand is `-m, --modelid <id>`, whereas for top-level `cline` runs (`cline --help`) it is `-m, --model <model-id>`. *Before the owner's sign-in, live tests were blocked by re-authentication. The lead's later tests above confirmed four working prefixed IDs and rejection of bare `glm-5.3`; always pass `cline-pass/<slug>`. The other eight model IDs remain untested.*
 
 ### Why `stealth/ox-alpha` Failed
 In August 2026, Z.ai (Zhipu AI) tested a stealth preview model on OpenRouter, OpenCode, and Cline under the anonymous ID **`stealth/ox-alpha`**. After community fingerprinting, Z.ai officially revealed `stealth/ox-alpha` as **GLM-5.3-Flash** (320B total / 18B active MoE with hybrid sparse-and-linear `IndexPool` attention) and retired the `stealth/ox-alpha` slug. Its direct replacement in Cline Pass is **`cline-pass/glm-5.3-flash`** (or its flagship sibling **`cline-pass/glm-5.3`**).
@@ -199,9 +199,9 @@ Because Cline Pass enforces rolling **5-hour, weekly, and monthly quotas** weigh
 4. **Keep sessions short:** Start a fresh session for each distinct task rather than carrying a 400k-token context across unrelated tasks.
 
 ### How to Switch the Saved Default Model (Exact Commands)
-Because `cline-pass` on this PC currently reports *"requires re-authentication"* (`docs/AGENT-ROSTER.md`) and still has the retired `stealth/ox-alpha` saved, the **owner** should run one of the following in a terminal pane (agents must never run `cline auth` or touch `%USERPROFILE%\.cline`):
+**History:** before the owner's sign-in, this PC reported *"requires re-authentication"* and had the retired `stealth/ox-alpha` saved. The lead's later verification above records successful sign-in and four working models. To change the saved default, the **owner** can use the following in a terminal pane (agents must never run `cline auth` or touch `%USERPROFILE%\.cline`). Herdr's Cline Pass profiles pass their own models from `agents.json`:
 
-1. **Re-authenticate and set the saved default model via CLI (`cline auth`):**
+1. **Set the saved default model via CLI (`cline auth`; finish sign-in if requested):**
    ```powershell
    cline auth -p cline-pass -m cline-pass/glm-5.3
    ```

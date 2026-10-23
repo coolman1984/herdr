@@ -16,7 +16,7 @@ herdr-agents ask <name> -TaskFile task.md
 herdr-agents read <name> [-Lines 200] [-Visible]
 herdr-agents stop <name>                   # only agents this tool started
 herdr-agents start <agent> -Pane <pane-id> # start in an existing empty shell pane
-herdr-agents start <agent> -Worktree <branch> [-Cwd REPO]   # own branch + folder, new space
+herdr-agents start <agent> -Worktree <branch> [-Cwd REPO]   # own branch + folder, beside caller; new space outside Herdr
 herdr-agents diff <name>                   # read-only: status, commits since base, files changed
 herdr-agents fanout "<task>" -Agents a,b   # same task to several agents in parallel
 herdr-agents history [<n>]                 # past tasks + answers (%APPDATA%\herdr\agent-runs)
@@ -47,7 +47,8 @@ tests, a second Claude reviews"*. Claude then (skill `herdr-team`, section 1b):
 ## Worktrees: an agent on its own branch
 
 `-Worktree <branch>` makes `~\.herdr\worktrees\<repo>\<branch>` with `git worktree add`
-(new branch from the current one, or the existing branch), opens it in a new space and
+(new branch from the current one, or the existing branch), opens it beside the caller
+(in a new space only outside Herdr) and
 starts the agent there - it cannot touch the main checkout. Review with `diff <name>`,
 merge yourself, then remove the worktree (`stop` prints the command; it never deletes
 work). Codex asks once per repository whether to trust it (LESSONS #23). Herdr's own
@@ -89,8 +90,14 @@ focus where it is, and names the agent (`codex`, `codex-2`, ...).
 |---|---|---|---|---|
 | claude | Claude Code | `--model` | claude-opus-5-5 | |
 | codex | Codex | `-m` | gpt-6.1-sol | |
-| cline | Cline | `-m` (+ `-P provider`) | Cline's choice | `--tui --auto-approve true` |
-| deepseek | Cline on DeepSeek | `-m` | chosen at `cline auth deepseek` | `--tui --auto-approve true -P deepseek` |
+| cline | Cline Pass | `-m` | cline-pass/glm-5.3 | `--tui --auto-approve true -P cline-pass` |
+| cline-flash | Cline Pass | `-m` | cline-pass/glm-5.3-flash | `--tui --auto-approve true -P cline-pass` |
+| deepseek | Cline Pass | `-m` | cline-pass/deepseek-v4-pro | `--tui --auto-approve true -P cline-pass` |
+| kimi | Cline Pass | `-m` | cline-pass/kimi-k3 | `--tui --auto-approve true -P cline-pass` |
+
+The owner signs these four profiles in with `cline auth cline-pass`. For a direct
+provider, the owner signs in to it (e.g. `cline auth deepseek`), then starts with
+`herdr-agents start cline -Provider deepseek -Model <direct-model-id>`.
 
 Approval modes (owner decision 2026-10-22, CLAUDE.md rule 3): Claude `--permission-mode auto`,
 Codex `-a never -s workspace-write`, Cline `--auto-approve true`, Antigravity `--mode auto`,

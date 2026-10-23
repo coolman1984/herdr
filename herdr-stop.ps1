@@ -12,13 +12,14 @@ $herdr = Join-Path $env:LOCALAPPDATA "Programs\Herdr\bin\herdr.exe"
 
 function Get-Running {
     $out = & $herdr agent list 2>$null
-    if ($LASTEXITCODE -ne 0) { return $null }
-    @(($out | ConvertFrom-Json).result.agents)
+    if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ Ok = $false; Agents = @() } }
+    [pscustomobject]@{ Ok = $true; Agents = @(($out | ConvertFrom-Json).result.agents) }
 }
 
-$agents = Get-Running
+$running = Get-Running
+$agents = $running.Agents
 if ($Status) {
-    if ($null -eq $agents) { Write-Output "Herdr is not running."; exit 0 }
+    if (-not $running.Ok) { Write-Output "Herdr server is not reachable."; exit 0 }
     Write-Output "Herdr is running with $($agents.Count) agent(s):"
     foreach ($a in $agents) { Write-Output ("  {0,-12} {1,-8} {2}" -f $(if ($a.name) { $a.name } else { $a.agent }), $a.agent_status, $a.cwd) }
     exit 0
@@ -26,8 +27,8 @@ if ($Status) {
 
 Add-Type -AssemblyName System.Windows.Forms
 $owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; ShowInTaskbar = $false; WindowState = "Minimized" }
-if ($null -eq $agents) {
-    [System.Windows.Forms.MessageBox]::Show($owner, "Herdr is not running - nothing to stop.", "Stop Herdr", "OK", "Information") | Out-Null
+if (-not $running.Ok) {
+    [System.Windows.Forms.MessageBox]::Show($owner, "Herdr server is not reachable.", "Stop Herdr", "OK", "Information") | Out-Null
     exit 0
 }
 $working = @($agents | Where-Object { $_.agent_status -in @("working", "blocked") })

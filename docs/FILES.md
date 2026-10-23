@@ -29,6 +29,7 @@
 | `sync-skills.ps1` | Copies `skills/` to `~/.claude/skills/` (`-Check` reports drift only) |
 | `check.ps1` | Verifies the whole setup |
 | `tests/test-batch-a.ps1` | Offline regression tests for delegation, Claude limits and setup checks; `-SourceRoot` tests baseline script copies |
+| `tests/test-batch-b.ps1` | Offline regression tests for installer, launchers, folder team model, spaces and Stop; `-SourceRoot` tests baseline copies, including the launcher binary |
 | `install.cmd`, `install.ps1` | Official installers as reviewed (Phase 2) |
 | `install-custom-build.ps1` | Installs a self-built Herdr (parked, Phase 8) |
 | `herdr-skill.md` | Herdr's own agent skill (`herdr --skill`), for reference |

@@ -95,7 +95,7 @@ static class Program
         string folder = null;
         if (!string.IsNullOrEmpty(argFolder) && Directory.Exists(argFolder))
         {
-            folder = argFolder;
+            folder = Path.GetFullPath(argFolder);
         }
         if (folder == null)
         {

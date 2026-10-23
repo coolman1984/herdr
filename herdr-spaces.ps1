@@ -108,7 +108,7 @@ function Join-Spaces($Chosen) {
         $ids = @($columns[$i])
         $below = $columns[$i]
         for ($k = 1; $k -lt $src.Panes.Count; $k++) {
-            $m = Invoke-Herdr @("pane", "move", $src.Panes[$k].pane_id, "--tab", $tabId, "--split", "down", "--target-pane", $below, "--ratio", (Format-Ratio (1.0 * $k / ($k + 1))), "--no-focus")
+            $m = Invoke-Herdr @("pane", "move", $src.Panes[$k].pane_id, "--tab", $tabId, "--split", "down", "--target-pane", $below, "--ratio", (Format-Ratio (1.0 / ($src.Panes.Count - $k + 1))), "--no-focus")
             if (-not $m.Ok) { $problems += "$($src.Space.label) pane $($k + 1): $($m.Text)"; continue }
             $below = $m.Json.result.move_result.pane.pane_id
             Update-PaneRecord $src.Panes[$k].pane_id $below
@@ -130,25 +130,50 @@ function Split-Spaces {
     $rec = Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json
     $alive = @{}
     $all = Invoke-Herdr @("pane", "list")
-    if ($all.Ok) { foreach ($p in $all.Json.result.panes) { $alive[$p.pane_id] = $true } }
+    if (-not $all.Ok) { Show-Message "Could not read panes:`n$($all.Text)"; return }
+    foreach ($p in $all.Json.result.panes) { $alive[$p.pane_id] = $true }
     $problems = @()
+    $remaining = @()
     foreach ($g in @($rec.groups)) {
         $ids = @($g.panes | Where-Object { $alive[$_] })
-        if (-not $ids) { $problems += "$($g.label): its panes are gone (closed or moved)"; continue }
-        $first = Invoke-Herdr @("pane", "move", $ids[0], "--new-workspace", "--label", $g.label, "--no-focus")
-        if (-not $first.Ok) { $problems += "$($g.label): $($first.Text)"; continue }
-        $newFirst = $first.Json.result.move_result.pane.pane_id
-        Update-PaneRecord $ids[0] $newFirst
-        $info = (Invoke-Herdr @("pane", "get", $newFirst)).Json.result.pane
-        $below = $newFirst
-        for ($k = 1; $k -lt $ids.Count; $k++) {
+        if (-not $ids) { $problems += "$($g.label): its panes are gone (closed or moved)"; $remaining += $g; continue }
+        # A partial retry reuses its destination and skips panes already moved there.
+        $separated = @()
+        if ($g.PSObject.Properties["separated"]) { $separated = @($g.separated | Where-Object { $alive[$_] }) }
+        if (-not $separated) {
+            $first = Invoke-Herdr @("pane", "move", $ids[0], "--new-workspace", "--label", $g.label, "--no-focus")
+            if (-not $first.Ok) { $problems += "$($g.label): $($first.Text)"; $remaining += $g; continue }
+            $newFirst = $first.Json.result.move_result.pane.pane_id
+            Update-PaneRecord $ids[0] $newFirst
+            $ids[0] = $newFirst
+            $separated = @($newFirst)
+        }
+        $lookup = Invoke-Herdr @("pane", "get", $separated[0])
+        if (-not $lookup.Ok) {
+            $problems += "$($g.label): $($lookup.Text)"
+            $remaining += [pscustomobject]@{ label = $g.label; panes = $ids; separated = $separated }
+            continue
+        }
+        $info = $lookup.Json.result.pane
+        $below = $separated[-1]
+        $failed = $false
+        for ($k = 0; $k -lt $ids.Count; $k++) {
+            if ($ids[$k] -in $separated) { continue }
             $m = Invoke-Herdr @("pane", "move", $ids[$k], "--tab", $info.tab_id, "--split", "down", "--target-pane", $below, "--ratio", "0.5", "--no-focus")
-            if (-not $m.Ok) { $problems += "$($g.label) pane $($k + 1): $($m.Text)"; continue }
+            if (-not $m.Ok) { $problems += "$($g.label) pane $($k + 1): $($m.Text)"; $failed = $true; continue }
             $below = $m.Json.result.move_result.pane.pane_id
             Update-PaneRecord $ids[$k] $below
+            $ids[$k] = $below
+            $separated += $below
+        }
+        if ($failed) {
+            $remaining += [pscustomobject]@{ label = $g.label; panes = $ids; separated = $separated }
         }
     }
-    Remove-Item -LiteralPath $recordPath
+    if ($remaining.Count) {
+        $rec.groups = @($remaining)
+        ConvertTo-Json -InputObject $rec -Depth 5 | Set-Content -LiteralPath $recordPath -Encoding utf8
+    } else { Remove-Item -LiteralPath $recordPath }
     if ($problems) { Show-Message ("Separated, with problems:`n`n" + ($problems -join "`n")) "Warning" }
     elseif ($noWindow) { Write-Output "SEPARATED: $((@($rec.groups) | ForEach-Object { $_.label }) -join ', ') back in their own spaces" }
 }

@@ -107,7 +107,13 @@ if ($Agent) {
             exit 1
         }
         $name = "codex-" + ($paneId -split ":")[0]
-        $output = & $herdr agent start $name --kind codex --pane $codexPane --timeout 90000 2>&1
+        $modelArgs = @()
+        $profilesPath = Join-Path $PSScriptRoot "agents.json"
+        if (Test-Path -LiteralPath $profilesPath) {
+            $codexProfile = (Get-Content -LiteralPath $profilesPath -Raw | ConvertFrom-Json).agents.codex
+            if ($codexProfile.modelFlag -and $codexProfile.model) { $modelArgs = @("--", $codexProfile.modelFlag, $codexProfile.model) }
+        }
+        $output = & $herdr agent start $name --kind codex --pane $codexPane --timeout 90000 @modelArgs 2>&1
         if ($LASTEXITCODE -ne 0) {
             Show-Error "Claude started, but Codex did not become ready in its pane:`n$($output -join "`n")"
             exit 1

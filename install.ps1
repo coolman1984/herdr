@@ -164,6 +164,25 @@ function Update-PathRegistryEntry {
         return $false
     }
 
+    $backupDir = Join-Path $env:APPDATA "herdr\backup"
+    New-Item -ItemType Directory -Path $backupDir -Force -ErrorAction Stop | Out-Null
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $suffix = 0
+    while ($true) {
+        $tail = if ($suffix) { "-$suffix" } else { "" }
+        $backupPath = Join-Path $backupDir "user-path-$stamp$tail.json"
+        try {
+            New-Item -ItemType File -Path $backupPath -ErrorAction Stop | Out-Null
+            break
+        } catch [System.IO.IOException] {
+            if (-not (Test-Path -LiteralPath $backupPath)) { throw }
+            $suffix++
+        }
+    }
+    [pscustomobject]@{ existed = ($null -ne $value); value = [string]$value
+        kind = [string]$kind; time = (Get-Date).ToString("s") } |
+        ConvertTo-Json | Set-Content -LiteralPath $backupPath -Encoding utf8 -ErrorAction Stop
+    Write-Host "PATH backup: $backupPath"
     $EnvironmentKey.SetValue("Path", $newValue, $kind)
     return $true
 }
@@ -651,11 +670,10 @@ function Remove-OldReleases {
     $releaseDirs = Get-ChildItem -LiteralPath $ReleasesDir -Force -Directory -ErrorAction SilentlyContinue |
         Where-Object { -not $_.Name.StartsWith(".staging.") -and -not $_.Name.StartsWith(".backup.") } |
         Sort-Object LastWriteTimeUtc -Descending
-    $kept = 0
+    $kept = 1 # Reserve a slot for the current release, even when it is the oldest.
     foreach ($dir in $releaseDirs) {
         $dirFullPath = [System.IO.Path]::GetFullPath($dir.FullName)
         if ($dirFullPath.Equals($currentFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $kept += 1
             continue
         }
         if ($kept -lt $Keep) {
