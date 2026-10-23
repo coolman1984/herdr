@@ -337,7 +337,9 @@ switch ($Command) {
         if ($prov) { $agentArgs += @($a.providerFlag, $prov) }
         $mdl = if ($Model) { $Model } else { $a.model }
         if ($mdl) { $agentArgs += @($a.modelFlag, $mdl) }
-        # Reasoning effort (low / medium / high ...): agents.json "effortArgs", {0} = the value.
+        # Reasoning effort (low / medium / high ...): agents.json "effortArgs", {0} = the value;
+        # the profile's "effort" is the default when -Effort is not given.
+        if (-not $Effort -and $a.PSObject.Properties["effort"] -and $a.effort) { $Effort = $a.effort }
         if ($Effort) {
             if (-not $a.PSObject.Properties["effortArgs"]) { Fail "$Target has no effort setting in agents.json." }
             $agentArgs += @($a.effortArgs | ForEach-Object { $_ -f $Effort })

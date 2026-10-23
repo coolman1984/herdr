@@ -220,6 +220,14 @@ try {
         Reset-Fixture; $r = Run-Branch start @{ Cwd = 'relative' }
         $r.Error -eq '' -and $script:savedState[0].cwd -eq 'C:\full\relative'
     }
+    Check 'E1 profile effort is the default and -Effort overrides it' {
+        $effortProfiles = '{"agents":{"ds":{"kind":"cline","command":"fake-cli","modelFlag":"-m","model":"m1","args":[],"effortArgs":["--thinking","{0}"],"effort":"high"},"plain":{"kind":"cline","command":"fake-cli","modelFlag":"-m","args":[],"effortArgs":["--thinking","{0}"]}}}'
+        $argsOf = { @($script:calls | Where-Object { $_[1] -eq 'start' } | Select-Object -First 1) | ForEach-Object { $_ -join ' ' } }
+        Reset-Fixture; $script:registryJson = $effortProfiles; $null = Run-Branch start @{ Target = 'ds' }; $default = & $argsOf
+        Reset-Fixture; $script:registryJson = $effortProfiles; $null = Run-Branch start @{ Target = 'ds'; Effort = 'xhigh' }; $override = & $argsOf
+        Reset-Fixture; $script:registryJson = $effortProfiles; $null = Run-Branch start @{ Target = 'plain' }; $none = & $argsOf
+        $default -match '-- -m m1 --thinking high$' -and $override -match '--thinking xhigh$' -and $override -notmatch 'thinking high' -and $none -notmatch 'thinking'
+    }
     Check 'M4 start records server and kind' {
         Reset-Fixture; $r = Run-Branch start
         $recorded = $r.Error -eq '' -and $script:savedState[0].server -ceq 'c:\fake\session.sock' -and $script:savedState[0].agentKind -eq 'codex'

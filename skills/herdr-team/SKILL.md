@@ -25,7 +25,8 @@ pwsh -NoProfile -File $T <command> ...
 | Who is running, their state | `pwsh -NoProfile -File $T status` |
 | Start an agent next to me | `pwsh -NoProfile -File $T start codex` |
 | ... with another model | `pwsh -NoProfile -File $T start codex -Model <model>` |
-| ... Cline Pass on DeepSeek | `pwsh -NoProfile -File $T start deepseek` |
+| ... DeepSeek V4.1 Flash, thinking high (first choice for bulk work and reviews) | `pwsh -NoProfile -File $T start ds-flash` |
+| ... Cline Pass on DeepSeek V4 Pro | `pwsh -NoProfile -File $T start deepseek` |
 | ... Cline, any provider | `pwsh -NoProfile -File $T start cline -Provider <id> -Model <model>` |
 | ... a second Claude | `pwsh -NoProfile -File $T start claude -Name reviewer` |
 | ... below instead of right | add `-Direction down` |
@@ -52,7 +53,8 @@ pwsh -NoProfile -File $T <command> ...
 Agent profiles (command, model flag, default model, safety flags) are in
 `D:\WORK\Software Development\GitHub\HERDR\agents.json`. Defaults: claude =
 claude-opus-5-5, codex = gpt-6.1-sol; Cline Pass: cline = cline-pass/glm-5.3,
-cline-flash = cline-pass/glm-5.3-flash, deepseek = cline-pass/deepseek-v4-pro,
+cline-flash = cline-pass/glm-5.3-flash, ds-flash = cline-pass/deepseek-v4.1-flash (default effort high),
+deepseek = cline-pass/deepseek-v4-pro,
 kimi = cline-pass/kimi-k3. Gemini profiles also set explicit models in agents.json;
 profiles without a model use their CLI default. The owner signs Cline Pass in with
 `cline auth cline-pass`; direct providers use `-Provider <id> -Model <model>` after

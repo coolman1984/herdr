@@ -1,5 +1,5 @@
 {
-  "_comment": "Agent CLIs that herdr-agents.ps1 can start in Herdr panes. kind = Herdr agent kind; modelFlag = how the CLI takes a model; args = always passed (safety first: tools need approval); model = default when -Model is not given (empty = the CLI's own default); effortArgs = how -Effort is passed ({0} = the level); contextWindow = tokens the HUD divides by for 'ctx %'. Which agent suits which task, and what works now: docs/AGENT-ROSTER.md. Edit freely. account = how -Account <name> gives a profile its own sign-in folder (%USERPROFILE%\\.herdr-accounts\\<tool>\\<name>): env vars / args with {dir}, the login command, and settings copied from the default folder (never sign-in files). Antigravity has no account support (its sign-in is not in a folder we can move).",
+  "_comment": "Agent CLIs that herdr-agents.ps1 can start in Herdr panes. kind = Herdr agent kind; modelFlag = how the CLI takes a model; args = always passed (safety first: tools need approval); model = default when -Model is not given (empty = the CLI's own default); effortArgs = how -Effort is passed ({0} = the level); effort = the default level when -Effort is not given; contextWindow = tokens the HUD divides by for 'ctx %'. Which agent suits which task, and what works now: docs/AGENT-ROSTER.md. Edit freely. account = how -Account <name> gives a profile its own sign-in folder (%USERPROFILE%\\.herdr-accounts\\<tool>\\<name>): env vars / args with {dir}, the login command, and settings copied from the default folder (never sign-in files). Antigravity has no account support (its sign-in is not in a folder we can move).",
   "agents": {
     "claude": {
       "kind": "claude",
@@ -203,6 +203,36 @@
         "--thinking",
         "{0}"
       ],
+      "account": {
+        "tool": "cline",
+        "env": {},
+        "args": [
+          "--config",
+          "{dir}",
+          "--data-dir",
+          "{dir}\\data"
+        ],
+        "login": "cline auth cline-pass --config \"{dir}\" --data-dir \"{dir}\\data\"",
+        "copy": []
+      }
+    },
+    "ds-flash": {
+      "kind": "cline",
+      "command": "cline",
+      "modelFlag": "-m",
+      "model": "cline-pass/deepseek-v4.1-flash",
+      "args": [
+        "--tui",
+        "--auto-approve",
+        "true"
+      ],
+      "providerFlag": "-P",
+      "provider": "cline-pass",
+      "effortArgs": [
+        "--thinking",
+        "{0}"
+      ],
+      "effort": "high",
       "account": {
         "tool": "cline",
         "env": {},

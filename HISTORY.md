@@ -574,3 +574,19 @@ warning. No live Herdr session, registry value, installed skill or shortcut was 
 The lead's AGENT-ROSTER.md edit and the supplied task spec were left intact.
 **Lead review:** renamed a `$profile` variable in herdr-open-folder.ps1 (it hid PowerShell's automatic `$PROFILE`), and made the F21 test check behaviour only (it failed the correct `D:\a b` case on the old script just because the new line was absent; now 16/18 fail on the old code - every broken case). Lead's model trial (GLM-5.3 Flash vs DeepSeek V4.1 Flash, xhigh vs high) added to docs/AGENT-ROSTER.md section 7.
 **Lesson:** a regression test must test behaviour, not the presence of the new code line.
+
+## Phase 27 - DeepSeek V4.1 Flash profile with default effort high (2026-10-23)
+
+**Symptom:** the owner's trial winner (DeepSeek V4.1 Flash, thinking high; docs/AGENT-ROSTER.md
+section 7) had no profile: every start needed `start deepseek -Model cline-pass/deepseek-v4.1-flash
+-Effort high`.
+**Cause:** profiles had no default reasoning effort; `effortArgs` applied only with `-Effort`.
+**Fix:** new optional profile field `effort` = the default level when `-Effort` is not given
+(`-Effort` still overrides; profiles without it unchanged). New profile `ds-flash`
+(`cline-pass/deepseek-v4.1-flash`, `effort: "high"`, same args and account block as the other
+Cline Pass profiles). Skill herdr-team and the roster's routing rule name it first for bulk
+coding and reviews.
+**Proof:** `tests/test-batch-a.ps1` test E1 (default high, `-Effort xhigh` overrides, no field ->
+no flag): 47/47 pass; E1 fails on the previous code. In the trial, the same model and flags
+(`--thinking high`, read back from the process arguments) scored 41/41.
+**Lesson:** a model goes into a profile only after a measured trial.
