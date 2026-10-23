@@ -193,3 +193,6 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     browser, sign-in, model pick) as BLOCKED for the owner (2026-10-23).
 54. **`usage` data can be a day old:** it showed account 2040 at 51% weekly (data age 1450 min)
     while Claude itself said 90%. Check the data age column; an old row means "unknown", not "free".
+55. **A one-word Cline prompt fails headless:** .NET `ArgumentList` passes a word without spaces
+    unquoted, and cline answers `Prompt text must be passed as a single quoted argument` (exit 1).
+    Real prompts (with spaces) are fine (found by DeepSeek, 2026-10-23).

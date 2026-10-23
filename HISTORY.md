@@ -636,3 +636,26 @@ for panes only for Codex, Antigravity and Claude.
 previous code (reported by the agents, A tests rechecked by the lead). Live: `ask astra -Fresh`
 -> `FRESH-OK` (69 s); HUD functions read a real Cline session (DeepSeek, read-only).
 **Lesson:** #47-#54. Mocked tests passed a wrong design twice; only the live check caught it.
+
+## Phase 30 - Cline headless runner; the toolkit becomes GitHub main (2026-10-23)
+
+**Symptom:** the owner wants only Codex, Antigravity and Claude agents in panes; Cline agents in
+panes also had unreliable idle/done state (LESSONS #41). The owner also wanted all toolkit
+updates on GitHub's `main`, which held the Herdr Rust application.
+**Fix:**
+- `herdr-headless.ps1` (written by DeepSeek V4.1 Flash, itself run headless - 21 min, 64 steps):
+  `-Profile <cline profile> -Task|-TaskFile [-Cwd -Model -Effort -Account -TimeoutSec]` builds
+  the cline arguments from agents.json (no `--tui`; `--json -c -t`), runs with no window, logs
+  JSONL to `agent-runs`, reads `run_result` (finishReason, tokens) and the final answer; exit 0 =
+  DONE, 1 = FAILED; kills the process tree 30 s after the timeout. The lead renamed a `$Profile`
+  parameter (AGENTS.md rule 6). Skill herdr-team: Cline models are started this way.
+- GitHub (owner's choice "Replace main, keep a backup"): the old `main` (b14199cb, the Herdr app
+  with the custom-command-menus work) copied to a new branch `herdr-app` and verified; then the
+  toolkit force-pushed to `main` with `--force-with-lease` on that exact commit. `master`
+  untouched; `windows-toolkit` kept equal to `main`; local `main` tracks `origin/main`.
+**Proof:** `tests/test-headless.ps1` 9/9 (0/9 on the previous code; H9 fails on the agent's own
+first, buggy version). Live: `herdr-headless.ps1 -Profile ds-flash -Task ...` -> `DONE ... in 61 s
+- in 15297 out 476`, `product.txt` = 42. GitHub: `herdr-app` = b14199cb, `main` = local main,
+`master` = 5bd900d8 before and after.
+**Lesson:** #55. An honest agent disclosed its own mistake (a case-insensitive name clash
+started the real cline twice) and added a test that catches it - keep asking for that.

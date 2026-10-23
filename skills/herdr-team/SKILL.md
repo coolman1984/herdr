@@ -25,7 +25,7 @@ pwsh -NoProfile -File $T <command> ...
 | Who is running, their state | `pwsh -NoProfile -File $T status` |
 | Start an agent next to me | `pwsh -NoProfile -File $T start codex` |
 | ... with another model | `pwsh -NoProfile -File $T start codex -Model <model>` |
-| ... DeepSeek V4.1 Flash, thinking high (first choice for bulk work and reviews) | `pwsh -NoProfile -File $T start ds-flash` |
+| DeepSeek V4.1 Flash / any Cline model: HEADLESS, no pane (owner rule) | `pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-headless.ps1" -Profile ds-flash -TaskFile <spec.md> -Cwd <folder>` (run it in the background; exit 0 = DONE) |
 | ... Cline Pass on DeepSeek V4 Pro | `pwsh -NoProfile -File $T start deepseek` |
 | ... Cline, any provider | `pwsh -NoProfile -File $T start cline -Provider <id> -Model <model>` |
 | ... a second Claude | `pwsh -NoProfile -File $T start claude -Name reviewer` |

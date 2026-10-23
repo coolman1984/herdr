@@ -22,6 +22,7 @@
 | `herdr-spaces.ps1` | Spaces side by side and separate again (ctrl+b shift+s) |
 | `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
+| `herdr-headless.ps1` | Run a Cline profile headless (no pane): waits, saves the JSONL log, prints DONE/FAILED, answer and tokens |
 | `herdr-trial.ps1` | Run one model trial, grade it and append results.csv; leave the agent for review |
 | `agents.json` | Agent profiles for the delegation tool |
 | `config/keys.toml` | Master copy of the key bindings added to Herdr's config |
@@ -31,6 +32,7 @@
 | `check.ps1` | Verifies the whole setup |
 | `tests/test-batch-a.ps1` | Offline regression tests for delegation, Claude limits and setup checks; `-SourceRoot` tests baseline script copies |
 | `tests/test-round2-agents.ps1` | Offline fresh Codex conversation and model trial tests; `-SourceRoot` / `-OnlyA` test baseline copies |
+| `tests/test-headless.ps1` | Offline tests for the headless Cline runner (arguments, result parsing, refusals, main flow) |
 | `tests/test-hud-cline.ps1` | Offline tests for the HUD's Cline session, model and token values |
 | `docs/TEAM-PLAYBOOK.md` | How the lead solves hard problems with the agent team: strategies, control cards, verification ladder, loops |
 | `tests/test-batch-b.ps1` | Offline regression tests for installer, launchers, folder team model, spaces and Stop; `-SourceRoot` tests baseline copies, including the launcher binary |
