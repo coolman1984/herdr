@@ -4,7 +4,7 @@
 # workbench can be diagnosed remotely.
 #
 #   radar           scan + repair + report + open herdr
-#   radar scan      scan + report only (changes nothing)
+#   radar scan      scan + report (repairs only broken Termux packages)
 #   radar hermes    force a clean Hermes reinstall (keeps ~/.hermes settings)
 #
 # radar updates itself from main on every run, so fixes ship by editing this file.
@@ -43,8 +43,7 @@ redact() {
 WB_PATH='export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$HOME/bin:/usr/local/bin:$PATH" HERDR_PROCESS_DETECTION=child-groups; unset TERMUX_VERSION PREFIX; '
 wb() { # run a command inside the workbench, bounded. Plain (non-login) bash:
   # the login profile starts a background update that would keep proot open.
-  # proot-distro is a script; run it through Termux bash so `timeout` can always exec it.
-  timeout --foreground "${WB_TIMEOUT:-900}" "$PREFIX/bin/bash" "$PREFIX/bin/proot-distro" login "$DISTRO" --shared-tmp -- \
+  timeout --foreground "${WB_TIMEOUT:-900}" "$PREFIX/bin/proot-distro" login "$DISTRO" --shared-tmp -- \
     bash -c "$WB_PATH$1" 2>&1
 }
 
@@ -106,18 +105,33 @@ scan() {
   grep -q "assertion" "$REPORT" && log "NOTE: proot assertion seen during scan"
 }
 
+# Termux packages must move together: installing one package on a stale
+# system (the first device run) left proot-distro pointing at a missing
+# python3.14. A full upgrade brings every dependency to the same release.
+pd_ok() { "$PREFIX/bin/proot-distro" --help >/dev/null 2>&1; }
+termux_health() {
+  local missing=() p
+  for p in proot-distro python git gh curl termux-api; do dpkg -s "$p" >/dev/null 2>&1 || missing+=("$p"); done
+  if [ ${#missing[@]} -eq 0 ] && pd_ok; then return 0; fi
+  step "repairing Termux packages (full upgrade, a few minutes)"
+  {
+    echo "termux repair: missing=[${missing[*]}] proot-distro-ok=$(pd_ok && echo yes || echo no)"
+    pkg update -y -o Dpkg::Options::=--force-confnew
+    yes | pkg upgrade -y -o Dpkg::Options::=--force-confnew
+    pkg install -y -o Dpkg::Options::=--force-confnew proot-distro python git gh curl termux-api
+  } 2>&1 | tee -a "$STATE/termux-repair.log" | tail -3
+  hash -r
+  if pd_ok; then ok "proot-distro works"; log "termux repair: proot-distro works"
+  else bad "proot-distro still broken"; log "termux repair FAILED: $(head -1 "$PREFIX/bin/proot-distro")"; tail -20 "$STATE/termux-repair.log" >> "$REPORT"; fi
+}
+
 hermes_ok() { wb 'command -v hermes >/dev/null && timeout 60 hermes --version >/dev/null 2>&1' >/dev/null; }
 
 # --- 3. repair ------------------------------------------------------------
 repair() {
   step "repairing"
   section "repairs"
-  # install only what is missing; upgrading proot-distro mid-run broke the first device run
-  local missing=()
-  for p in proot-distro git gh curl termux-api; do dpkg -s "$p" >/dev/null 2>&1 || missing+=("$p"); done
-  if [ ${#missing[@]} -gt 0 ]; then
-    pkg install -y "${missing[@]}" >> "$REPORT" 2>&1; hash -r; log "installed: ${missing[*]}"
-  else log "termux packages: ok"; fi
+  termux_health
 
   if [ ! -d "$ROOTFS/usr" ]; then
     log "workbench missing: running full setup"
@@ -204,6 +218,7 @@ upload() {
 }
 
 # --- run ------------------------------------------------------------------
+termux_health
 scan
 if [ "$MODE" != "scan" ]; then
   repair
