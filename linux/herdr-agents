@@ -10,7 +10,7 @@
 # CLAUDE.md rule 3). This script passes those args through unchanged — never weaken them.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 HERDR_HOME="${HERDR_HOME:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 REGISTRY="$HERDR_HOME/agents.json"
 HERDR_BIN="${HERDR_BIN:-herdr}"
