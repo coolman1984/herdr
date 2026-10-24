@@ -23,6 +23,8 @@ fetch() { # fetch <name> <dest>: prefer the local checkout, else download
   else curl -fsSL "$REPO_RAW/$1" -o "$2"; fi
 }
 
+# `setup.sh --launchers` (used by radar) only (re)writes dev, radar and the boot script
+if [ "${1:-}" != "--launchers" ]; then
 say "updating Termux packages"
 export DEBIAN_FRONTEND=noninteractive
 pkg update -y -o Dpkg::Options::=--force-confnew
@@ -54,6 +56,7 @@ if : </dev/tty 2>/dev/null; then
   proot-distro login "$DISTRO" --shared-tmp -- bash /root/.workbench/setup.sh </dev/tty
 else
   proot-distro login "$DISTRO" --shared-tmp -- bash /root/.workbench/setup.sh
+fi
 fi
 
 say "installing the 'dev' launcher"

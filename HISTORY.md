@@ -1104,3 +1104,11 @@ outside proot), then `ImportError: cannot import name 'YAML' from 'ruamel.yaml'`
 `chown -R 0:0 ~/.hermes/hermes-agent ~/.local/bin`, `hermes pm repair` and `hermes update`, and counts Hermes as
 broken when its output says "repair failed". The Hermes chat provider (kilocode) returned HTTP 402 "Low Credit" with a
 negative balance; the xAI fallback has no token. That is the owner's billing/provider choice, not something radar changes.
+**Second device report (2026-10-24 17:00 UTC):** the workbench setup ran - herdr 0.9.5, Claude, Codex, Gemini,
+OpenCode and Copilot installed, gh signed in, SSH key added. Hermes still crashed (`No module named 'ruamel'`), yet
+radar printed "hermes: WORKING": `proot-distro login` (5.10.2) returns 0 whatever the inner command returns, so every
+`if wb ...` check was always true. radar now asks yes/no questions through `wb_ok`, which prints a marker. `chown`
+under proot's fake root did not change the uid Hermes sees, so a broken Hermes now gets a clean reinstall (data in
+`~/.hermes` kept) with `hermes pm repair` only as a second step. The `dev` launcher was never written (only the
+workbench half of setup ran); radar now runs `setup.sh --launchers`. The first `herdr` attach timed out after 15 s
+while radar's own background `herdr server` was starting; radar no longer starts a server.
