@@ -10,6 +10,14 @@
 # radar updates itself from main on every run, so fixes ship by editing this file.
 set -uo pipefail
 
+# radar must run in Termux itself, not inside the Ubuntu workbench
+if [ ! -x "${PREFIX:-/nonexistent}/bin/pkg" ]; then
+  printf '\n\033[1;33m⚠ You are inside the Ubuntu workbench.\033[0m\n'
+  printf '  Type:  exit   then paste the radar command again.\n'
+  printf '  اكتب exit وبعدين الصق أمر الرادار تاني.\n\n'
+  exit 1
+fi
+
 RAW="${HERDR_MOBILE_RAW:-https://raw.githubusercontent.com/coolman1984/herdr/${HERDR_MOBILE_REF:-main}/mobile/termux}"
 DISTRO="${HERDR_MOBILE_DISTRO:-ubuntu}"
 ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO"
@@ -185,5 +193,7 @@ step "summary"
 grep -E "MISSING|NOT signed-in|STILL BROKEN|WORKING|assertion" "$REPORT" | sort -u | sed 's/^/  /'
 hermes_ok && ok "Hermes works" || bad "Hermes still broken (the report tells Claude why)"
 if [ "$MODE" != "scan" ] && [ -t 0 ]; then
-  echo; echo "opening herdr..."; sleep 2; exec dev
+  echo; echo "opening herdr..."; sleep 2
+  if command -v dev >/dev/null; then exec dev; fi
+  exec proot-distro login "$DISTRO" --shared-tmp -- bash -lc 'cd ~/code 2>/dev/null; exec herdr'
 fi
