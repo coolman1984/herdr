@@ -116,9 +116,10 @@ termux_health() {
   step "repairing Termux packages (full upgrade, a few minutes)"
   {
     echo "termux repair: missing=[${missing[*]}] proot-distro-ok=$(pd_ok && echo yes || echo no)"
-    pkg update -y -o Dpkg::Options::=--force-confnew
-    yes | pkg upgrade -y -o Dpkg::Options::=--force-confnew
-    pkg install -y -o Dpkg::Options::=--force-confnew proot-distro python git gh curl termux-api
+    # apt directly: the pkg wrapper needs curl, which a half-upgraded system breaks
+    apt-get update
+    apt-get full-upgrade -y -o Dpkg::Options::=--force-confnew
+    apt-get install -y -o Dpkg::Options::=--force-confnew proot-distro python git gh curl termux-api
   } 2>&1 | tee -a "$STATE/termux-repair.log" | tail -3
   hash -r
   if pd_ok; then ok "proot-distro works"; log "termux repair: proot-distro works"
