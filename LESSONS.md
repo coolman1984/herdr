@@ -204,3 +204,11 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     "Antigravity Browser Extension" in Chrome's Default profile (the owner can switch it off in
     chrome://extensions). It also keeps its own Edge profiles under `~\.gemini\antigravity-cli\brain\<id>\scratch`
     (521 MB from one 2026-10-17 session).
+57. **Claude Code reads AGENTS.md only when no CLAUDE.md exists** (working folder or above); with
+    both, it loads CLAUDE.md only - so Claude helpers never saw our delegate rules. Fix: import it
+    from CLAUDE.md with `@AGENTS.md` (Claude Code docs, "AGENTS.md"; needs v2.1.277+).
+58. **Claude Haiku 5.5 at `xhigh` can end a turn with no visible answer** (the whole answer stays in
+    its thinking) - Anthropic's Haiku prompting guide. Give Haiku helpers an answer FILE and read it.
+    Anthropic's defaults: Haiku and Sonnet start at `medium`, Opus at `medium`; `max` showed
+    timeouts / scope violations for Sonnet. Codex SOL 6.1 medium found this headless with
+    `codex --search exec` in 19 min, every claim with an official URL (lead spot-checked two).

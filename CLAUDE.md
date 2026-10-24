@@ -3,6 +3,9 @@
 Read this file completely before your first tool call. Read [HISTORY.md](HISTORY.md)
 and [LESSONS.md](LESSONS.md) before changing a script, a key binding or a skill.
 
+**Delegates** (any agent started by the lead, Claude helpers included) also follow the delegate
+rules in @AGENTS.md - Claude Code reads AGENTS.md only through this import when a CLAUDE.md exists.
+
 This folder is the owner's personal Herdr setup: the tools that let Claude Code lead
 the other agent CLIs on this PC. It touches the owner's Claude settings, PATH,
 registry and agent CLIs, so mistakes reach outside the folder.

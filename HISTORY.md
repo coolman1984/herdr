@@ -675,3 +675,14 @@ a finished trial pane (Gemini Flash) stayed open overnight; the PC is short on R
   "Antigravity Browser Extension" (owner's setting, chrome://extensions).
 **Proof:** Chrome RAM before/after stopping Argon (above); `t-gflash` pane graded (41/41) and closed.
 **Lesson:** #56.
+
+## Phase 32 - Claude helpers get the delegate rules; Claude model control cards (2026-10-24)
+
+**Symptom:** Codex research (headless, `codex --search exec`, 19 min) reported that Claude Code
+reads AGENTS.md only when no CLAUDE.md exists - this folder has one, so Claude helpers never saw
+the 9 delegate rules; and that Haiku 5.5 at xhigh can end a turn with no visible answer.
+**Fix:** CLAUDE.md imports `@AGENTS.md` for delegates; TEAM-PLAYBOOK control cards for Opus,
+Sonnet and Haiku 5.5 (effort defaults, failure modes, counter-measures) from Anthropic's guides.
+**Proof:** the lead checked both claims on Anthropic's pages (Haiku prompting guide; Claude Code
+memory docs, "AGENTS.md" table).
+**Lesson:** #57, #58.
