@@ -1,0 +1,49 @@
+         -tion status).
+      11 -- Not verified live: no Herdr session was run. The guard was tested with mocked `ag
+         -ent read` output, and the screens are the spec's sample texts, not captured from li
+         -ve panes.
+       9 +- check.ps1 was not rerun this round. Last run: 1 FAIL, "docs/FILES.md lists 'herdr
+         +/' but it does not exist". Pre-existing: herdr/ exists only in the main checkout, n
+         +ot in this worktree.
+      10 +- Not verified live: no Herdr session was run. The guard was tested with mocked `ag
+         +ent read` output, and the screens are sample texts, not captured from live panes.
+
+● DONE
+  Changed: herdr-agents.ps1 (new Get-AgentDialog, with trust = do you trust|trust this folder; guard
+  in the ask branch before -Fresh and agent prompt; one header line); tests/test-dialog-guard.ps1
+  (new); tests/test-round2-agents.ps1 (A1, A2 and A7 get one extra leading idle screen for the
+  guard's read; nothing else changed). No commit. HISTORY.md and LESSONS.md are untouched, as you
+  asked.
+  Tests:
+  - test-dialog-guard.ps1: suite 21/21. On HEAD: 19 fail (A4 and A5 pass on HEAD by design, since
+    normal asks must still send).
+  - test-round2-agents.ps1: suite 18/18. On HEAD sources with this test file: 3 fail (A1, A2, A7),
+    because the extra leading screen changes their queue.
+  - test-batch-a.ps1: suite 48/48. Not run on HEAD.
+  - herdr-agents.ps1 parses with 0 errors.
+
+  Doubts:
+  - Codex trust text: the test uses only the quoted phrase "Trust this folder?" from LESSONS #23.
+    The full live Codex screen was not captured.
+  - trust this folder also matches Antigravity's option line "> Yes, I trust this folder". That is
+    harmless there, because its question line matches first. A screen showing only the option line
+    would report it as the Line.
+  - When a pattern matches several lines, the top-most matching line is returned (the spec is
+    silent).
+  - The check is a snapshot: a dialog that appears between the read and the prompt is not caught.
+  - check.ps1 was not rerun this round. Its last run showed 1 FAIL, "docs/FILES.md lists 'herdr/'
+    but it does not exist". That is pre-existing: herdr/ exists only in the main checkout, not in
+    this worktree.
+  - Not verified live: no Herdr session was run. The guard was tested with mocked agent read output,
+    and the screens are sample texts, not captured from live panes.
+
+  The answer is also in tasks/dialog-guard-answer.md.
+
+✻ Crunched for 1m 54s · done 7:44 AM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Haiku 5.5 | $0.55 | 202.1k/1000.0k (20%)
+  ⏵⏵ auto mode on (shift+tab to cycle) · gh auth login for PR status
+

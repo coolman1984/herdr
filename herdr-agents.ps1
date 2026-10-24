@@ -6,6 +6,7 @@
 #   herdr-agents start codex -Effort medium              reasoning effort (agents.json effortArgs)
 #   herdr-agents ask <name> "<task>" [-TimeoutSec 900] [-Lines 200]   send a task, wait, print the answer
 #   herdr-agents ask <name> -TaskFile task.md                          long task from a file
+#   (ask reads the screen first: a startup dialog - trust, browser, sign-in, model - sends nothing: BLOCKED)
 #   herdr-agents ask codex -Fresh -TaskFile t.md   fresh conversation first (LESSONS #45)
 #   herdr-agents read <name> [-Lines 200] [-Visible]                   what is on its screen
 #   herdr-agents status                                  every live agent and its state
@@ -88,6 +89,29 @@ function Format-Screen([string]$Text) {
     }
     while ($out.Count -gt 0 -and -not $out[$out.Count - 1]) { $out.RemoveAt($out.Count - 1) }
     $out -join "`n"
+}
+
+# Startup dialogs that only the owner may answer (CLAUDE.md rule 2, LESSONS #53). Only the last 20
+# non-empty lines count: older text is conversation history. A trust, browser or model dialog also
+# needs a selection footer in the last 6 lines, because answer text can quote the dialog phrase.
+# Sign-in needs no footer, but its phrase must be in the last 6 lines.
+function Get-AgentDialog([string]$Screen) {
+    $tail = @($Screen -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Last 20)
+    $recent = @($tail | Select-Object -Last 6)
+    $footer = [bool]($recent | Where-Object { $_ -match 'enter to confirm|enter confirm|navigate|esc to' } | Select-Object -First 1)
+    # The first pattern with a matching line wins, in this order.
+    $patterns = [ordered]@{
+        trust     = 'do you trust|trust this folder'
+        browser   = 'use my browser|browser tools'
+        'sign-in' = 'not logged in|not signed in|please (log|sign) in|run /login'
+        model     = '(select|choose|pick) a model'
+    }
+    foreach ($name in $patterns.Keys) {
+        $window = if ($name -eq 'sign-in') { $recent } elseif ($footer) { $tail } else { @() }
+        $line = $window | Where-Object { $_ -match $patterns[$name] } | Select-Object -First 1
+        if ($line) { return [PSCustomObject]@{ Name = $name; Line = $line } }
+    }
+    $null
 }
 
 function Fail([string]$Message) {
@@ -459,6 +483,18 @@ switch ($Command) {
         if (-not $Target) { Fail "ask needs an agent name. See: herdr-agents status" }
         if ($TaskFile) { $Task = Get-Content -LiteralPath $TaskFile -Raw }
         if (-not $Task) { Fail "ask needs a task (text or -TaskFile)." }
+        # A dialog only the owner may answer would swallow the task or answer for them: send nothing
+        # while one shows. A failed read does not stop the ask.
+        $screen = Invoke-Herdr @("agent", "read", $Target, "--source", "visible")
+        $dialog = if ($screen.Ok) { Get-AgentDialog $screen.Text } else { $null }
+        if ($dialog) {
+            $text = (@("BLOCKED: $Target shows a $($dialog.Name) dialog (`"$($dialog.Line)`") - the owner answers it in the pane.",
+                "--- screen of $Target ---", (Format-Screen $screen.Text)) -join "`n")
+            $log = Save-Run $Target $Task "BLOCKED" $text
+            Write-Output $text
+            Write-Output "--- saved: $log ---"
+            exit 3
+        }
         if ($Fresh) {
             $live = Invoke-Herdr @('agent', 'get', $Target)
             if (-not $live.Ok) { Fail "Could not read agent ${Target}: $($live.Text)" }

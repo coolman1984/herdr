@@ -56,14 +56,14 @@ function Run-Branch {
     try { & $ask | Out-Null; 'NO_EXIT' } catch { $_.Exception.Message }
 }
 Check 'A1 fresh sends /new then waits for ready' {
-    Reset-Fixture; $script:screens = @('loading', $freshScreen)
+    Reset-Fixture; $script:screens = @($freshScreen, 'loading', $freshScreen)
     $result = Run-Branch
     $prompts = @($script:calls | Where-Object { $_[1] -eq 'prompt' })
     $result -eq 'TEST_EXIT:0' -and $prompts.Count -eq 2 -and $prompts[0][3] -eq '/new' -and
         $prompts[0] -notcontains '--wait' -and $prompts[1][3] -eq 'do task' -and $script:tick -ge 1
 }
 Check 'A2 fresh answers the worktree menu once' {
-    Reset-Fixture; $script:screens = @("$freshScreen`n$menuScreen", $menuScreen, $freshScreen)
+    Reset-Fixture; $script:screens = @($freshScreen, "$freshScreen`n$menuScreen", $menuScreen, $freshScreen)
     $result = Run-Branch
     $keys = @($script:calls | Where-Object { $_[1] -eq 'send-keys' })
     $result -eq 'TEST_EXIT:0' -and $keys.Count -eq 1 -and $keys[0][3] -ceq 'Enter' -and $script:tick -ge 2
@@ -97,7 +97,7 @@ Check 'A6 fresh banner screen without bullets returns' {
 }
 Check 'A7 menu answered then fresh screen returns' {
     Reset-Fixture
-    $script:screens = @("$freshScreen`n$menuScreen", $menuScreen, $freshScreen)
+    $script:screens = @($freshScreen, "$freshScreen`n$menuScreen", $menuScreen, $freshScreen)
     $result = Run-Branch
     $keys = @($script:calls | Where-Object { $_[1] -eq 'send-keys' })
     $result -eq 'TEST_EXIT:0' -and $script:tick -eq 2 -and $keys.Count -eq 1 -and $keys[0][3] -ceq 'Enter'
