@@ -40,7 +40,10 @@ redact() {
     -e 's/((api[_-]?key|token|secret|password|authorization|bearer)[^:=]{0,20}[:=][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig' \
     -e 's/[A-Za-z0-9_+\/=-]{40,}/[REDACTED-LONG]/g'
 }
-wb_alive() { timeout 120 "$PREFIX/bin/proot-distro" login "$DISTRO" -- true >/dev/null 2>&1; }
+# proot-distro login does not pass the inner exit status through, so every
+# yes/no question to the workbench is answered by printing a marker.
+wb_ok() { wb "{ $1 ; } >/dev/null 2>&1 && echo __RADAR_OK__" | grep -q __RADAR_OK__; }
+wb_alive() { timeout 120 "$PREFIX/bin/proot-distro" login "$DISTRO" -- echo __RADAR_OK__ 2>/dev/null | grep -q __RADAR_OK__; }
 wb_put() { # wb_put <local file> <path under the workbench home>: copy through stdin,
   # because the container's directory on disk differs between proot-distro versions
   timeout 120 "$PREFIX/bin/proot-distro" login "$DISTRO" -- bash -c \
@@ -134,7 +137,7 @@ termux_health() {
 }
 
 # --version alone passed on the device while Hermes printed "dependency repair failed"
-hermes_ok() { wb 'out="$(timeout 120 hermes --version 2>&1)" && ! printf "%s" "$out" | grep -qiE "repair failed|update failed|refusing to update|Traceback"' >/dev/null; }
+hermes_ok() { wb_ok 'out="$(timeout 120 hermes --version 2>&1)" && ! printf "%s" "$out" | grep -qiE "repair failed|update failed|refusing to update|Traceback"'; }
 
 # --- 3. repair ------------------------------------------------------------
 repair() {
@@ -161,14 +164,14 @@ repair() {
   curl -fsSL "$RAW/tools.conf" -o "$STATE/tools.conf" && wb_put "$STATE/tools.conf" .workbench/tools.conf.default
 
   wb '[ -f ~/.workbench/tools.conf ] || cp ~/.workbench/tools.conf.default ~/.workbench/tools.conf' >/dev/null
-  if ! wb 'command -v dev-update >/dev/null' >/dev/null; then
+  if ! wb_ok 'command -v dev-update'; then
     # an older hand-made workbench: install our helpers and missing tools once
     log "--- workbench helpers missing: running workbench-setup.sh"
     curl -fsSL "$RAW/workbench-setup.sh" -o "$STATE/workbench-setup.sh" && wb_put "$STATE/workbench-setup.sh" .workbench/setup.sh
     WB_TIMEOUT=3600 wb 'bash ~/.workbench/setup.sh </dev/tty' | tee "$STATE/workbench-setup.log"
     tail -60 "$STATE/workbench-setup.log" | redact >> "$REPORT"
   fi
-  if wb 'for t in herdr claude codex gemini; do command -v $t >/dev/null || exit 1; done' >/dev/null; then
+  if wb_ok 'for t in herdr claude codex gemini; do command -v $t || exit 1; done'; then
     log "core tools present"
   else
     log "--- tools missing: dev-update --now"
@@ -185,22 +188,22 @@ repair() {
       curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser
       ls -dt "$H"/hermes-agent.broken-* 2>/dev/null | tail -n +3 | xargs -r rm -rf' | tail -40 | redact >> "$REPORT"
   fi
-  # Files created from Termux outside proot belong to the app uid (10362 on the
-  # device); Hermes refuses to update a tree it does not own as root.
-  log "--- hermes ownership + dependency repair"
-  wb 'H="${HERMES_HOME:-$HOME/.hermes}"
-      chown -R 0:0 "$H/hermes-agent" "$HOME/.local/bin" 2>&1 | tail -2
-      timeout 900 hermes pm repair </dev/null 2>&1 | tail -15
-      timeout 1800 hermes update </dev/null 2>&1 | tail -25' | redact >> "$REPORT"
+  # A fresh install replaces trees Hermes refuses to update (on the device:
+  # "venv/bin/ty is owned by uid 10362", then "No module named 'ruamel'").
+  if ! hermes_ok; then
+    log "--- hermes still broken after reinstall: pm repair"
+    wb 'timeout 900 hermes pm repair </dev/null 2>&1 | tail -15' | redact >> "$REPORT"
+  fi
   log "--- hermes doctor --fix"
   wb 'timeout 300 hermes doctor --fix' | tail -40 | redact >> "$REPORT"
   hermes_ok && log "
 hermes: WORKING" || log "
 hermes: STILL BROKEN"
 
-  if wb 'command -v herdr' >/dev/null && ! wb 'pgrep -x herdr >/dev/null' >/dev/null; then
-    (proot-distro login "$DISTRO" --shared-tmp -- bash -c "$WB_PATH"'mkdir -p ~/code ~/.workbench; cd ~/code && exec herdr server >> ~/.workbench/server.log 2>&1' >/dev/null 2>&1 &)
-    log "started herdr server"
+  # the herdr client starts its own server; radar only makes sure the
+  # Termux-side launchers (dev, boot script) exist and carry the proot fix
+  if ! grep -qs PROOT_NO_SECCOMP "$PREFIX/bin/dev" || [ ! -x "$HOME/.termux/boot/10-herdr-server" ]; then
+    curl -fsSL "$RAW/setup.sh" -o "$STATE/setup.sh" && bash "$STATE/setup.sh" --launchers >> "$REPORT" 2>&1 && log "installed dev launcher and boot script"
   fi
   endsection
 }
@@ -246,7 +249,8 @@ cp "$REPORT" "$HOME/storage/downloads/radar-report.md" 2>/dev/null
 upload || echo "report saved: ~/storage/downloads/radar-report.md"
 
 step "summary"
-grep -oE "^[a-z]+ +MISSING|NOT signed-in|hermes: (STILL BROKEN|WORKING)|assertion failed|Error code: 402[^,]*" "$REPORT" | sort -u | sed 's/^/  /'
+# summarize the final state only (after repair when there was one)
+{ grep -q '^# after repair' "$REPORT" && sed -n '/^# after repair/,$p' "$REPORT" || cat "$REPORT"; } | grep -oE "^[a-z]+ +MISSING|NOT signed-in|hermes: (STILL BROKEN|WORKING)|assertion failed|Error code: 402[^,]*" | sort -u | sed 's/^/  /'
 hermes_ok && ok "Hermes works" || bad "Hermes still broken (the report tells Claude why)"
 if [ "$MODE" != "scan" ] && [ -t 0 ]; then
   echo; echo "opening herdr..."; sleep 2
