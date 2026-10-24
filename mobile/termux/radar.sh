@@ -49,7 +49,10 @@ wb_put() { # wb_put <local file> <path under the workbench home>: copy through s
   timeout 120 "$PREFIX/bin/proot-distro" login "$DISTRO" -- bash -c \
     'mkdir -p "$(dirname ~/"$1")" && cat > ~/"$1"' _ "$2" < "$1"
 }
-WB_PATH='export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$HOME/bin:/usr/local/bin:$PATH" HERDR_PROCESS_DETECTION=child-groups HERDR_SOCKET_PATH=/tmp/herdr.sock; unset TERMUX_VERSION PREFIX; '
+# Termux's bin dir leaks into the workbench PATH; Hermes' installer then picked
+# Termux's python3.14 (bionic) over Ubuntu's 3.13 and built a broken
+# "linux-arm64-bionic" runtime ("cannot import name YAML from ruamel.yaml").
+WB_PATH='PATH="$(printf %s "$PATH" | tr : "\n" | grep -v "^/data/data/com.termux" | paste -sd: -)"; export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$HOME/bin:/usr/local/bin:$PATH" HERDR_PROCESS_DETECTION=child-groups HERDR_SOCKET_PATH=/tmp/herdr.sock; unset TERMUX_VERSION PREFIX; '
 wb() { # run a command inside the workbench, bounded. Plain (non-login) bash:
   # the login profile starts a background update that would keep proot open.
   timeout --foreground "${WB_TIMEOUT:-900}" "$PREFIX/bin/proot-distro" login "$DISTRO" --shared-tmp -- \
@@ -181,6 +184,13 @@ repair() {
   printf '%s\n' '# radar: herdr sockets must stay under the 107-byte unix socket limit' \
     'export HERDR_SOCKET_PATH=/tmp/herdr.sock' > "$STATE/herdr-sockets.sh"
   wb_put "$STATE/herdr-sockets.sh" ../etc/profile.d/herdr-sockets.sh && log "herdr socket profile installed"
+
+  # keep the workbench's dev-update current (it runs `hermes update` every 12 h)
+  if curl -fsSL "$RAW/workbench-setup.sh" -o "$STATE/workbench-setup.sh" \
+     && sed -n "/<<'UPD'\$/,/^UPD\$/p" "$STATE/workbench-setup.sh" | sed '1d;$d' > "$STATE/dev-update" \
+     && [ -s "$STATE/dev-update" ] && wb_put "$STATE/dev-update" ../usr/local/bin/dev-update; then
+    wb 'chmod +x /usr/local/bin/dev-update' >/dev/null && log "dev-update refreshed"
+  fi
 
   log "--- fixing apt/dpkg inside the workbench"
   wb 'dpkg --configure -a; apt-get -f install -y' | tail -5 | redact >> "$REPORT"

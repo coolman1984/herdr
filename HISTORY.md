@@ -1128,3 +1128,10 @@ printed "hermes: WORKING" because `command -v hermes && ...; ! grep` was true wh
 (tested against stubs: missing, crashing, healthy). The reinstall now also moves the old Hermes uv cache aside
 (it survived the first reinstall) and sets `UV_LINK_MODE=copy`; the scan reports foreign-owned files under
 `~/.hermes` and the installed `ruamel/yaml/__init__.py`. Not yet confirmed on the device.
+**Hermes root cause, found by Claude Code running inside herdr on the phone (2026-10-24 ~19:00 UTC):** after our full
+Termux upgrade, Termux's `python3.14` (bionic) sat at the end of the workbench PATH. Hermes' installer prefers
+Python 3.14 (Ubuntu 25.10 has 3.13), so `uv python find --system` picked Termux's interpreter; `pm/store.py`
+`current_target()` then saw `sys.platform == "android"` and pinned the whole runtime to `linux-arm64-bionic`
+inside a glibc Ubuntu, which ends in `cannot import name 'YAML' from 'ruamel.yaml'`. Fix: radar's workbench commands,
+`workbench-setup.sh` and `dev-update` drop `/data/data/com.termux/*` from PATH; radar refreshes `dev-update` from main.
+The uv-cache and ownership guesses in the earlier entries were not the cause.

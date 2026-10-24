@@ -302,3 +302,8 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     Natively, herdr 0.9.5 refuses a socket path over the limit ("local socket name length exceeds capacity of
     sun_path"). Also: `proot-distro login` (5.10) always exits 0, and kills every process at logout unless
     `--no-kill-on-exit` is given.
+
+71. **Inside a Termux proot workbench, keep Termux's bin dir out of PATH for installers.** proot-distro exposes
+    `/data/data/com.termux/files/usr`, and a PATH entry for it lets a glibc installer find a bionic binary
+    (Termux's `python3.14`). Hermes then detected Android and built an unusable `linux-arm64-bionic` runtime.
+    Filter `^/data/data/com.termux` out of PATH before installing or updating anything in the workbench.
