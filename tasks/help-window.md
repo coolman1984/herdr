@@ -1,6 +1,6 @@
 # Task for Codex: the Herdr help window (herdr-help.ps1)
 
-You work in `D:\WORK\Software Development\GitHub\HERDR` (a personal PowerShell toolkit around
+You work in `I:\herdr` (a personal PowerShell toolkit around
 the Herdr terminal app). Create ONE new file: `herdr-help.ps1`. Do not change any other file.
 Do not run git. Do not install anything. PowerShell 7 (`pwsh`) only.
 

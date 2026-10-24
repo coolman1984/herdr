@@ -23,7 +23,7 @@
 6. **One-click start** - run `pwsh -NoProfile -File launcher/build.ps1` to build the
    windowless `launcher\HerdrLauncher.exe`. On a fresh PC create Desktop and Start-menu
    `Herdr.lnk` shortcuts targeting the full path of this exe (no arguments; working
-   folder `D:\WORK\Software Development\GitHub`). If they already exist, leave them
+   folder `I:\herdr`). If they already exist, leave them
    for step 7 to back up and update. `Herdr.cmd` is the fallback; it flashes a console.
 7. **`herdr` in Explorer** - on a fresh PC create the registry key
    `HKCU\Software\Microsoft\Windows\CurrentVersion\App Paths\herdr.exe` and set its

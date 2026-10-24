@@ -9,7 +9,7 @@ The owner runs Claude Code (Opus 5.5) as the lead inside Herdr. Other agent CLIs
 run in neighbouring Herdr panes. One tool does the work:
 
 ```
-$T = "D:\WORK\Software Development\GitHub\HERDR\herdr-agents.ps1"
+$T = "I:\herdr\herdr-agents.ps1"
 pwsh -NoProfile -File $T <command> ...
 ```
 
@@ -25,7 +25,7 @@ pwsh -NoProfile -File $T <command> ...
 | Who is running, their state | `pwsh -NoProfile -File $T status` |
 | Start an agent next to me | `pwsh -NoProfile -File $T start codex` |
 | ... with another model | `pwsh -NoProfile -File $T start codex -Model <model>` |
-| DeepSeek V4.1 Flash / any Cline model: HEADLESS, no pane (owner rule) | `pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-headless.ps1" -Profile ds-flash -TaskFile <spec.md> -Cwd <folder>` (run it in the background; exit 0 = DONE) |
+| DeepSeek V4.1 Flash / any Cline model: HEADLESS, no pane (owner rule) | `pwsh -NoProfile -File "I:\herdr\herdr-headless.ps1" -Profile ds-flash -TaskFile <spec.md> -Cwd <folder>` (run it in the background; exit 0 = DONE) |
 | ... Cline Pass on DeepSeek V4 Pro | `pwsh -NoProfile -File $T start deepseek` |
 | ... Cline, any provider | `pwsh -NoProfile -File $T start cline -Provider <id> -Model <model>` |
 | ... a second Claude | `pwsh -NoProfile -File $T start claude -Name reviewer` |
@@ -40,7 +40,7 @@ pwsh -NoProfile -File $T <command> ...
 | Give a task, wait, get answer | `pwsh -NoProfile -File $T ask codex "<task>" -TimeoutSec 900` |
 | Long task | write it to a .md file, then `ask codex -TaskFile <path>` |
 | Fresh Codex conversation before a task (LESSONS #45) | `pwsh -NoProfile -File $T ask codex -Fresh -TaskFile <path>` |
-| Run and grade a model trial, keep the agent for review | `pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-trial.ps1" -Profile ds-flash [-Model <id>] [-Effort high] [-Run <name>]` |
+| Run and grade a model trial, keep the agent for review | `pwsh -NoProfile -File "I:\herdr\herdr-trial.ps1" -Profile ds-flash [-Model <id>] [-Effort high] [-Run <name>]` |
 | See its screen / transcript | `pwsh -NoProfile -File $T read codex` (`-Visible` = screen now) |
 | Stop an agent I started | `pwsh -NoProfile -File $T stop codex` |
 | Start in an existing empty pane | `pwsh -NoProfile -File $T start codex -Pane <pane-id>` |
@@ -49,11 +49,11 @@ pwsh -NoProfile -File $T <command> ...
 | Same task to several agents at once | `pwsh -NoProfile -File $T fanout "<task>" -Agents codex,deepseek` |
 | Past tasks and answers | `pwsh -NoProfile -File $T history` / `history <n>` |
 | One-shot board of every agent | `pwsh -NoProfile -File $T watch -Once` |
-| Saved layout preset | `pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-layout.ps1" -Preset <name>` |
-| Open a multi-column layout | write a plan file, `pwsh -NoProfile -File "D:\WORK\Software Development\GitHub\HERDR\herdr-layout.ps1" -PlanFile <plan.json>` (format in its header; moving a running agent = Type "existing", Value = its pane id) |
+| Saved layout preset | `pwsh -NoProfile -File "I:\herdr\herdr-layout.ps1" -Preset <name>` |
+| Open a multi-column layout | write a plan file, `pwsh -NoProfile -File "I:\herdr\herdr-layout.ps1" -PlanFile <plan.json>` (format in its header; moving a running agent = Type "existing", Value = its pane id) |
 
 Agent profiles (command, model flag, default model, safety flags) are in
-`D:\WORK\Software Development\GitHub\HERDR\agents.json`. Defaults: claude =
+`I:\herdr\agents.json`. Defaults: claude =
 claude-opus-5-5, codex = gpt-6.1-sol; Cline Pass: cline = cline-pass/glm-5.3,
 cline-flash = cline-pass/glm-5.3-flash, ds-flash = cline-pass/deepseek-v4.1-flash (default effort high),
 deepseek = cline-pass/deepseek-v4-pro,
@@ -82,7 +82,7 @@ DeepSeek does Y ..."), ALWAYS run this routine:
    make the whole plan and the design; agents execute. They never guess: you decide the
    technologies, files, function names and signatures, data formats, UI layout, error
    handling and the checks. Research first (code, docs, web) when the design is unclear.
-   **Choose agents with `D:\WORK\Software Development\GitHub\HERDR\docs\AGENT-ROSTER.md`**
+   **Choose agents with `I:\herdr\docs\AGENT-ROSTER.md`**
    (what works now, strengths, cost, thinking levels, routing rules, edge cases). If the
    owner names an agent that does not work now, say so and propose the closest working one.
    More than 3 agents: `team` puts 4 per extra page in new tabs ("team 2" ...;
@@ -95,7 +95,7 @@ DeepSeek does Y ..."), ALWAYS run this routine:
 1. **Plan and specs.** Write the overall plan (goal, parts, order, who does what, how the
    parts fit). For each agent: profile, model, effort, provider, folder, and ONE spec file
    `tasks\<name>.md` filled from
-   `D:\WORK\Software Development\GitHub\HERDR\tasks\TEMPLATE.md` (role + goal + why,
+   `I:\herdr\tasks\TEMPLATE.md` (role + goal + why,
    context, exact scope, design with function signatures, steps, definition of done with
    commands, answer format). Keep the critical / risky / integrating part for yourself.
    Split work so two agents never edit the same file.

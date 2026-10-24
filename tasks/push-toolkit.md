@@ -8,7 +8,7 @@ Why: the owner keeps this PowerShell toolkit on its own branch of a PUBLIC fork;
 `main` / `master` hold the Herdr Rust application and must stay untouched.
 
 ## 2. Context
-- Folder: `D:\WORK\Software Development\GitHub\HERDR` (git repo, branch `main`, clean).
+- Folder: `I:\herdr` (git repo, branch `main`, clean).
 - Remote `origin` = `https://github.com/coolman1984/herdr.git`, already set; sign-in to
   GitHub is handled by Git Credential Manager (never ask for or print a token).
 - Remote branch `origin/windows-toolkit` is at `cd9779c7`; local `main` is ahead of it, so

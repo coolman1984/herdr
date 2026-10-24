@@ -16,6 +16,6 @@ backslash in the run of backslashes at the END of `s` (`D:\` -> `"D:\\"`,
 the `wt -d` folder, the herdr.exe path, the HUD script path. Keep everything else the same.
 
 **Check, then answer:** rebuild; run `launcher\HerdrLauncher.exe --dry-run "D:\"` and
-`--dry-run` with a real folder ending in `\` (e.g. `D:\WORK\Software Development\GitHub\HERDR\docs\`),
+`--dry-run` with a real folder ending in `\` (e.g. `I:\herdr\docs\`),
 using `Start-Process -Wait`; paste both dry-run files.
 Answer: DONE + what changed + the two dry-run files.

@@ -12,7 +12,7 @@ Herdr itself is the **official 0.9.5 build**, unmodified. Everything here is bui
 
 | Way | What happens |
 |---|---|
-| Double-click **Herdr** (Desktop / Start menu) | Windows Terminal opens Herdr in `D:\WORK\Software Development\GitHub` |
+| Double-click **Herdr** (Desktop / Start menu) | Windows Terminal opens Herdr in `I:\herdr` |
 | Type `herdr` in File Explorer's address bar | Herdr opens in the folder you are looking at |
 | `Win + R` -> `herdr` | Herdr opens in the GitHub folder |
 

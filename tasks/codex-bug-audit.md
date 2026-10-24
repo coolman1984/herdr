@@ -10,7 +10,7 @@ items, and then give you a second task to fix the approved ones. A false or vagu
 costs the lead review time, so precision beats volume.
 
 ## 2. Context you need (nothing else is needed)
-- Folder: your current folder is a git worktree of `D:\WORK\Software Development\GitHub\HERDR`
+- Folder: your current folder is a git worktree of `I:\herdr`
   on branch `fix/bug-audit`. Audit THE FILES IN YOUR CURRENT FOLDER.
 - Read first, completely: `CLAUDE.md`, `AGENTS.md`, `LESSONS.md` (numbered durable facts -
   many "bugs" are deliberate workarounds explained there), `docs/FILES.md`; skim `HISTORY.md`

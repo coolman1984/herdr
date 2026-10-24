@@ -218,3 +218,53 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     Claude `Enter to confirm · Esc to ...`); a reply that only mentions the words has none. Mocked
     tests passed both designs; only the live `ask` on a real pane showed the false positive (third
     time on 2026-10-23/24 that a live check beat green mocks - always do it).
+60. **Update CLIs one npm package at a time or in a safe batch, and check C: first:** one package
+    that refuses to install (openclaw needs a newer Node) aborts the whole `npm install -g` batch, and
+    a full disk (ENOSPC, npm cache 3.2 GB) leaves half-installed packages. Check `Get-PSDrive C`,
+    run `npm cache clean --force`, leave out the blocked package. Separate: on 2026-10-24
+    `herdr-agents start` got `agent_pane_busy: not an available shell` on fresh panes (status
+    `unknown`, revision 1) although pwsh showed its prompt; cause not found. Workaround that worked:
+    `herdr pane run <pane> "codex -m ... -c model_reasoning_effort=medium"` - Herdr still detects the agent.
+61. **Cloning the toolkit does not install the personal Windows setup.** On 2026-10-24,
+    this PC had a newly created, theme-only Herdr config, no installed Herdr skills, no
+    App Path registration and no launcher backups. The repository's local reflog records
+    a clone that morning; this supports incomplete setup here, not a proven update reset.
+    `sync-skills.ps1 -Check` says DIFFERS for missing skills too. The master key commands
+    still point to the old, absent D: folder: copying them unchanged can pass check.ps1
+    while leaving shortcuts broken. Check command targets as well as matching text.
+62. **Removal from a workspace sandbox needs an honest handoff.** On 2026-10-24,
+    the removal dry run found Hermes folders and its executable still present, while
+    openclaw shims and the named Codex skill were absent. Task/service enumeration,
+    H: root and Hermes pending_messages could not all be read; uv tool inventory exited 2.
+    User environment and inherited process environment differed. Record each separately;
+    neither a clear command lookup nor a bounded folder scan proves complete removal.
+63. **A clean setup check does not prove key commands can run.** On 2026-10-24,
+    restoring unmodified config blocks, skills and App Path reduced check.ps1 from
+    19 FAIL to 0, while all ten key commands still referenced absent D: scripts.
+    The check compares master/live command text; it does not test target existence.
+    Report path checks separately. When registration was originally absent, record
+    that before creating it: use-launcher.ps1 exports the key only after it exists,
+    so its -Undo alone cannot restore the original absence.
+    The key-binding repair on 2026-10-24 pointed all ten commands at I:\herdr:
+    each target exists and parses, and the live key table equals the master.
+    Keep conhost.exe --headless and the STA flag for dialogs. Script and launcher
+    defaults should use their own toolkit folder so moving the checkout does not
+    break them again; TOML key commands need the installed absolute script path.
+    Syntax, path and offline checks do not prove live key operation: the lead must
+    still press one key. Historical path references were refreshed or described as
+    former locations; the task contract itself remains unchanged.
+64. **Full disk permission is not Windows administrator permission.** On 2026-10-24,
+    Hermes/OpenClaw folders could be deleted after the owner widened disk access, and
+    task/service/H: discovery worked. Deleting Clawdbot Gateway, Hermes_Gateway and
+    the stopped clawdbot service still returned access denied. Do not retry those
+    mutations; give exact elevated commands. Verify environment removal by checking
+    HKCU Environment value names: passing PowerShell null to SetEnvironmentVariable
+    left named empty values in this run. Existing parent applications can also retain
+    old process variables after the persisted user values are removed. Name matches
+    inside Windows and other installed packages do not prove a leftover installation.
+65. **Check the model list before promising an effort level:** `cursor-agent models` has no Composer
+    "high" (only `composer-2.5` and `-fast`), while `agy models` really has `gemini-4-argon-high`.
+    Run the CLI's own `models` command, then set the exact id. Also: `grok whoami` is not a command
+    and hangs the shell by opening the full-screen app; use `grok login` (device code, no paste) and
+    `cursor-agent status` / `claude auth status` to read sign-in state without printing secrets.
+    `herdr-agents start` still hits `agent_pane_busy` (see #60); `herdr pane run <pane> "<cmd>"` works.

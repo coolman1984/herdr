@@ -18,7 +18,7 @@ so the owner needs a correct model choice now.
   `--tui`; commands `auth`, `config`, `mcp`, `skill`, `hook`, `schedule`, `hub`, `doctor`.
 
 ## 3. Exact scope
-- Write ONE new file: `D:\WORK\Software Development\GitHub\HERDR\docs\CLINE-PASS.md`.
+- Write ONE new file: `I:\herdr\docs\CLINE-PASS.md`.
 - Do NOT change any other file, run git, install anything, run `cline auth`, or touch
   `%USERPROFILE%\.cline` (never read `secrets.json`).
 - You may run read-only commands: `cline --help`, `cline <command> --help`, `cline version`.

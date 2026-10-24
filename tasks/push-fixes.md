@@ -10,7 +10,7 @@ Why: the owner keeps this PowerShell toolkit on its own branch of a PUBLIC fork.
 would destroy it. The lead has already reviewed every change and scanned it for secrets.
 
 ## 2. Context
-- Folder: `D:\WORK\Software Development\GitHub\HERDR` (your current folder), branch `main`.
+- Folder: `I:\herdr` (your current folder), branch `main`.
 - Expected state now: `main` = `d2fd00fa`; branch `fix/bug-audit` = `87056896` (3 commits ahead
   of `main`, `main` is its ancestor); untracked files `tasks/codex-bug-audit.md` and
   `tasks/push-fixes.md` (this file); nothing else changed.

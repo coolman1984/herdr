@@ -1,14 +1,14 @@
 # Handoff to Claude 2040 (from Claude 2030, whose 5-hour limit is at 99%)
 
 You are Claude Code on the owner's second account ("2040"). You take over as LEAD for the
-owner's Herdr toolkit. Work in `D:\WORK\Software Development\GitHub\HERDR`.
+owner's Herdr toolkit. Work in `I:\herdr`.
 **First read** `CLAUDE.md`, the last 3 phases of `HISTORY.md`, `LESSONS.md` #21, #24, #36-#39,
 `docs\AGENT-ROSTER.md`, and the skill `herdr-team` (your `skills` folder has it). Reply to the
 owner in English. PowerShell only. Commit with a HISTORY entry; run `pwsh -File check.ps1`.
 
 ## A. Finish HerdrLauncher.exe (written by GLM-5.3 Flash, reviewed by 2030)
 State: `launcher\HerdrLauncher.cs`, `launcher\build.ps1`, `launcher\HerdrLauncher.exe` exist
-(uncommitted). Lead's hidden tests: `D:\WORK\Software Development\GitHub\HERDR-trials\launcher-tests\test-launcher.ps1`
+(uncommitted). Lead's hidden tests: `I:\HERDR-trials\launcher-tests\test-launcher.ps1`
 -> 21/21 pass in dry-run mode (first run found the real bug: paths ending in `\`, incl. `D:\`,
 broke the wt command line; Flash fixed it with a Quote() helper).
 1. Real launch test: `$env:LAUNCHER_REAL="1"; pwsh -File <that test script>` - it opens ONE real
@@ -16,7 +16,7 @@ broke the wt command line; Flash fixed it with a Quote() helper).
    no console window appears. Report the result.
 2. If it passes: point the App Path at the exe
    (`HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\herdr.exe`, default value =
-   `D:\WORK\Software Development\GitHub\HERDR\launcher\HerdrLauncher.exe`; back up the old value
+   `I:\herdr\launcher\HerdrLauncher.exe`; back up the old value
    `...\Herdr.cmd` in HISTORY) and the Desktop + Start-menu `Herdr.lnk` (Target = the exe, no
    args, keep the icon). Keep `Herdr.cmd` as a fallback.
 3. Docs: `docs\FILES.md` (launcher\ rows), README "Start" table, GUIDE 13.1, HISTORY Phase 23

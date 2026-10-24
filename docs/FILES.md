@@ -41,7 +41,7 @@
 | `install-custom-build.ps1` | Installs a self-built Herdr (parked, Phase 8) |
 | `herdr-skill.md` | Herdr's own agent skill (`herdr --skill`), for reference |
 | `config.toml.backup` | Herdr config before our key bindings |
-| `herdr/` | Upstream source clone (own git; branch `feature/custom-command-menus`) - not tracked here |
+| Upstream clone (absent) | The old PC's ignored `herdr/` clone is not on this PC; the tracked app source is in `herdr-app/` (Phase 34) |
 | `herdr-app/` | Copy of the Herdr app source with the owner's custom-menus commit, merged from branch `herdr-app` with full history (Phase 34) |
 
 ## Outside this folder (changed by this setup)
@@ -63,7 +63,7 @@
 | Desktop `Stop Herdr.lnk` | runs `herdr-stop.ps1` (asks first) |
 | `~/.claude/statusline.js` | owner-approved addition `shareCostWithHerdr`: writes `%APPDATA%\herdr\claude-cost\<session>.json` (backup `statusline.js.<time>.bak`) |
 | `%USERPROFILE%\.herdr-accounts\<tool>\<name>` | separate sign-in folders made by `herdr-agents -Account` / `login` |
-| `D:\WORK\Software Development\GitHub\HERDR-trials\` | test projects for trying agents (Phase 22 GLM-5.3 Flash trial, hidden tests) |
+| `I:\HERDR-trials\` | test projects for trying agents (Phase 22 GLM-5.3 Flash trial, hidden tests) |
 | `%APPDATA%\herdr\claude-cost\` | Claude's cost and rate limits per session (`config_dir` = account), read by the HUD and `herdr-agents usage` |
 | Startup folder `Herdr HUD.lnk` | starts `herdr-hud.ps1` hidden at sign-in (one copy; the launcher starts it too) |
 | `~/.claude/skills/herdr-team`, `herdr-workspace` | Claude skills (from `skills/`) |

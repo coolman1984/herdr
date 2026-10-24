@@ -63,7 +63,7 @@
       "kind": "agy",
       "command": "agy",
       "modelFlag": "--model",
-      "model": "gemini-4-argon-medium",
+      "model": "gemini-4-argon-high",
       "args": [
         "--dangerously-skip-permissions"
       ],
@@ -189,6 +189,15 @@
       "effortArgs": [
         "--effort",
         "{0}"
+      ]
+    },
+    "cursor": {
+      "kind": "cursor",
+      "command": "cursor-agent",
+      "modelFlag": "--model",
+      "model": "composer-2.5",
+      "args": [
+        "--force"
       ]
     },
     "cline-flash": {

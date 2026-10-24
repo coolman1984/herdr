@@ -17,7 +17,7 @@ All shortcuts in one window: `Ctrl+B`, then `I` (search box + this guide).
 
 | Way | What happens |
 |---|---|
-| Double-click **Herdr** (Desktop or Start menu) **(ours)** | Windows Terminal opens Herdr in `D:\WORK\Software Development\GitHub` |
+| Double-click **Herdr** (Desktop or Start menu) **(ours)** | Windows Terminal opens Herdr in `I:\herdr` |
 | Type `herdr` in File Explorer's address bar **(ours)** | Herdr opens in the folder you are looking at |
 | `Win + R` -> `herdr` **(ours)** | Herdr opens in the GitHub folder |
 | `herdr` in any terminal | Herdr opens in that terminal's folder |
@@ -344,7 +344,7 @@ then press `X`. Commands can be typed in any pane (PowerShell).
 - Sidebar spaces: `main` = git branch; `↑2` = 2 commits not pushed; `↓3` = 3 commits on
   GitHub not pulled.
 - The values refresh every 5 s. If a border shows nothing: run
-  `pwsh -File "D:\WORK\Software Development\GitHub\HERDR\herdr-hud.ps1"` once in any
+  `pwsh -File "I:\herdr\herdr-hud.ps1"` once in any
   pane (it starts by itself at sign-in and with Herdr).
 
 ### 13.8 Start an agent yourself
@@ -419,7 +419,7 @@ Files: `%APPDATA%\herdr\agent-runs\<date>\`.
 shows Herdr's own key list.
 
 ### 13.18 Check, repair, update
-- Check everything: `pwsh -File "D:\WORK\Software Development\GitHub\HERDR\check.ps1"`.
+- Check everything: `pwsh -File "I:\herdr\check.ps1"`.
 - A key stopped working: `herdr server reload-config`.
 - Update Herdr: `herdr update`, then run the check.
 - Restore an older config: `%APPDATA%\herdr\config.toml.<time>.bak` (copy it over

@@ -17,7 +17,7 @@ that repeatable so cheap models can take more work.
   `tests/test-batch-a.ps1` (copy its AST loader, `Check`, mocks, `Run-Branch`).
 - Another agent (DeepSeek) works in this SAME folder on `herdr-hud.ps1`, `tests/test-hud-cline.ps1`
   and `docs/GUIDE.md`. Never touch those files.
-- Trial kit (outside this repo, read-only for you): `D:\WORK\Software Development\GitHub\HERDR-trials\model-trial\`
+- Trial kit (outside this repo, read-only for you): `I:\HERDR-trials\model-trial\`
   - `kit\` (the task folder copied per run), `grade.ps1 -Run <folder>` prints lines
     `LEDGER a/b`, `COLUMNS a/b`, `SCOPE ok|VIOLATED: ...`, `REVIEW.md present|MISSING`, `REPORT.md ...`.
   - The standard prompt (exact): `Read TASKS.md in your current folder completely and do every task in it. Follow its rules exactly. When finished, reply with the answer format from TASKS.md.`
@@ -57,7 +57,7 @@ that repeatable so cheap models can take more work.
 ### B. `herdr-trial.ps1`
 - `herdr-trial.ps1 -Profile <name> [-Model <id>] [-Effort <lvl>] [-Run <name>]
   [-TrialRoot <path>] [-TimeoutMin 60] [-PollSec 15]`
-  - `-TrialRoot` default `D:\WORK\Software Development\GitHub\HERDR-trials\model-trial`.
+  - `-TrialRoot` default `I:\HERDR-trials\model-trial`.
   - `-Run` default: `<profile>-<effort or 'default'>-<yyyyMMdd-HHmm>`; must match
     `^[a-z0-9][a-z0-9._-]{0,48}$`; if `runs\<Run>` exists -> `Fail "Run folder exists: ..."`.
   - Agent name: `trial-<n>` with the lowest free n (from `agent list`).

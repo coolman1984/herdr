@@ -25,7 +25,7 @@ $agentsTool = Join-Path $PSScriptRoot "herdr-agents.ps1"
 $lastPath = Join-Path $env:APPDATA "herdr\layout-last.json"
 $presetDir = Join-Path $env:APPDATA "herdr\layouts"
 $panesState = Join-Path $env:APPDATA "herdr\herdr-agents-panes.json"
-$defaultFolder = "D:\WORK\Software Development\GitHub"
+$defaultFolder = $PSScriptRoot
 $noWindow = [bool]($PlanFile -or $Preset)
 
 function Show-Message([string]$Text, [string]$Icon = "Error") {

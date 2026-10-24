@@ -5,8 +5,8 @@ rem Uses the installer's stable alias, so "herdr update" never breaks this launc
 setlocal
 set "HERDR_EXE=%LOCALAPPDATA%\Programs\Herdr\bin\herdr.exe"
 set "START_DIR=%CD%"
-rem Started from Win+R or a shortcut without a folder: use the GitHub folder.
-if /i "%START_DIR%"=="%SystemRoot%\System32" set "START_DIR=D:\WORK\Software Development\GitHub"
+rem Started from Win+R or a shortcut without a folder: use this toolkit folder.
+if /i "%START_DIR%"=="%SystemRoot%\System32" set "START_DIR=%~dp0"
 if not "%~1"=="" set "START_DIR=%~1"
 
 if not exist "%HERDR_EXE%" (

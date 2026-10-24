@@ -17,7 +17,7 @@ Add-Type -AssemblyName System.Windows.Forms
 
 $herdr = Join-Path $env:LOCALAPPDATA "Programs\Herdr\bin\herdr.exe"
 $stateFile = Join-Path $env:APPDATA "herdr\open-folder-last.txt"
-$defaultFolder = "D:\WORK\Software Development\GitHub"
+$defaultFolder = $PSScriptRoot
 
 function Show-Error([string]$Message) {
     [System.Windows.Forms.MessageBox]::Show($Message, "Herdr - open folder", "OK", "Error") | Out-Null

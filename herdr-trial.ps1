@@ -9,11 +9,14 @@ param(
     [string]$Model,
     [string]$Effort,
     [string]$Run,
-    [string]$TrialRoot = 'D:\WORK\Software Development\GitHub\HERDR-trials\model-trial',
+    [string]$TrialRoot,
     [ValidateRange(1, 1440)] [int]$TimeoutMin = 60,
     [ValidateRange(1, 3600)] [int]$PollSec = 15
 )
 $ErrorActionPreference = "Stop"
+if (-not $PSBoundParameters.ContainsKey('TrialRoot')) {
+    $TrialRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'HERDR-trials\model-trial'
+}
 $herdr = Join-Path $env:LOCALAPPDATA 'Programs\Herdr\bin\herdr.exe'
 
 function Fail([string]$Message) { Write-Output "ERROR: $Message"; exit 1 }

@@ -457,8 +457,7 @@ Windows Terminal window, and the HUD's mutex kept it to one copy.
 **Switch:** the first attempt to change the registry from Claude was refused by Claude Code's
 permission classifier ("persistence"); the owner said "try again" and Claude ran the new
 `launcher\use-launcher.ps1`: App Path `herdr.exe` -> the exe (old value `...\HERDR\Herdr.cmd`),
-Desktop + Start-menu `Herdr.lnk` -> the exe (were `wt.exe -d "D:\WORK\Software
-Development\GitHub" --title Herdr herdr.exe`; icon, working folder kept); backups in
+Desktop + Start-menu `Herdr.lnk` -> the exe (were `wt.exe -d "<former GitHub folder>" --title Herdr herdr.exe`; icon, working folder kept); backups in
 `%APPDATA%\herdr\backup\launcher-20261022-165104\`; `-Undo` restores. `Herdr.cmd` stays as the
 fallback. The Flash pane was already closed when the lead came to stop it.
 **Lesson:** #40, #41.
@@ -718,3 +717,296 @@ touched). Not under `herdr/`: that path is the owner's local upstream clone (ign
 **Proof:** `git merge -s ours --allow-unrelated-histories` + `git read-tree --prefix=herdr-app/`;
 3107 files added, `git diff HEAD~1 --stat -- . ':!herdr-app'` shows only this entry and FILES.md.
 `check.ps1` not run (no pwsh in the cloud session).
+
+## Phase 35 - CLI update day and Codex Sol 6.1 medium beside the lead (2026-10-24)
+
+**Symptom:** the owner asked to update every CLI and run Codex GPT-6.1-Sol medium beside the lead.
+`npm install -g` failed halfway with ENOSPC (C: had 0.7 GB free; npm cache was 3.2 GB). Then
+`herdr-agents start codex` failed twice with `agent_pane_busy ... not an available shell` although
+the new pane showed a normal pwsh prompt.
+**Fix:** `npm cache clean --force` (C: 0.7 -> 3.8 GB), reran the installs. Updated: codex 0.162.0 ->
+0.164.0, cline 3.0.60 -> 3.0.73, opencode 1.18.35 -> 1.19.4, gemini 0.57.0 -> 0.65.0, kilo 7.5.5 ->
+7.8.17, qwen 0.22.2 -> 0.26.0, grok 1.0.50 -> 1.0.70, agy 1.1.13 -> 1.4.7, cursor-agent -> 2026.10.22.
+Claude Code 2.1.310 already current. NOT updated: openclaw (needs Node >=24.22.1, has 24.14.0; in one
+npm batch it aborts every other package), claude-mem 13 -> 15 and pnpm 11 -> 12 (major versions),
+pm2 (runs as a service). Codex started by hand: `herdr pane run w1:p3 "codex -m gpt-6.1-sol -a never
+-s workspace-write -c model_reasoning_effort=medium"`; Herdr then detected it (agent list: codex,
+gpt-6.1-sol; screen: `GPT-6.1-Sol medium`).
+**Lesson:** #60.
+
+## Phase 36 - Diagnose setup checks on this PC (2026-10-24)
+
+**Symptom:** `pwsh -NoProfile -File I:\herdr\check.ps1` exits 1 with 20 FAIL lines.
+**Cause / evidence (local file times, UTC+03:00):**
+
+| Failures | Observed cause | Since when / limits |
+|---|---|---|
+| 10 keys: prefix+f, shift+f, t, shift+v, shift+b, a, shift+s, i, shift+q, shift+c | The live config is 74 bytes: onboarding plus theme only; no key blocks | Created 2026-10-24 10:36:19, last written 10:55:54; absent at this check. No `config.toml*` backups beside it. The exact writer is unknown |
+| 6 settings lines: toast table/delivery, agents table/rows, spaces table/rows | Those three tables are absent from the same live config | Same file and time evidence as the keys |
+| 2 skills | Both installed directories and SKILL.md files are absent, rather than different text; `-Check` calls either case DIFFERS | Absent at this check; exact removal/non-install time unknown. Master files created here 2026-10-24 10:21:43; Phase 25/26 already documented unsynchronized skill copies on the earlier setup |
+| 1 App Path | HKCU App Paths/herdr.exe key is absent, not merely a broken target; no launcher backup directory either | Absent at this check; exact removal/non-install time unknown. Phase 23's earlier registration is not present here |
+| 1 file-list row | FILES.md listed the ignored upstream `herdr/` clone as present | Phase 25/26 already reported it missing on 2026-10-23; Phase 34 retained that assumption. Tracked source is `herdr-app/`, which exists |
+
+The local `.git/logs/HEAD` was read directly (no git commands, per task scope): clone at
+10:17:39, switch to main at 10:21:43, fast-forward at 10:35:32 on 2026-10-24.
+The installed Herdr executable was created here at 10:36:06; version output is 0.9.5,
+the same version recorded in Phase 2. This supports an incomplete installation of this
+personal setup after cloning to I:, not a proven config reset or format change.
+Neither the responsible process nor whether this is different hardware is established.
+The repository's `config.toml.backup` is also theme-only, not a recovery copy of our blocks.
+
+**Fix:** corrected only the absent-clone row in FILES.md; added LESSONS #61. External
+writes are forbidden by this task's workspace sandbox, so no config, skills, registry
+or shortcuts were changed and no external backup was created. No agents or servers were
+started or stopped. Existing root/docs edits were preserved; no git commands were run.
+
+**Proof:** check.ps1: before 20 FAIL, after 19 FAIL (exit 1); docs line OK with 37 phases
+and 62 lessons (including a concurrent agent's separate entry). `herdr.exe --session lab config check` -> `config: ok` (exit 0; read-only,
+no server needed). Python's `tomllib` parsed the current config plus the two master files:
+10 unique keys, notifications system, current catppuccin-latte theme preserved. All ten
+unmodified master commands target nonexistent D: scripts. Replacing only the old folder
+with I:\herdr in memory produces valid TOML with zero missing script targets. This is
+syntax/path verification, not a live test of shortcuts or a completed installation.
+
+**Owner commands for the remaining 19 failures (not executed):** run in PowerShell 7.
+The key master needs the following path correction as a follow-up outside this task's
+file-edit scope. It is backed up first; otherwise a matching config would still invoke
+ten missing scripts. These commands assume the observed theme-only config is unchanged;
+the guard stops if another process has already added keys or the relevant settings.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$repairStamp = Get-Date -Format 'yyyyMMdd-HHmmss-fffffff'
+$liveConfig = Join-Path $env:APPDATA 'herdr\config.toml'
+$keyMaster = 'I:\herdr\config\keys.toml'
+$liveText = [IO.File]::ReadAllText($liveConfig)
+if ($liveText -match '(?m)^\s*\[(?:\[?keys|ui\.toast|ui\.sidebar\.(?:agents|spaces))') {
+    throw 'Config changed: merge the blocks instead of appending duplicates.'
+}
+$configBackup = "$liveConfig.$repairStamp.bak"
+$keyBackup = "$keyMaster.$repairStamp.bak"
+[IO.File]::Copy($liveConfig, $configBackup, $false)
+[IO.File]::Copy($keyMaster, $keyBackup, $false)
+Write-Output "Backups: $configBackup ; $keyBackup"
+$keyText = [IO.File]::ReadAllText($keyMaster).Replace(
+    '<former toolkit folder>', 'I:\herdr')
+[IO.File]::WriteAllText($keyMaster, $keyText)
+$settingsText = [IO.File]::ReadAllText('I:\herdr\config\settings.toml')
+[IO.File]::WriteAllText($liveConfig, $liveText + "`r`n" + $keyText + "`r`n" + $settingsText)
+pwsh -NoProfile -File I:\herdr\sync-skills.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Skill sync failed.' }
+pwsh -NoProfile -File I:\herdr\sync-skills.ps1 -Check
+if ($LASTEXITCODE -ne 0) { throw 'Installed skills still differ.' }
+```
+
+The sync script backs up changed installed copies before overwriting; both copies are
+currently missing. For App Path, SETUP step 7 requires an existing key before
+use-launcher.ps1 can export it. Record its original absence before creating it:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$appKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\herdr.exe'
+if (-not (Test-Path -LiteralPath $appKey)) {
+    $absenceRecord = Join-Path $env:APPDATA ('herdr\apppath-absent-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fffffff') + '.json')
+    [IO.File]::WriteAllText($absenceRecord, '{"existed":false,"key":"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\herdr.exe"}')
+    Write-Output "Original absent registration recorded: $absenceRecord"
+    New-Item -Path $appKey -Force | Out-Null
+    Set-ItemProperty -LiteralPath $appKey -Name '(default)' -Value 'I:\herdr\launcher\HerdrLauncher.exe'
+}
+pwsh -NoProfile -File I:\herdr\launcher\use-launcher.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Launcher registration failed.' }
+& "$env:LOCALAPPDATA\Programs\Herdr\bin\herdr.exe" --session lab config check
+if ($LASTEXITCODE -ne 0) { throw 'Config validation failed; restore the printed config backup.' }
+pwsh -NoProfile -File I:\herdr\check.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Setup still has failures; read the FAIL lines.' }
+```
+
+use-launcher.ps1 prints its own registry/shortcut backup directory under
+`%APPDATA%\herdr\backup\launcher-<time>\` and reads the targets back. Its `-Undo` returns
+to its exported registration; restoring the originally absent key instead requires removing
+that new key, using the absence record. No live reload command is included because this
+task forbids modifying the owner's running session; applying the config to that session
+is a separate owner action. The missing Desktop/Start-menu/HUD links and user PATH are
+warnings, outside the permitted repairs; SETUP steps 6, 8 and 9 cover them.
+
+**Not verified:** the owner commands have not run; external repairs and running shortcut
+behaviour remain unverified. Commit history (`git log`) was not queried because the task
+says no git; the local reflog and existing HISTORY entries provide the chronology above.
+No regression tests were added for this documentation-only change.
+**Lesson:** #61.
+
+## Phase 37 - Hermes/OpenClaw removal blocked; scoped script and evidence (2026-10-24)
+
+**Symptom:** the owner requested complete removal; Hermes folders, executable and a
+Start-menu link remained during discovery.
+**Cause:** this session permits writes only inside I:\herdr; external removal is outside
+its sandbox. Task/service discovery and some filesystem reads also returned access denied.
+**Fix:** saved tasks/remove-hermes-openclaw.ps1 with -WhatIf, exact deletion allowlist,
+size output, process stops scoped by executable path, PATH recovery copy, admin recovery
+commands and before/after checks. Ran discovery only; no removal, registry edits, git or pane
+operations. Unknown discoveries are reported for review, not automatically deleted.
+**Proof:** tasks/remove-hermes-openclaw-dryrun.txt records sizes and free space; openclaw
+lookup/shims absent, hermes lookup present. Script parsing passed. check.ps1 exited 1 with
+19 setup/configuration failures, saved in tasks/remove-hermes-openclaw-check.txt.
+Removal and full drive-content verification remain BLOCKED. The script keeps deletion in
+PowerShell with LiteralPath rather than handing paths to a second shell.
+**Lesson:** #62.
+
+## Phase 38 - Complete the setup repairs with owner-authorized disk access (2026-10-24)
+
+**Symptom:** Phase 36 left 19 setup FAILs because external writes were sandbox-blocked.
+**Cause:** the same incomplete local setup remains: theme-only config, both installed skill
+directories absent, and App Path key absent. Rechecked before repair; no evidence of an
+update reset. The absent upstream-clone FILES.md row was already corrected in Phase 36.
+**Fix:** owner explicitly authorized full disk access for this task on 2026-10-24. Backed up
+the live config, recorded original skill/registry absence, appended the unmodified master key
+and settings blocks, ran sync-skills.ps1, created the required App Path key, then ran
+launcher/use-launcher.ps1. Original config text (including catppuccin-latte) is preserved.
+No change to ~/.claude/settings.json, master keys, approval/trust settings or herdr-app/;
+no git, agents, browser, live reload or server start/stop commands.
+
+**Backups / evidence:**
+- `C:\Users\mflma\AppData\Roaming\herdr\backup\check-repair-20261024-110714-8581912\`:
+  config.toml.bak, skills-before.json, apppath-before.json, check-before.txt,
+  check-after.txt and key-targets.json. Both skill directories and the App Path key were
+  absent, so their original absence is recorded instead of copying nonexistent files.
+- `C:\Users\mflma\AppData\Roaming\herdr\backup\launcher-20261024-110727\`:
+  use-launcher.ps1 registry export (created after initial registration). Its -Undo restores
+  that registration, not the original absence; apppath-before.json records the original state.
+- `tasks/fix-check-failures-backup-path.txt` points to the repair backup directory.
+
+**Proof:** `pwsh -NoProfile -File I:\herdr\check.ps1`: before 19 FAIL / exit 1,
+after 0 FAIL / exit 0. `herdr.exe --session lab config check`: config: ok / exit 0
+(no server started). `sync-skills.ps1 -Check`: OK herdr-team, OK herdr-workspace / exit 0.
+Launcher script readback: App Path = I:\herdr\launcher\HerdrLauncher.exe (file exists).
+Original-config prefix comparison: True. Path inspection: 10 key commands, 10 missing
+script targets under the former toolkit folder on D:.
+
+**Not done / doubts:** owner specifically requested reporting the missing D: paths without
+guessing replacements, so they were copied unchanged and remain broken. Passing check.ps1
+does not prove shortcut operation. No live shortcut test or reload was performed. Four
+warnings remain: Desktop and Start-menu Herdr links, Startup HUD link, user PATH. These
+are outside the allowed repairs. No new code or regression tests were needed.
+**Lesson:** #63.
+
+## Phase 39 - Execute owner-authorized Hermes/OpenClaw cleanup (2026-10-24)
+
+**Symptom:** Phase 37 only produced a dry run. The owner now authorized full disk access
+and actual removal, with exact elevated commands for anything requiring an administrator.
+**Cause:** the old script missed the discovered Start-menu link; its null environment
+writes left named empty registry values in the real run. A root/home-only scan could not
+establish complete removal. Disk access did not grant task/service deletion rights.
+**Fix:** reviewed the script; added the shortcut, uv tool-directory and Startup discovery,
+explicit task/service inventory counts, ScanOnly and FileTargetsOnly modes, and registry
+value-name verification. Removed the nine listed folders and shortcut (11,110,902,502 bytes),
+then three archived configuration/backup folders (54,460 bytes). Removed both user environment
+values and verified their absence. The exact user PATH entry was already absent and was not
+changed. No git commands, panes, owner session, Claude settings or ERP files were touched.
+**Proof:** tasks/remove-hermes-openclaw-real.txt and -extra.txt record sizes, read-back,
+free space, and access-denied results. C: free space 12,412,694,528 -> 22,647,898,112 bytes;
+G: 305,942,528 -> 309,477,376 bytes (other activity can change these later). Focused read-only
+verification found no command, environment, PATH or matching npm/pip/uv/scoop package names;
+only two protected tasks and the stopped service remained. Their deletions were attempted
+once, denied, and not retried; exact recovery is in tasks/remove-hermes-openclaw-admin.ps1.
+A names-only recursive scan records matching names, unreadable folders and untraversed
+links; Windows/other-app references are preserved. Final wide-scan results follow below.
+**Lesson:** #64.
+
+**Additional verified removal:** the wide scan discovered another Hermes source clone,
+installer, archived Moltbot files, project cache/history, temporary logs/screenshots and
+separate E: Moltbot/OpenClaw project copies. They were individually added to the reviewed
+allowlist, measured, deleted and read back; -FileTargetsOnly prevented retries of the three
+denied Windows deletions. Evidence: -cache.txt, -leftovers.txt, -e-leftovers.txt and
+-e-projects.txt. The E: Moltbot copy alone contained 1,463,958,594 bytes / 49,218 files.
+Read-only focused verification inspected 211 tasks and 337 services with zero scan errors;
+only the two denied tasks and stopped service remained. No matching process was found.
+All cleanup/admin/scan scripts parsed, and check.ps1 exited 0 (all checks passed; existing
+shortcut/PATH warnings remain). Another agent concurrently completed Phase 38 setup repairs;
+this task did not alter or revert that work. The interrupted initial wide-before snapshot
+is incomplete; wide-after is the canonical recursive evidence, reconciled after deletions.
+An automatic approval review rejected a combined housekeeping command including deletion
+of that incomplete log, stating only blocked by policy; the log was left in place.
+
+**Final source-copy removal:** E:\Github Projects\Open Claw (space in its name) contained
+5,497,373,122 bytes / 218,142 files and was removed with read-back verification; evidence
+is tasks/remove-hermes-openclaw-e-source.txt. All 42 reviewed targets are now absent
+(37 were removed, five were already absent). The recursive scan can record DirectoryNotFound
+for targets removed while it was running; those are resolved by the final explicit checks.
+ERP project copies, research notes/cloud documents and other software's own matching files
+remain untouched and must not be described as a completely empty keyword scan.
+
+**Environment behavior proof:** an isolated process-only sentinel reproduced the old null call: namePresent=True, valueLength=0. Explicit Env: removal then gave namePresent=False. Evidence: tasks/remove-hermes-openclaw-environment-proof.txt. No temporary user registry value was created.
+
+**Completed evidence:** all five recursive names-only drive traversals finished. They
+inspected 4,760,324 entries in 575,657 directories; H: had zero unreadable locations.
+The totals include 732 unreadable/disappeared directories (some disappeared because this
+cleanup removed them) and 4,212 untraversed directory links. This is not proof that all
+protected/linked contents are clear. The completed scan exposed further downloaded source,
+skill archives and dedicated editor/project caches; those were measured and removed too.
+Final removal total: 70 targets, 18,669,241,805 bytes (17.387 GiB); all 75 reviewed paths
+absent. Five targets had already been absent. Final read-only inventory: 211 tasks, 337
+services, zero scan errors; only Clawdbot Gateway, Hermes_Gateway and stopped clawdbot remain.
+Command/package/environment/PATH checks clear, no matching process, PM2 list empty.
+Report: tasks/remove-hermes-openclaw-result.txt; per-target proof: -target-verification.txt;
+final focused checks: -verification.txt; full raw names: -wide-after.txt. The report
+rechecks matched names after removal and groups the ERP log matches, while preserving
+301 other-app/research/history/evidence name matches. The task is PARTIAL, not DONE;
+no claim that nothing is left. The three administrator deletions were never retried.
+
+## Phase 40 - Rebuild key-binding paths for this checkout (2026-10-24)
+
+**Symptom:** all ten configured key commands targeted missing scripts in the former
+D: toolkit folder, even though check.ps1 passed.
+**Cause:** the master/live commands and several defaults/docs retained the former
+checkout location. The saved pre-repair config confirms 10/10 missing targets.
+**Fix:** changed master/live commands to I:\herdr, keeping headless conhost, arguments
+and STA flags; changed folder-picker/layout/launcher defaults to their own toolkit
+folder and the trial default to the sibling HERDR-trials folder. Rebuilt the launcher.
+Updated skills and path-only docs/archived task references; historical old locations
+are described as former locations. The current task contract was left unchanged.
+Synced skills with installed-copy backups. No git, agents, browser, live reload,
+pane changes, Claude settings, trust or approval changes.
+**Backups:** live config:
+C:\Users\mflma\AppData\Roaming\herdr\config.toml.20261024-121607-7139695.bak;
+installed skills: SKILL.md.20261024-121609.bak beside both installed skill files.
+**Proof:** target inspection printed every key/path: 10/10 Test-Path=True and parses=True;
+master/live key table equality=True (ten blocks), and live-config comparison with its
+backup confirms only folder replacement. Offline herdr.exe --session lab config check:
+config: ok (no server started). Offline suites: batch A 48/48, batch B 18/18,
+round2 18/18, HUD 11/11, dialog guard 26/26, headless 9/9 (130/130).
+No new tests or git baseline were used for these path replacements; pre-repair config
+provides the missing-target baseline. The first computed trial parameter default broke
+the AST-only alias fixture (17/18); moving initialization after parameter binding restored
+18/18 without changing tests. External trial-kit availability is not established by
+choosing a portable default. Final setup and path-search results follow after verification.
+**Not verified live:** no shortcut was pressed; the lead tests one key. The unchanged
+current task text still quotes the former path as the problem/search instruction.
+**Lesson:** #63.
+**Final checks:** check.ps1 exit 0, 0 FAIL (four existing shortcut/PATH warnings).
+Launcher ResolveFolder invoked offline from System32 returns I:\herdr; folder-picker
+and layout default assignments evaluated with a moved toolkit folder return that folder.
+The full toolkit path search prints only four lines in the unchanged task contract;
+excluding that contract yields no matches. The live config search has no matches.
+The expected sibling trial-kit folder is absent on this PC; no kit was created or run.
+## Phase 41 - Sign-ins, Cursor profile, Antigravity on Argon High (2026-10-24)
+
+**Symptom:** the owner moved to this PC and asked for the other tools to be signed in and set up:
+Cursor with Composer high, Antigravity with Argon high.
+**Fix:** signed in (owner did it in panes): Claude 2040 and 1984 (`CLAUDE_CONFIG_DIR` folders), Grok,
+Cline Pass (`cline auth cline-pass`); Cursor (`cursor-agent status`: logged in) and Antigravity
+(answered a test prompt) were already signed in. `agents.json`: `gemini` default model
+`gemini-4-argon-medium` -> `gemini-4-argon-high`; new profile `cursor` (`cursor-agent --model
+composer-2.5`; owner decision 2026-10-24, same as Phase 18: `--force` = run without approval prompts). Cursor has no
+"Composer high": `cursor-agent models` lists only `composer-2.5` and `composer-2.5-fast`.
+Read back: `herdr-agents tools` shows both; the cursor pane was detected by Herdr (`agent list`: cursor).
+**Lesson:** #65.
+
+## Phase 42 - Shortcuts and PATH restored on this PC (2026-10-24)
+
+**Symptom:** `check.ps1` had four WARNs: Desktop and Start-menu `Herdr.lnk`, the Startup `Herdr HUD.lnk`,
+and this folder not on the user PATH (SETUP steps 6, 8, 9 were never done on this PC).
+**Fix:** created Desktop/Start-menu `Herdr.lnk` -> `launcher\HerdrLauncher.exe`, Startup `Herdr HUD.lnk`
+and Desktop `Stop Herdr.lnk` (both `conhost.exe --headless pwsh ...`), added `I:\herdr` to the user PATH.
+Backups (old shortcuts, raw PATH + kind) in `%APPDATA%\herdr\backup\shortcuts-20261024-122942`.
+**Proof:** `check.ps1`: All checks passed, no WARN. Not tested live: clicking the shortcuts.
+**Lesson:** first try failed on a parameter named `$args` (automatic variable, AGENTS.md rule 6).

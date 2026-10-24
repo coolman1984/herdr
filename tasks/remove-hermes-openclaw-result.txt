@@ -1,0 +1,402 @@
+PARTIAL
+
+Changed: 70 targets removed; 18669241805 bytes (17.387 GiB). Two user environment values removed. User PATH already had no Hermes bin entry; unchanged.
+
+Checks: command/package/Run/startup/environment/PATH checks are in remove-hermes-openclaw-verification.txt. Every reviewed deletion target is checked below. Full traversal is names only, with protected ERP/upstream folders excluded and directory links not followed; unreadable locations are recorded.
+
+Not done / doubts: Clawdbot Gateway and Hermes_Gateway tasks, and stopped clawdbot service: Windows access denied once; no mutation retry. Research notes/cloud documents, old discussion records and files belonging to other programs remain. Raw keyword matches cannot prove software ownership. Original applications can retain inherited environment values until restarted. No claim of zero traces.
+
+Administrator PowerShell commands (not executed):
+Unregister-ScheduledTask -TaskPath '\' -TaskName 'Clawdbot Gateway' -Confirm:$false
+Unregister-ScheduledTask -TaskPath '\' -TaskName 'Hermes_Gateway' -Confirm:$false
+Stop-Service -Name 'clawdbot'
+sc.exe delete clawdbot
+Administrator scan of denied locations:
+pwsh -NoProfile -File I:\herdr\tasks\remove-hermes-openclaw-scan.ps1 -LogPath I:\herdr\tasks\remove-hermes-openclaw-wide-admin.txt
+
+Removed targets and read-back:
+ABSENT C:\Users\mflma\.clawdbot : 991621 bytes removed
+ABSENT C:\Users\mflma\.hermes : 6918056 bytes removed
+ABSENT C:\Users\mflma\Hermes-Mastery-Database : 149135642 bytes removed
+ABSENT C:\Users\mflma\hermes-youtube-stack : 448921375 bytes removed
+ABSENT C:\Users\mflma\AppData\Roaming\Hermes : 14391425 bytes removed
+ABSENT C:\Users\mflma\AppData\Local\com.nousresearch.hermes.setup : 50875976 bytes removed
+ABSENT C:\Users\mflma\AppData\Local\hermes : 10437168202 bytes removed
+ABSENT G:\Hermes Secrets : 2030448 bytes removed
+ABSENT G:\hermes-agent-self-evolution : 466811 bytes removed
+ABSENT C:\Users\mflma\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Hermes.lnk : 2946 bytes removed
+ABSENT C:\Users\mflma\Documents\Codex\2026-07-05\understand-the-project-first-then-tell\work\repo-scan\Company-Dashboard-Project\.hermes : 37513 bytes removed
+ABSENT C:\Users\mflma\Documents\Codex\2026-06-03\fix-this-error-i-downloaded-hermes\work\openclaw-auth-backup-20260603-213351 : 11722 bytes removed
+ABSENT C:\Users\mflma\Documents\Codex\2026-06-03\fix-this-error-i-downloaded-hermes\work\openclaw-backup-20260603-212400 : 5225 bytes removed
+ABSENT C:\Users\mflma\AppData\Local\claude-cli-nodejs\Cache\g--Hermes-Secrets : 18736 bytes removed
+ABSENT G:\Skills\Sources\hermes-agent-main : 130643779 bytes removed
+ABSENT G:\Company-Dashboard-Project\.hermes : 37513 bytes removed
+ABSENT G:\EXCEL-AUTOMATION\data\hermes-server-8001.pid : 7 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity\scratch\Hermes-Setup.exe : 7587128 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity\code_tracker\active\Moltbot_3cb610f54e81817c88de494e5209e1fbc6025635 : 159055 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity\code_tracker\active\no_repo\9efe97da187b8d55e4f6b5e67655ac70_Launch_Moltbot.bat : 4326 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity\code_tracker\active\no_repo\ab1ff61fcb323245a6d8aa270bf53414_openclaw.json : 2226 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity\code_tracker\active\no_repo\ecec9d551386e0658ff2275e8ece6d29_moltbot_tray.py : 2976 bytes removed
+ABSENT C:\Users\mflma\.claude\projects\g--Hermes-Secrets : 2149 bytes removed
+ABSENT C:\tmp\clawdbot : 41108 bytes removed
+ABSENT C:\tmp\clawdbot-gateway.log : 3965 bytes removed
+ABSENT C:\tmp\hermes_screen_now.jpg : 107058 bytes removed
+ABSENT C:\tmp\hermes_screen_now.png : 2287746 bytes removed
+ABSENT C:\tmp\openclaw : 5380 bytes removed
+ABSENT E:\tmp\hermes_screen_now.jpg : 107058 bytes removed
+ABSENT E:\tmp\hermes_screen_now.png : 2287746 bytes removed
+ABSENT E:\Github Projects\Moltbot : 1463958594 bytes removed
+ABSENT E:\Github Projects\Online Openclaw : 2525 bytes removed
+ABSENT E:\Github Projects\OpenClaw_VPS_Control_Guide.md : 2525 bytes removed
+ABSENT E:\Github Projects\tmp\clawdbot : 13509 bytes removed
+ABSENT E:\Github Projects\tmp\openclaw : 1317958 bytes removed
+ABSENT E:\Github Projects\tmp\openclaw-install-flow : 0 bytes removed
+ABSENT E:\Github Projects\Open Claw : 5497373122 bytes removed
+ABSENT E:\all my projects\Hermes Secrets : 2030448 bytes removed
+ABSENT E:\all my projects\hermes-agent-self-evolution : 466811 bytes removed
+ABSENT E:\all my projects\Skills\Sources\hermes-agent-main : 130643779 bytes removed
+ABSENT E:\Github Projects\Agents\stack\openclaw-openai.batch.json : 98 bytes removed
+ABSENT E:\Github Projects\.pnpm-store\v10\index\fe\3b9251bd3bd17cfc2bc0a74a18da650afb095b51696e056d1f77960af584b7-openclaw@2026.3.13.json : 963464 bytes removed
+ABSENT E:\Github Projects\.pnpm-store\v10\index\7b\9464d808f9e6c0ffe4bc97f7899d602423ef3a475e8d31219b25fa4d78d3e9-openclaw@2026.3.8.json : 2101184 bytes removed
+ABSENT E:\Github Projects\.pnpm-store\v10\index\6b\aceb712eafe6d516ab3b0587970db72bb9f93adad545b9caf3ed62145808a4-openclaw@2026.2.24.json : 1799921 bytes removed
+ABSENT E:\all my projects\Company-Dashboard-Project\.hermes : 37513 bytes removed
+ABSENT E:\all my projects\EXCEL-AUTOMATION\data\hermes-server-8001.pid : 7 bytes removed
+ABSENT E:\Downloads\Skills\hermes-agent-main : 130580221 bytes removed
+ABSENT E:\Downloads\Skills\Hermes-Agent-Skills : 16369311 bytes removed
+ABSENT E:\Downloads\Skills\Sources\hermes-agent-main.zip : 67458400 bytes removed
+ABSENT E:\Downloads\hermes-skills-share-2026-06-05 : 17293152 bytes removed
+ABSENT E:\Downloads\hermes-skills-share-2026-06-05.zip : 6243241 bytes removed
+ABSENT C:\Users\mflma\AppData\Local\Temp\hermes-dm : 0 bytes removed
+ABSENT C:\Users\mflma\.local\state\hermes : 905 bytes removed
+ABSENT C:\Users\mflma\.pm2\pids\openclaw-gateway-2.pid : 5 bytes removed
+ABSENT C:\Users\mflma\.kilocode\cli\workspaces\moltbot-50a7b85a : 1012 bytes removed
+ABSENT C:\Users\mflma\.kilocode\cli\workspaces\moltbot-808aec49 : 928 bytes removed
+ABSENT C:\Users\mflma\AppData\Roaming\Code\User\globalStorage\kilocode.kilo-code\vector\.clawdbot-bf302d3ab38b5d09 : 7089 bytes removed
+ABSENT C:\Users\mflma\AppData\Roaming\Code\User\globalStorage\kilocode.kilo-code\vector\Moltbot-808aec492057a93b : 75970620 bytes removed
+ABSENT C:\Users\mflma\AppData\Roaming\Code\User\globalStorage\github.vscode-pull-request-github\assignableUsers\openclaw : 12055 bytes removed
+ABSENT C:\Users\mflma\AppData\Roaming\Code\User\globalStorage\github.vscode-pull-request-github\assignableUsers\coolman1984\Hermes-Secrets.json : 191 bytes removed
+ABSENT C:\Users\mflma\AppData\Roaming\Code\User\globalStorage\github.vscode-pull-request-github\assignableUsers\coolman1984\Moltbot.json : 428 bytes removed
+ABSENT C:\Users\mflma\AppData\Roaming\ai.opencode.desktop\opencode.workspace.G--Hermes-Se.1vziyee.dat : 705 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity-ide\code_tracker\active\Moltbot_3cb610f54e81817c88de494e5209e1fbc6025635 : 159055 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity-ide\code_tracker\active\no_repo\9efe97da187b8d55e4f6b5e67655ac70_Launch_Moltbot.bat : 4326 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity-ide\code_tracker\active\no_repo\ab1ff61fcb323245a6d8aa270bf53414_openclaw.json : 2226 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity-ide\code_tracker\active\no_repo\ecec9d551386e0658ff2275e8ece6d29_moltbot_tray.py : 2976 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity-backup\code_tracker\active\Moltbot_3cb610f54e81817c88de494e5209e1fbc6025635 : 159055 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity-backup\code_tracker\active\no_repo\9efe97da187b8d55e4f6b5e67655ac70_Launch_Moltbot.bat : 4326 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity-backup\code_tracker\active\no_repo\ab1ff61fcb323245a6d8aa270bf53414_openclaw.json : 2226 bytes removed
+ABSENT C:\Users\mflma\.gemini\antigravity-backup\code_tracker\active\no_repo\ecec9d551386e0658ff2275e8ece6d29_moltbot_tray.py : 2976 bytes removed
+
+Drive traversal totals (before final reconciliation of removed matches):
+TOTAL C:\ directories=422530 entries=2119994 matches=198 unreadable=132 directoryLinks=1859
+TOTAL G:\ directories=29660 entries=227805 matches=106 unreadable=1 directoryLinks=0
+TOTAL H:\ directories=3211 entries=22709 matches=15 unreadable=0 directoryLinks=0
+TOTAL I:\ directories=19512 entries=226185 matches=15 unreadable=1 directoryLinks=573
+TOTAL E:\ directories=100744 entries=2163631 matches=1009875 unreadable=598 directoryLinks=1780
+
+Remaining matching names (checked again after cleanup; records and other-app files retained):
+ERP project copies: 1009331 matching paths retained; exact names are in the raw scan. No ERP files changed.
+C:\Windows\WinSxS\Temp\PendingDeletes\1191348eba83db012a020000ec20c43f.hermes.dll
+C:\Windows\WinSxS\Temp\PendingDeletes\2175c23b6033dc0199080000b0057c06.hermes.dll
+C:\Windows\WinSxS\Temp\PendingDeletes\3a2c3c557e43dc019c07000004456431.hermes.dll
+C:\Windows\WinSxS\Temp\PendingDeletes\44fac49d75cadb01620b0000702f6018.hermes.dll
+C:\Windows\WinSxS\Temp\PendingDeletes\7c463e16fdaedb01b5070000b466a801.hermes.dll
+C:\Windows\WinSxS\Temp\PendingDeletes\9bc11fdca6c2dc01260700009047004b.hermes.dll
+C:\Windows\WinSxS\Temp\PendingDeletes\a69a77591c87dc012b020000cc29c854.hermes.dll
+C:\Windows\WinSxS\Temp\PendingDeletes\c0215d671565dc01500200000825e43c.hermes.dll
+C:\Windows\WinSxS\Temp\PendingDeletes\fa60873b04a1dc01fd040000e0533c53.hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\ff211c6135fbdb0196050000b0383817\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.4202_none_fb0fb9b32160b903\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\fd9141f63f61dd01b407000044474009\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.9278_none_fb163c87215af5ed\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\f3ecf366b966db014205000058406439\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.2161_none_fb209e572153212d\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\f33336902041db0101000000c0452816\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.1882_none_fad6d6c9218a33ec\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\bc02712482e8dc011c070000a852405a\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.7920_none_fac63e152197737b\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\aaccb8e58790db017f04000044337029\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.3037_none_fb27e69b214e5024\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\6ae276204010dd01640600001852681b\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.8328_none_fb06694321679604\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\69682639aadcdc01b0040000443a400d\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.7705_none_fad96b7121898910\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\5f4895d945e7db01c0040000d04eb859\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.3912_none_fac508a3219898ca\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\5ede87733419dc0106050000043a705c\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.4484_none_fb01ee9b2169eedf\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\5e83dfb1af43dd01e10b000060612867\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.8972_none_facb13dd21932297\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\5e83dfb1af43dd01e10b000060612867\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.8737_none_fadc40a52187057e\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\3b5d4a12892add01bd050000f855342c\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.8521_none_faf168e321771a7f\Photon\hermes.dll
+C:\Windows\WinSxS\Temp\InFlight\244f3af8b4fadc0158050000643b4431\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.8115_none_fb1b4d292157f7e8\Photon\hermes.dll
+C:\Windows\WinSxS\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.9549_none_faf2b51d2176175c\r\Photon\hermes.dll
+C:\Windows\WinSxS\amd64_userexperience-photon_31bf3856ad364e35_10.0.26100.9549_none_faf2b51d2176175c\Photon\hermes.dll
+C:\Windows\SystemApps\MicrosoftWindows.Client.Photon_cw5n1h2txyewy\hermes.dll
+C:\Users\mflma\scoop\persist\nodejs-lts\bin\node_modules\claude-mem\openclaw
+C:\Users\mflma\scoop\persist\nodejs-lts\bin\node_modules\claude-mem\openclaw\openclaw.plugin.json
+C:\Users\mflma\scoop\persist\bun\install\cache\@GH@obra-superpowers-b36e082@@@1\.hermes-plugin
+C:\Users\mflma\scoop\persist\bun\install\cache\@GH@obra-superpowers-b36e082@@@1\tests\hermes
+C:\Users\mflma\scoop\persist\bun\install\cache\@GH@obra-superpowers-b36e082@@@1\skills\using-superpowers\references\hermes-tools.md
+C:\Users\mflma\scoop\persist\bun\install\cache\@GH@obra-superpowers-b36e082@@@1\docs\superpowers\specs\2026-08-05-hermes-version-bump-wiring-design.md
+C:\Users\mflma\scoop\persist\bun\install\cache\@GH@obra-superpowers-b36e082@@@1\docs\superpowers\plans\2026-08-06-hermes-version-bump-wiring.md
+C:\Users\mflma\scoop\apps\shotcut\26.8.1\lib\ladspa\hermes_filter_1200.dll
+C:\Users\mflma\scoop\apps\shotcut\26.2.26\lib\ladspa\hermes_filter_1200.dll
+C:\Users\mflma\Documents\Codex\2026-07-26\drive-c-hermes-agent-comfyfox-browser
+C:\Users\mflma\Documents\Codex\2026-06-03\fix-this-error-i-downloaded-hermes
+C:\Users\mflma\Documents\Codex\2026-05-27\my-hermes-agent-on-this-pc
+C:\Users\mflma\AppData\Roaming\uv\tools\headroom-ai\Lib\site-packages\headroom\providers\hermes.py
+C:\Users\mflma\AppData\Roaming\uv\tools\headroom-ai\Lib\site-packages\headroom\providers\openclaw
+C:\Users\mflma\AppData\Roaming\uv\tools\headroom-ai\Lib\site-packages\headroom\providers\__pycache__\hermes.cpython-313.pyc
+C:\Users\mflma\AppData\Roaming\npm\node_modules\claude-mem\openclaw
+C:\Users\mflma\AppData\Roaming\npm\node_modules\claude-mem\openclaw\openclaw.plugin.json
+C:\Users\mflma\AppData\Roaming\npm\node_modules\.claude-mem-yRguIs0t\openclaw
+C:\Users\mflma\AppData\Roaming\npm\node_modules\.claude-mem-yRguIs0t\openclaw\openclaw.plugin.json
+C:\Users\mflma\AppData\Local\packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\TempState\prep_Activatable Class_Hermes_perf.cache
+C:\Users\mflma\AppData\Local\packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\TempState\prep_Form_JSI_API_not_a_real_file_Hermes_perf.cache
+C:\Users\mflma\AppData\Local\herdr\agent-detection\remote\hermes.toml
+C:\Users\mflma\.herdr-accounts\claude\2040\skills\research\grounded-citations.bak\scripts\_hermes_home.py
+C:\Users\mflma\.herdr-accounts\claude\2040\skills\research\grounded-citations\scripts\_hermes_home.py
+C:\Users\mflma\.grok\installed-plugins\last30days-skill-6201633e\HERMES_SETUP.md
+C:\Users\mflma\.grok\installed-plugins\last30days-skill-6201633e\tests\hermes
+C:\Users\mflma\.grok\installed-plugins\last30days-skill-6201633e\tests\test_hermes_skillignore.py
+C:\Users\mflma\.grok\installed-plugins\last30days-skill-6201633e\tests\test_setup_openclaw.py
+C:\Users\mflma\.gemini\antigravity-ide\brain\3a41bd44-16d5-469f-b98f-9557662290aa\openclaw_npm_check_1771089332423.webp
+C:\Users\mflma\.gemini\antigravity-ide\brain\21faf735-cc86-4dbe-9b34-6a91a1c33b4a\clawdbot_local_start_1769376631674.webp
+C:\Users\mflma\.gemini\antigravity-ide\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md
+C:\Users\mflma\.gemini\antigravity-ide\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md.metadata.json
+C:\Users\mflma\.gemini\antigravity-ide\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md.resolved
+C:\Users\mflma\.gemini\antigravity-ide\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md.resolved.0
+C:\Users\mflma\.gemini\antigravity-backup\brain\3a41bd44-16d5-469f-b98f-9557662290aa\openclaw_npm_check_1771089332423.webp
+C:\Users\mflma\.gemini\antigravity-backup\brain\21faf735-cc86-4dbe-9b34-6a91a1c33b4a\clawdbot_local_start_1769376631674.webp
+C:\Users\mflma\.gemini\antigravity-backup\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md
+C:\Users\mflma\.gemini\antigravity-backup\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md.metadata.json
+C:\Users\mflma\.gemini\antigravity-backup\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md.resolved
+C:\Users\mflma\.gemini\antigravity-backup\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md.resolved.0
+C:\Users\mflma\.gemini\antigravity\brain\3a41bd44-16d5-469f-b98f-9557662290aa\openclaw_npm_check_1771089332423.webp
+C:\Users\mflma\.gemini\antigravity\brain\21faf735-cc86-4dbe-9b34-6a91a1c33b4a\clawdbot_local_start_1769376631674.webp
+C:\Users\mflma\.gemini\antigravity\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md
+C:\Users\mflma\.gemini\antigravity\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md.metadata.json
+C:\Users\mflma\.gemini\antigravity\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md.resolved
+C:\Users\mflma\.gemini\antigravity\brain\0c32f9d5-6183-465c-9cd8-130783ff1671\openclaw_background_plan.md.resolved.0
+C:\Users\mflma\.cursor\plugins\marketplaces\github.com\mvanhorn\last30days-skill\1004324ad35a3ba656e6df0faabd54749e398455\HERMES_SETUP.md
+C:\Users\mflma\.cursor\plugins\marketplaces\github.com\mvanhorn\last30days-skill\1004324ad35a3ba656e6df0faabd54749e398455\tests\hermes
+C:\Users\mflma\.cursor\plugins\marketplaces\github.com\mvanhorn\last30days-skill\1004324ad35a3ba656e6df0faabd54749e398455\tests\test_hermes_skillignore.py
+C:\Users\mflma\.cursor\plugins\marketplaces\github.com\mvanhorn\last30days-skill\1004324ad35a3ba656e6df0faabd54749e398455\tests\test_setup_openclaw.py
+C:\Users\mflma\.cursor\plugins\cache\last30days-skill\last30days\1004324ad35a3ba656e6df0faabd54749e398455\HERMES_SETUP.md
+C:\Users\mflma\.cursor\plugins\cache\last30days-skill\last30days\1004324ad35a3ba656e6df0faabd54749e398455\tests\hermes
+C:\Users\mflma\.cursor\plugins\cache\last30days-skill\last30days\1004324ad35a3ba656e6df0faabd54749e398455\tests\test_hermes_skillignore.py
+C:\Users\mflma\.cursor\plugins\cache\last30days-skill\last30days\1004324ad35a3ba656e6df0faabd54749e398455\tests\test_setup_openclaw.py
+C:\Users\mflma\.codex\plugins\cache\last30days-skill\last30days\3.25.0\HERMES_SETUP.md
+C:\Users\mflma\.codex\plugins\cache\last30days-skill\last30days\3.25.0\tests\hermes
+C:\Users\mflma\.codex\plugins\cache\last30days-skill\last30days\3.25.0\tests\test_hermes_skillignore.py
+C:\Users\mflma\.codex\plugins\cache\last30days-skill\last30days\3.25.0\tests\test_setup_openclaw.py
+C:\Users\mflma\.codex\plugins\cache\claude-plugins-official\superpowers\6.4.1\.hermes-plugin
+C:\Users\mflma\.codex\plugins\cache\claude-plugins-official\superpowers\6.4.1\tests\hermes
+C:\Users\mflma\.codex\plugins\cache\claude-plugins-official\superpowers\6.4.1\skills\using-superpowers\references\hermes-tools.md
+C:\Users\mflma\.codex\plugins\cache\claude-plugins-official\superpowers\6.4.1\docs\superpowers\specs\2026-08-05-hermes-version-bump-wiring-design.md
+C:\Users\mflma\.codex\plugins\cache\claude-plugins-official\superpowers\6.4.1\docs\superpowers\plans\2026-08-06-hermes-version-bump-wiring.md
+C:\Users\mflma\.codex\.tmp\plugins-backup-hFNC2P\repo\plugins\nvidia\skills\physical-ai-infrastructure-setup-and-resilient-scaling\components\openclaw-azure-login
+C:\Users\mflma\.codex\.tmp\plugins-backup-hFNC2P\repo\plugins\nvidia\skills\nemoclaw-user-get-started\references\quickstart-hermes.md
+C:\Users\mflma\.codex\.tmp\plugins\plugins\nvidia\skills\physical-ai-infrastructure-setup-and-resilient-scaling\components\openclaw-azure-login
+C:\Users\mflma\.codex\.tmp\plugins\plugins\nvidia\skills\nemoclaw-user-get-started\references\quickstart-hermes.md
+C:\Users\mflma\.codex\.tmp\marketplaces\last30days-skill\HERMES_SETUP.md
+C:\Users\mflma\.codex\.tmp\marketplaces\last30days-skill\tests\hermes
+C:\Users\mflma\.codex\.tmp\marketplaces\last30days-skill\tests\test_hermes_skillignore.py
+C:\Users\mflma\.codex\.tmp\marketplaces\last30days-skill\tests\test_setup_openclaw.py
+C:\Users\mflma\.codex\.tmp\marketplaces\last30days-skill\changelog.d\+hermes-setup-install-path.fixed.md
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\tests\test_hermes_passthrough_compression.py
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\tests\test_hermes_tool_call_unwrap.py
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\tests\test_plugins_hermes_retrieve.py
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\tests\test_provider_openclaw_wrap.py
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\tests\test_cli\test_wrap_openclaw.py
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\plugins\hermes
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\plugins\openclaw
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\plugins\openclaw\openclaw.plugin.json
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\plugins\openclaw\src\openclaw-compaction.ts
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\headroom\providers\hermes.py
+C:\Users\mflma\.codex\.tmp\marketplaces\headroom-marketplace\headroom\providers\openclaw
+C:\Users\mflma\.claude\plugins\marketplaces\last30days-skill\HERMES_SETUP.md
+C:\Users\mflma\.claude\plugins\marketplaces\last30days-skill\tests\hermes
+C:\Users\mflma\.claude\plugins\marketplaces\last30days-skill\tests\test_hermes_skillignore.py
+C:\Users\mflma\.claude\plugins\marketplaces\last30days-skill\tests\test_setup_openclaw.py
+C:\Users\mflma\.claude\plugins\marketplaces\headroom-marketplace\tests\test_hermes_passthrough_compression.py
+C:\Users\mflma\.claude\plugins\marketplaces\headroom-marketplace\tests\test_hermes_tool_call_unwrap.py
+C:\Users\mflma\.claude\plugins\marketplaces\headroom-marketplace\tests\test_plugins_hermes_retrieve.py
+C:\Users\mflma\.claude\plugins\marketplaces\headroom-marketplace\tests\test_provider_openclaw_wrap.py
+C:\Users\mflma\.claude\plugins\marketplaces\headroom-marketplace\tests\test_cli\test_wrap_openclaw.py
+C:\Users\mflma\.claude\plugins\marketplaces\headroom-marketplace\plugins\hermes
+C:\Users\mflma\.claude\plugins\marketplaces\headroom-marketplace\plugins\openclaw
+C:\Users\mflma\.claude\plugins\marketplaces\headroom-marketplace\plugins\openclaw\openclaw.plugin.json
+C:\Users\mflma\.claude\plugins\marketplaces\headroom-marketplace\headroom\providers\hermes.py
+C:\Users\mflma\.claude\plugins\marketplaces\headroom-marketplace\headroom\providers\openclaw
+C:\Users\mflma\.claude\plugins\cache\last30days-skill\last30days\3.18.4\HERMES_SETUP.md
+C:\Users\mflma\.claude\plugins\cache\last30days-skill\last30days\3.18.4\tests\hermes
+C:\Users\mflma\.claude\plugins\cache\last30days-skill\last30days\3.18.4\tests\test_hermes_skillignore.py
+C:\Users\mflma\.claude\plugins\cache\last30days-skill\last30days\3.18.4\tests\test_setup_openclaw.py
+C:\Users\mflma\.claude\plugins\cache\claude-plugins-official\superpowers\7.0.0\.hermes-plugin
+C:\Users\mflma\.claude\plugins\cache\claude-plugins-official\superpowers\7.0.0\tests\hermes
+C:\Users\mflma\.claude\plugins\cache\claude-plugins-official\superpowers\7.0.0\skills\using-superpowers\references\hermes-tools.md
+C:\Users\mflma\.claude\plugins\cache\claude-plugins-official\superpowers\7.0.0\docs\superpowers\specs\2026-08-05-hermes-version-bump-wiring-design.md
+C:\Users\mflma\.claude\plugins\cache\claude-plugins-official\superpowers\7.0.0\docs\superpowers\plans\2026-08-06-hermes-version-bump-wiring.md
+C:\Users\mflma\.claude\plugins\cache\claude-plugins-official\superpowers\6.4.1\.hermes-plugin
+C:\Users\mflma\.claude\plugins\cache\claude-plugins-official\superpowers\6.4.1\tests\hermes
+C:\Users\mflma\.claude\plugins\cache\claude-plugins-official\superpowers\6.4.1\skills\using-superpowers\references\hermes-tools.md
+C:\Users\mflma\.claude\plugins\cache\claude-plugins-official\superpowers\6.4.1\docs\superpowers\specs\2026-08-05-hermes-version-bump-wiring-design.md
+C:\Users\mflma\.claude\plugins\cache\claude-plugins-official\superpowers\6.4.1\docs\superpowers\plans\2026-08-06-hermes-version-bump-wiring.md
+C:\Users\mflma\.cache\opencode\node_modules\superpowers\.hermes-plugin
+C:\Users\mflma\.cache\opencode\node_modules\superpowers\tests\hermes
+C:\Users\mflma\.cache\opencode\node_modules\superpowers\skills\using-superpowers\references\hermes-tools.md
+C:\Users\mflma\.cache\opencode\node_modules\superpowers\docs\superpowers\specs\2026-08-05-hermes-version-bump-wiring-design.md
+C:\Users\mflma\.cache\opencode\node_modules\superpowers\docs\superpowers\plans\2026-08-06-hermes-version-bump-wiring.md
+C:\Users\mflma\.agents\skills\research\grounded-citations.bak\scripts\_hermes_home.py
+C:\Users\mflma\.agents\skills\research\grounded-citations\scripts\_hermes_home.py
+C:\Program Files\Microsoft OneDrive\26.150.0804.0011\hermes.dll
+C:\Program Files\Microsoft Office\root\Office16\hermes.dll
+G:\Tools\cognee\cognee-frontend\public\visuals\logos\openclaw.svg
+G:\Skills\_archive\research\HERMES_SKILLS_SHORTLIST.md
+G:\Skills\Sources\gbrain-master\openclaw.plugin.json
+G:\Skills\Sources\gbrain-master\test\check-resolvable-openclaw-compact.test.ts
+G:\Skills\Sources\gbrain-master\test\fixtures\openclaw-compact-resolver
+G:\Skills\Sources\gbrain-master\test\fixtures\openclaw-mixed-merge
+G:\Skills\Sources\gbrain-master\test\fixtures\openclaw-plugin-real
+G:\Skills\Sources\gbrain-master\test\fixtures\openclaw-reference-minimal
+G:\Skills\Sources\gbrain-master\test\fixtures\openclaw-plugin-real\openclaw.plugin.json.template
+G:\Skills\Sources\gbrain-master\test\e2e\bench-vs-openclaw
+G:\Skills\Sources\gbrain-master\test\e2e\openclaw-context-engine-plugin.test.ts
+G:\Skills\Sources\gbrain-master\test\e2e\openclaw-plugin-load-real.test.ts
+G:\Skills\Sources\gbrain-master\test\e2e\openclaw-reference-compat.test.ts
+G:\Skills\Sources\gbrain-master\src\openclaw-context-engine.ts
+G:\Skills\Sources\gbrain-master\src\core\claw-test\runners\openclaw.ts
+G:\reference\oss-clones\cognee\cognee-frontend\public\visuals\logos\openclaw.svg
+H:\.Encrypted\My Drive\Media\x-article-notes\0xJeff\1 Month with Hermes - 2026-04-27
+H:\My Drive\Fable 5\hermes-mastery-prompt.md.gdoc
+H:\My Drive\Fable 5\hermes-extraction-mastery-prompt.md.gdoc
+H:\My Drive\Fable 5\hermes-research-collection-prompt.md.gdoc
+H:\My Drive\Fable 5\hermes-reasoning-mastery-prompt.md.gdoc
+H:\My Drive\Fable 5\hermes-engineering-mastery-prompt.md.gdoc
+H:\My Drive\Fable 5\hermes-planning-mastery-prompt.md.gdoc
+H:\My Drive\Fable 5\hermes-transformation-leader-prompt.md.gdoc
+H:\My Drive\Fable 5\hermes-transformation-leader-prompt-v2.md.gdoc
+H:\My Drive\My Study\hermes-skills-share-2026-06-05.zip
+H:\My Drive\Media\x-article-notes\0xJeff\1 Month with Hermes - 2026-04-27
+H:\My Drive\Media\x-article-notes\0xJeff\1 Month with Hermes - 2026-04-27\1 Month with Hermes - 2026-04-27.md
+H:\My Drive\Media\youtube-transcripts\Jack Roberts\I replaced Hermes... Claude Agent 2.0 - 2026-05-02.md
+H:\My Drive\Media\youtube-transcripts\Tina Huang\Zero To A Full OpenClaw Setup In 26 Minutes - 2026-04-28.md
+H:\My Drive\Media\youtube-transcripts\Wes Roth\Hermes Agent is INSANE - 2026-04-27.md
+I:\herdr\tasks\remove-hermes-openclaw-admin.ps1
+I:\herdr\tasks\remove-hermes-openclaw-cache.txt
+I:\herdr\tasks\remove-hermes-openclaw-check.txt
+I:\herdr\tasks\remove-hermes-openclaw-dryrun.txt
+I:\herdr\tasks\remove-hermes-openclaw-extra.txt
+I:\herdr\tasks\remove-hermes-openclaw-real.txt
+I:\herdr\tasks\remove-hermes-openclaw-reviewed-dryrun.txt
+I:\herdr\tasks\remove-hermes-openclaw-scan.ps1
+I:\herdr\tasks\remove-hermes-openclaw-verification.txt
+I:\herdr\tasks\remove-hermes-openclaw-wide-after.txt
+I:\herdr\tasks\remove-hermes-openclaw-wide-before.txt
+I:\herdr\tasks\remove-hermes-openclaw.md
+I:\herdr\tasks\remove-hermes-openclaw.ps1
+I:\herdr\.git\refs\remotes\upstream\issue\5068-hermes-launcher
+I:\herdr\.git\logs\refs\remotes\upstream\issue\5068-hermes-launcher
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-estree
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesAST.js.flow
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesASTAdapter.js
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesASTAdapter.js.flow
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesParser.js
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesParser.js.flow
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesParserDecodeUTF8String.js
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesParserDecodeUTF8String.js.flow
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesParserDeserializer.js
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesParserDeserializer.js.flow
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesParserNodeDeserializers.js
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesParserNodeDeserializers.js.flow
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesParserWASM.js
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesParserWASM.js.flow
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesToESTreeAdapter.js
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-parser\dist\HermesToESTreeAdapter.js.flow
+E:\Github Projects\Scoial Media Project\minnak\node_modules\hermes-estree\dist\generated\HermesESTreeSelectorTypes.js.flow
+E:\Github Projects\My Second Brain\AI Second Brain Vault\08_Research\Videos\Hermes Agent is INSANE - 2026-04-27.md
+E:\Github Projects\My Second Brain\AI Second Brain Vault\08_Research\Videos\I replaced Hermes... Claude Agent 2.0 - 2026-05-02.md
+E:\Github Projects\My Second Brain\AI Second Brain Vault\08_Research\Videos\Zero To A Full OpenClaw Setup In 26 Minutes - 2026-04-28.md
+E:\Github Projects\My Second Brain\AI Second Brain Vault\08_Research\Tweets\1 Month with Hermes - 2026-04-27.md
+E:\Github Projects\My Second Brain\AI Second Brain Vault\04_Projects\Moltbot.md
+E:\Github Projects\Management Dashboard\node_modules\hermes-estree
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesAST.js.flow
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesASTAdapter.js
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesASTAdapter.js.flow
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesParser.js
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesParser.js.flow
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesParserDecodeUTF8String.js
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesParserDecodeUTF8String.js.flow
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesParserDeserializer.js
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesParserDeserializer.js.flow
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesParserNodeDeserializers.js
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesParserNodeDeserializers.js.flow
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesParserWASM.js
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesParserWASM.js.flow
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesToESTreeAdapter.js
+E:\Github Projects\Management Dashboard\node_modules\hermes-parser\dist\HermesToESTreeAdapter.js.flow
+E:\Github Projects\Management Dashboard\node_modules\hermes-estree\dist\generated\HermesESTreeSelectorTypes.js.flow
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-estree
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesAST.js.flow
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesASTAdapter.js
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesASTAdapter.js.flow
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesParser.js
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesParser.js.flow
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesParserDecodeUTF8String.js
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesParserDecodeUTF8String.js.flow
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesParserDeserializer.js
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesParserDeserializer.js.flow
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesParserNodeDeserializers.js
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesParserNodeDeserializers.js.flow
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesParserWASM.js
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesParserWASM.js.flow
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesToESTreeAdapter.js
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-parser\dist\HermesToESTreeAdapter.js.flow
+E:\Github Projects\Landing Pages\Test\pc-program-landing\node_modules\hermes-estree\dist\generated\HermesESTreeSelectorTypes.js.flow
+E:\Github Projects\Fabric\data\patterns\suggest_moltbot_command
+E:\Github Projects\Antigravity\brain\21faf735-cc86-4dbe-9b34-6a91a1c33b4a\clawdbot_local_start_1769376631674.webp
+E:\Github Projects\Agents\video-stack\scripts\render-hermes-agent-voice.mjs
+E:\Github Projects\Agents\video-stack\remotion\HermesAgentPromo.tsx
+E:\Github Projects\Agents\video-stack\remotion\HermesAgentVariants.tsx
+E:\Github Projects\Agents\video-stack\artifacts\hermes-agent-luxe.mp4
+E:\Github Projects\Agents\video-stack\artifacts\hermes-agent-promo.mp4
+E:\Github Projects\Agents\video-stack\artifacts\hermes-agent-social.mp4
+E:\Github Projects\Agents\video-stack\artifacts\hermes-agent-voice-video.mp4
+E:\Github Projects\Agents\video-stack\artifacts\hermes-agent-voice.mp4
+E:\Github Projects\Agents\video-stack\artifacts\hermes-agent-voice.txt
+E:\Github Projects\Agents\video-stack\artifacts\hermes-agent-voice.wav
+E:\Downloads\hermes-engineering-mastery-prompt.md
+E:\Downloads\hermes-extraction-mastery-prompt.md
+E:\Downloads\hermes-mastery-prompt.md
+E:\Downloads\hermes-planning-mastery-prompt.md
+E:\Downloads\hermes-reasoning-mastery-prompt.md
+E:\Downloads\hermes-research-collection-prompt.md
+E:\Downloads\hermes-transformation-leader-prompt-v2.md
+E:\Downloads\hermes-transformation-leader-prompt.md
+E:\Downloads\Skills\HERMES_SKILLS_SHORTLIST.md
+E:\Downloads\Skills\gbrain-master\openclaw.plugin.json
+E:\Downloads\Skills\gbrain-master\test\check-resolvable-openclaw-compact.test.ts
+E:\Downloads\Skills\gbrain-master\test\fixtures\openclaw-compact-resolver
+E:\Downloads\Skills\gbrain-master\test\fixtures\openclaw-mixed-merge
+E:\Downloads\Skills\gbrain-master\test\fixtures\openclaw-plugin-real
+E:\Downloads\Skills\gbrain-master\test\fixtures\openclaw-reference-minimal
+E:\Downloads\Skills\gbrain-master\test\fixtures\openclaw-plugin-real\openclaw.plugin.json.template
+E:\Downloads\Skills\gbrain-master\test\e2e\bench-vs-openclaw
+E:\Downloads\Skills\gbrain-master\test\e2e\openclaw-context-engine-plugin.test.ts
+E:\Downloads\Skills\gbrain-master\test\e2e\openclaw-plugin-load-real.test.ts
+E:\Downloads\Skills\gbrain-master\test\e2e\openclaw-reference-compat.test.ts
+E:\Downloads\Skills\gbrain-master\src\openclaw-context-engine.ts
+E:\Downloads\Skills\gbrain-master\src\core\claw-test\runners\openclaw.ts
+E:\all my projects\Tools\cognee\cognee-frontend\public\visuals\logos\openclaw.svg
+E:\all my projects\Skills\_archive\research\HERMES_SKILLS_SHORTLIST.md
+E:\all my projects\Skills\Sources\gbrain-master\openclaw.plugin.json
+E:\all my projects\Skills\Sources\gbrain-master\test\check-resolvable-openclaw-compact.test.ts
+E:\all my projects\Skills\Sources\gbrain-master\test\fixtures\openclaw-compact-resolver
+E:\all my projects\Skills\Sources\gbrain-master\test\fixtures\openclaw-mixed-merge
+E:\all my projects\Skills\Sources\gbrain-master\test\fixtures\openclaw-plugin-real
+E:\all my projects\Skills\Sources\gbrain-master\test\fixtures\openclaw-reference-minimal
+E:\all my projects\Skills\Sources\gbrain-master\test\fixtures\openclaw-plugin-real\openclaw.plugin.json.template
+E:\all my projects\Skills\Sources\gbrain-master\test\e2e\bench-vs-openclaw
+E:\all my projects\Skills\Sources\gbrain-master\test\e2e\openclaw-context-engine-plugin.test.ts
+E:\all my projects\Skills\Sources\gbrain-master\test\e2e\openclaw-plugin-load-real.test.ts
+E:\all my projects\Skills\Sources\gbrain-master\test\e2e\openclaw-reference-compat.test.ts
+E:\all my projects\Skills\Sources\gbrain-master\src\openclaw-context-engine.ts
+E:\all my projects\Skills\Sources\gbrain-master\src\core\claw-test\runners\openclaw.ts
+E:\all my projects\reference\oss-clones\cognee\cognee-frontend\public\visuals\logos\openclaw.svg
+
+Free space at final report:
+SPACE final C: 22775652352 bytes (21.211 GiB) free
+SPACE final G: 454774784 bytes (0.424 GiB) free

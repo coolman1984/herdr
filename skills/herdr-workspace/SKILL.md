@@ -1,11 +1,11 @@
 ---
 name: herdr-workspace
-description: "Operate, fix, change or document the owner's personal Herdr setup in D:\\WORK\\Software Development\\GitHub\\HERDR - Herdr install/update, the one-click launcher, the 'herdr' Explorer command, the folder-picker keys (ctrl+b f / shift+f / t), the herdr-agents delegation tool and agents.json, the Claude skills, Cline/other agent CLIs and their models, and the folder's docs (HISTORY, LESSONS). Use when the user asks to change, repair, extend, check or explain this Herdr setup, add a new agent CLI or model, or when Herdr misbehaves."
+description: "Operate, fix, change or document the owner's personal Herdr setup in I:\\herdr - Herdr install/update, the one-click launcher, the 'herdr' Explorer command, the folder-picker keys (ctrl+b f / shift+f / t), the herdr-agents delegation tool and agents.json, the Claude skills, Cline/other agent CLIs and their models, and the folder's docs (HISTORY, LESSONS). Use when the user asks to change, repair, extend, check or explain this Herdr setup, add a new agent CLI or model, or when Herdr misbehaves."
 ---
 
 # Herdr workspace: maintain the owner's setup
 
-Folder: `D:\WORK\Software Development\GitHub\HERDR`. Herdr itself is the official
+Folder: `I:\herdr`. Herdr itself is the official
 build; everything else there is ours.
 
 ## Before any change

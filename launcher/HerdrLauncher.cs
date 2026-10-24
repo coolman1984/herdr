@@ -3,7 +3,7 @@
 // What: starts Herdr in Windows Terminal in the chosen folder, plus the toolkit's pane
 //       HUD (herdr-hud.ps1) hidden in a headless conhost. Folder rules match Herdr.cmd:
 //       the argument if it is an existing folder, else the current directory, else
-//       (when that is System32 or missing) D:\WORK\Software Development\GitHub.
+//       (when that is System32 or missing) the toolkit folder.
 // Why:  Herdr.cmd is a batch file, so Windows creates a console that flashes on screen
 //       for a moment every time it runs (e.g. typing "herdr" in Explorer's address bar).
 //       This is a GUI-subsystem exe (/target:winexe), so Windows never creates a console.
@@ -21,7 +21,7 @@ using System.Windows.Forms;
 
 static class Program
 {
-    const string DefaultFolder = @"D:\WORK\Software Development\GitHub";
+    static string DefaultFolder { get { return ToolkitFolder(); } }
 
     [STAThread]
     static int Main(string[] args)
@@ -88,7 +88,7 @@ static class Program
     }
 
     // 1. argument if it is an existing folder; 2. current directory;
-    // 3. when that is System32 (same as Herdr.cmd) or missing -> the GitHub folder,
+    // 3. when that is System32 (same as Herdr.cmd) or missing -> the toolkit folder,
     //    or the user profile if that is missing too.
     static string ResolveFolder(string argFolder)
     {
