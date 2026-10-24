@@ -122,6 +122,10 @@ scan() {
     echo "last update: $(cat ~/.workbench/last-update 2>/dev/null | xargs -I{} date -d @{} 2>/dev/null || echo never)"
     echo; echo "--- update.log (tail)"; tail -n 30 ~/.workbench/update.log 2>/dev/null
     echo; echo "--- server.log (tail)"; tail -n 20 ~/.workbench/server.log 2>/dev/null
+    H="${HERMES_HOME:-$HOME/.hermes}"
+    echo "files under ~/.hermes (depth 4) not owned by this user: $(find "$H" -maxdepth 4 ! -user root 2>/dev/null | wc -l)"
+    echo "hermes uv cache: $(du -sh "$H/cache/uv" 2>/dev/null | cut -f1)"
+    echo "ruamel/yaml/__init__.py copies:"; find "$H" -maxdepth 9 -path "*ruamel/yaml/__init__.py" 2>/dev/null | grep -v broken | head -3 | xargs -r ls -la
     echo; echo "--- hermes dump"; timeout 120 hermes dump 2>&1 | head -80
     echo; echo "--- hermes doctor"; timeout 180 hermes doctor 2>&1 | tail -60
     echo; echo "--- hermes logs (tail)"; ls -t ~/.hermes/logs/*.log 2>/dev/null | head -2 | xargs -r tail -n 25
@@ -154,7 +158,7 @@ termux_health() {
 # --version alone passed on the device while Hermes printed "dependency repair failed"
 # `hermes --version` printed a version while every real command crashed with
 # "No module named 'ruamel'", so judge Hermes by `hermes status`.
-hermes_ok() { wb_ok 'command -v hermes && out="$(timeout 180 hermes status </dev/null 2>&1)"; ! printf "%s" "$out" | grep -qiE "Traceback|ModuleNotFoundError|ImportError|retry limit reached|refusing to update|repair failed"'; }
+hermes_ok() { wb_ok 'command -v hermes >/dev/null || exit 1; out="$(timeout 180 hermes status </dev/null 2>&1)"; ! printf "%s" "$out" | grep -qiE "Traceback|ModuleNotFoundError|ImportError|retry limit reached|refusing to update|repair failed"'; }
 
 # --- 3. repair ------------------------------------------------------------
 repair() {
@@ -204,7 +208,13 @@ repair() {
     wb 'set +e
       unset TERMUX_VERSION PREFIX
       H="${HERMES_HOME:-$HOME/.hermes}"
-      [ -d "$H/hermes-agent" ] && mv "$H/hermes-agent" "$H/hermes-agent.broken-$(date +%s)"
+      ts=$(date +%s)
+      [ -d "$H/hermes-agent" ] && mv "$H/hermes-agent" "$H/hermes-agent.broken-$ts"
+      # the reinstall reused the uv cache from the old install and failed the
+      # same way ("cannot import name YAML from ruamel.yaml (unknown location)")
+      [ -d "$H/cache/uv" ] && mv "$H/cache/uv" "$H/cache/uv.broken-$ts"
+      ls -dt "$H"/cache/uv.broken-* 2>/dev/null | tail -n +2 | xargs -r rm -rf
+      export UV_LINK_MODE=copy
       rm -f "$HOME/.local/bin/hermes"
       curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser
       ls -dt "$H"/hermes-agent.broken-* 2>/dev/null | tail -n +3 | xargs -r rm -rf' | tail -40 | redact >> "$REPORT"
