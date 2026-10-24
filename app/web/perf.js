@@ -21,7 +21,7 @@ const P = window.__deckPerf = {
       p95_render_ms: +q(w, 0.95).toFixed(2), max_render_ms: +(w[w.length - 1] || 0).toFixed(2),
       long_tasks: longTasks, long_task_max_ms: Math.round(longMax), slowest_input_ms: Math.round(evMax),
       heap_mb: performance.memory ? +(performance.memory.usedJSHeapSize / 1048576).toFixed(1) : null,
-      dom_nodes: document.getElementsByTagName('*').length, screen_rows_in_dom: document.querySelectorAll('.row:not([hidden])').length,
+      dom_nodes: document.getElementsByTagName('*').length, screen_rows_in_dom: document.querySelectorAll('.trow:not([hidden])').length,
       sse_msgs_per_s: msgsRate,
     };
   },

@@ -290,3 +290,6 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     event subscription is a different surface; output-match subscriptions fire on match
     transitions, not every screen update. `pane read` CLI emits terminal text directly,
     while the socket returns `result.read.text`. Preserve this distinction in adapters.
+66. **A PowerShell function must never share its name with the program it wraps:** `function Git { & git ... }`
+    resolves `git` to the function itself (names ignore case, functions beat programs) and loops forever
+    with no error - the first autosync dry run hung for 2 minutes. Name wrappers `Invoke-Git`.

@@ -69,7 +69,7 @@ try {
     DeckPost '/api/pane/prompt' @{key=$deckKey;text="Write-Output ('DECK-AGENT-' + 'OK')"} | Out-Null
     Lab @('pane','wait-output',$deckFirst,'--match','DECK-AGENT-OK','--timeout','6000') | Out-Null
     Proof 'agent prompt reaches the offline codex.exe transport fixture (no AI CLI/network/tools launched)'
-    Lab @('pane','report-metadata',$deckFirst,'--title','Deck test HUD','--token','model=gpt-6.1-sol','--token','ctx=12%','--token','out=42','--ttl-ms','120000') | Out-Null
+    Lab @('pane','report-metadata',$deckFirst,'--source','deck-test-hud','--title','Deck test HUD','--token','model=gpt-6.1-sol','--token','ctx=12%','--token','out=42','--ttl-ms','120000') | Out-Null
     Lab @('pane','run',$deckFirst,'BLOCK') | Out-Null
     Lab @('pane','report-agent',$deckFirst,'--source','deck-test','--agent','codex','--state','blocked') | Out-Null
     Start-Sleep -Milliseconds 2500

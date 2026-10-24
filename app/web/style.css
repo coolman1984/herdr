@@ -224,8 +224,8 @@ body.no-rail .rail { visibility: hidden; }
 .screen:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .screen .spacer { width: 1px; }
 .rows { position: absolute; inset: 0 auto auto 0; min-width: 100%; }
-.row { position: absolute; left: 0; top: 0; height: var(--row-h); padding: 0 12px; white-space: pre; }
-.row.hit { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.trow { position: absolute; left: 0; top: 0; height: var(--row-h); padding: 0 12px; white-space: pre; }
+.trow.hit { background: color-mix(in srgb, var(--accent) 28%, transparent); }
 .clip-more { color: var(--accent); padding-left: 4px; cursor: help; }
 .card-err { padding: 8px 12px; background: color-mix(in srgb, var(--red) 14%, var(--card)); color: var(--red); font-size: 12px; border-top: 1px solid var(--line); }
 .card-done { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--green) 9%, var(--card)); font-size: 12px; animation: fadein var(--t-mid) var(--ease); }
@@ -279,7 +279,7 @@ body.no-rail .rail { visibility: hidden; }
 .empty-card h2 { margin: 0 0 8px; font-size: 20px; letter-spacing: -.01em; }
 .empty-card p { margin: 0 0 16px; }
 .empty-card::before { content: ''; display: block; width: 12px; height: 12px; margin: 0 auto 16px; border-radius: 4px; background: var(--accent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 16%, transparent); }
-.row { } .row:empty { }
+
 div.row, .dlg-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
 
 /* ---------- drawer = right inspector (340px) ---------- */
@@ -423,3 +423,7 @@ div.row, .dlg-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: c
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 @media (max-width: 1000px) { .body { grid-template-columns: 64px minmax(0, 1fr) auto; } .rl2, .rail-agent, .health { display: none; } .rail-item .rl1 { font-size: 11px; } .form2, .cols2 { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) {
+  .brand > span:not(.mark), #btn-board, #btn-agents, #btn-tools, #btn-layout, [data-view="layout"] { display: none; }
+  .top { gap: 8px; } .tgroup + .tgroup { padding-left: 8px; }
+}

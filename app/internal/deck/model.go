@@ -50,6 +50,8 @@ type State struct {
 	Profiles    []Profile       `json:"profiles"`
 	Layouts     json.RawMessage `json:"layouts"`
 	FocusedPane string          `json:"focused_pane_id"`
+	ReadOnly    bool            `json:"read_only"`
+	Lead        LeadIdentity    `json:"lead"`
 }
 
 func parseSnapshot(raw []byte, session string) (State, error) {

@@ -22,6 +22,7 @@
 | `herdr-spaces.ps1` | Spaces side by side and separate again (ctrl+b shift+s) |
 | `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
+| `herdr-autosync.ps1` | Owner-authorized GitHub main sync loop; status/dry-run modes, bounded log and conflict stop (maintained separately from Deck) |
 | `herdr-headless.ps1` | Run a Cline profile headless (no pane): waits, saves the JSONL log, prints DONE/FAILED, answer and tokens |
 | `herdr-trial.ps1` | Run one model trial, grade it and append results.csv; leave the agent for review |
 | `agents.json` | Agent profiles for the delegation tool |

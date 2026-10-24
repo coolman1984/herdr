@@ -34,11 +34,13 @@ type App struct {
 	jobs                            map[string]*Job
 	lastRead, lastChange            map[string]time.Time
 	debug                           bool
+	lead                            LeadIdentity
 	guards                          *GuardState
 }
 
 func newApp(h Herdr, session, token, origin, root string, profiles map[string]Profile) *App {
-	return &App{herdr: h, token: token, origin: origin, root: root, profiles: profiles, state: State{Session: session, Panes: []Pane{}, Workspaces: []Nav{}, Tabs: []Nav{}}, clients: map[chan []byte]bool{}, visible: map[string]bool{}, active: true, started: time.Now(), lastClient: time.Now(), jobs: map[string]*Job{}}
+	lead := leadIdentity(profiles)
+	return &App{herdr: h, token: token, origin: origin, root: root, profiles: profiles, lead: lead, state: State{Session: session, Panes: []Pane{}, Workspaces: []Nav{}, Tabs: []Nav{}, Lead: lead}, clients: map[chan []byte]bool{}, visible: map[string]bool{}, active: true, started: time.Now(), lastClient: time.Now(), jobs: map[string]*Job{}}
 }
 func (a *App) shouldExit(now time.Time) bool {
 	a.mu.Lock()
@@ -157,6 +159,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.actionMu.Lock()
 		a.mu.Lock()
 		a.readOnly = v.Enabled
+		a.state.ReadOnly = v.Enabled
 		a.mu.Unlock()
 		a.actionMu.Unlock()
 		respond(w, 200, map[string]bool{"enabled": v.Enabled})
@@ -494,6 +497,8 @@ func (a *App) publish(old, next State) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	next.ReadOnly = a.readOnly
+	next.Lead = a.lead
 	a.state = next
 	if reflect.DeepEqual(old, next) {
 		return

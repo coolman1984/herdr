@@ -11,7 +11,7 @@ export const MAX_LINES = 2000;
 const OVERSCAN = 12, SHIFT_SEARCH = 600;
 
 const ro = new ResizeObserver((entries) => {
-  for (const e of entries) { const v = e.target._view; if (v) { v.h = e.contentRect.height; v.need(); } }
+  for (const e of entries) { const v = e.target._view; if (v) { v.h = e.contentRect.height; if (v.follow) v.jump = true; v.need(); } }
 });
 
 export class ScreenView {
@@ -149,7 +149,7 @@ export class ScreenView {
       let r = this.rows.get(abs);
       if (!r) {
         r = this.pool.pop() || this.layer.appendChild(document.createElement('div'));
-        r.className = 'row'; r.hidden = false; r._y = -1; r._h = null;
+        r.className = 'trow'; r.hidden = false; r._y = -1; r._h = null;
         this.rows.set(abs, r);
       }
       const html = this.cache[i].html;

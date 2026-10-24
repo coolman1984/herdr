@@ -1054,3 +1054,26 @@ baseline folder twice, including an exact LiteralPath attempt, stating only "blo
 Left tests/.review-old-32db5c5becec4590a36494f1668372b5 and tests/.review-baseline-path.txt for
 lead cleanup; no further deletion method was attempted. Final review-fixes run: 25/25;
 final check.ps1: 5 FAIL (the external issues listed above).
+
+## Phase 43 - AutoSync to GitHub main (2026-10-24)
+
+**Symptom:** the owner wants this folder kept in sync with `main` all the time, automatically.
+**Fix:** new `herdr-autosync.ps1`: every 5 minutes (one instance, mutex) it stages changed files, skips
+secret-like names/text and files > 5 MB, commits `autosync: N file(s) <time>`, `git pull --rebase
+--autostash`, pushes. On a rebase conflict it aborts the rebase and logs CONFLICT; it never force-pushes,
+resets or checks out; it does nothing on a branch other than `main` or during a merge/rebase.
+Log: `%APPDATA%\herdr\autosync.log`. `-Once -DryRun` prints what it would commit; `-Status` shows the loop.
+**Proof:** dry run listed 97 files; first real pass committed 97 files and pushed (`986d77bb`),
+`git log origin/main..HEAD` = 0. Auto-start at sign-in is NOT installed: Claude Code's auto-mode
+blocked creating the Startup shortcut and the hidden background loop (persistence) - the owner starts it.
+**Lesson:** #66 (a function named `Git` calls itself: PowerShell names ignore case).
+
+## Phase 44 - Shutdown handoff for the web/phone session (2026-10-24)
+
+**Symptom:** the owner had to close the PC mid-project (Herdr Deck app) and continue from claude.ai on a phone.
+**Fix:** both Deck builders were told to stop, finish their current edit and write status blocks
+(`app/API.md`, `app/PERF.md`, `app/README.md`, `app/FEATURES.md`); the lead wrote
+`tasks/HANDOFF-web-2026-10-24.md` (what was done, Deck state, ordered next steps, rules, PC commands),
+ran `herdr-autosync.ps1 -Once` and checked `git log origin/main..HEAD` = 0.
+**Lesson:** a handoff must name what cannot be done from the web (build, run, live tests) so the
+web session writes code and docs and marks everything "not verified" until the PC is back.

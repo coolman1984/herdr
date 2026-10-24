@@ -354,6 +354,13 @@ function autosize(ta) { ta.style.height = 'auto'; const h = ta.scrollHeight; ta.
 const chip = (text, cls = '') => el('span', { class: 'chip ' + cls, text });
 function updateCard(c, p) {
   if (!p) return;
+  // Screen first: the header, failure card and last line read the updated text.
+  if (typeof p.screen === 'string' && p.screen !== c.view.lastText) { c.view.set(p.screen); c.view.sv = p.screen_version; }
+  if (p.pq) {
+    const q = p.pq; p.pq = null;
+    for (const pt of q) if (!c.view.patch(pt)) { resync(`screen version ${c.view.sv} != ${pt.from_version} for ${p.pane_id}`); break; }
+  }
+  p.screen = undefined;   // the view owns the text now; keep no second copy per pane
   const s = statusOf(p), t = tok(p), name = nameOf(p), kind = kindOf(p);
   const hist = S.hist.get(p.key) || [];
   const h = [s, name, kind, JSON.stringify(t), p.cwd, p.title, p.error, S.queue.get(p.key)?.length || 0, S.selected.has(p.key), S.finished.has(p.key), hist.length, S.zoom === p.key, G.isUncertain(p.key)].join('|');
@@ -381,12 +388,6 @@ function updateCard(c, p) {
     Q.doneStrip(c, p, S.finished.has(p.key) && s !== 'working');
     G.failureCard(c, p);
   }
-  if (typeof p.screen === 'string' && p.screen !== c.view.lastText) { c.view.set(p.screen); c.view.sv = p.screen_version; }
-  if (p.pq) {
-    const q = p.pq; p.pq = null;
-    for (const pt of q) if (!c.view.patch(pt)) { resync(`screen version ${c.view.sv} != ${pt.from_version} for ${p.pane_id}`); break; }
-  }
-  p.screen = undefined;   // the view owns the text now; keep no second copy per pane
 }
 
 // ---------- pane actions ----------
@@ -462,6 +463,8 @@ function renderTop() {
   $('#counts').replaceChildren(...['blocked', 'working', 'idle', 'done'].filter((s) => counts[s]).map((s) =>
     el('span', { class: 'count', 'data-s': s }, el('span', { class: 'dot', 'data-s': s }), `${counts[s]} ${s}`)));
   document.title = (blocked ? `(${blocked}!) ` : '') + 'Herdr Deck';
+  const hp = $('#health .hp');
+  if (hp) hp.textContent = `${list.length} panes, ${list.filter((p) => isAgent(p) && ['idle', 'done'].includes(statusOf(p))).length} idle agents`;
   for (const c of cards.values()) if (c.sel.checked !== S.selected.has(c.key)) c.sel.checked = S.selected.has(c.key);
 }
 function renderStatus() {

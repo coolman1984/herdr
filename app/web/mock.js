@@ -45,7 +45,7 @@ export function createMock(R) {
       panes: ps.map((p, i) => ({ pane_id: p.pane_id, rect: { x: each * i, y: 0, width: i === ps.length - 1 ? w - each * i : each, height: h } })) };
   });
   const state = () => running
-    ? { session: 'lab', herdr: { running: true, error: '' }, panes: [...panes.values()].map(({ n: _n, ...p }) => p), workspaces, tabs, layouts: layouts(), profiles, error: '' }
+    ? { session: 'lab', lead: { tool: 'claude', account: '2040', known: true }, herdr: { running: true, error: '' }, panes: [...panes.values()].map(({ n: _n, ...p }) => p), workspaces, tabs, layouts: layouts(), profiles, error: '' }
     : { session: 'lab', herdr: { running: false, error: 'herdr.sock not found (mock)' }, panes: [], workspaces: [], tabs: [], profiles, error: '' };
 
   let sink = null;
@@ -69,7 +69,10 @@ export function createMock(R) {
   const handlers = {
     [R.state]: state,
     [R.visible]: () => ok(''),
-    [R.prompt]: ({ key, text }) => { const p = need(key); append(p, C(36, '> ') + text); if (p.agent) touch(p, { agent_status: 'working' }); return ok('prompt sent'); },
+    [R.reservations]: () => ({ reservations: [{ id: 'r1', task: 'tasks/other.md', owner: 'codex-1', paths: ['app/web/app.js'] }] }),
+    [R.headlessRoutes]: () => ({ routes: [{ profile: 'cline-ds', verified: true, search: 'server' }] }),
+    [R.prompt]: ({ key, text }) => {
+      if (/timeout-test/.test(text)) { const e = new Error('504: delivery unknown'); e.status = 504; e.dispatch_id = 'd-1'; throw e; } const p = need(key); append(p, C(36, '> ') + text); if (p.agent) touch(p, { agent_status: 'working' }); return ok('prompt sent'); },
     [R.keys]: ({ key, keys }) => { const p = need(key); append(p, C(2, `[keys ${keys.join(' ')}]`));
       if (p.blocked && keys.includes('Enter')) touch(p, { blocked: false, agent_status: 'idle' }); return ok('keys sent'); },
     [R.text]: ({ key, text }) => { append(need(key), C(2, '[text] ') + text); return ok(`${text.length} chars sent`); },
@@ -85,7 +88,7 @@ export function createMock(R) {
     [R.herdrStart]: () => { setTimeout(() => { running = true; emit('state', state()); }, 1200); return ok('launcher started'); },
     [R.reload]: () => ok('config reloaded'),
     [R.tasks]: () => ({ tasks: ['herdr-deck-app.md', 'herdr-deck-frontend.md', 'herdr-deck-split.md'].map((f) => ({ file: 'tasks/' + f, title: f, mtime: now() })) }),
-    [R.taskRead]: () => ({ file: 'tasks/x.md', text: '# Task: example\n\n## 1. Role and goal\nMock task text.' }),
+    [R.taskRead]: ({ file }) => ({ file, text: file.includes('frontend') ? '# Task\n\n## 3. Scope\n- Write ONLY: `app/web/**`, `app/web/app.js`, `app/FEATURES.md`.\n\n## 6. Definition of done\n- checks pass\n\n## 7. Answer format\nDONE | BLOCKED | PARTIAL' : '# Task: example\n\n## 1. Role and goal\nMock task text.' }),
     [R.usage]: () => ({ text: 'claude 2040: 5h 41% weekly 12%\nclaude 1984: 5h 3% weekly 30%\ncodex: 5h 20%',
       accounts: [{ name: '2030', five_hour: 88, weekly: 64 }, { name: '2040', five_hour: 41, weekly: 12 }, { name: '1984', five_hour: 3, weekly: 30 }],
       codex: { five_hour: 20, weekly: 9 } }),

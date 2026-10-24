@@ -39,6 +39,30 @@ type LaunchPolicy struct {
 	MinRAMMB  float64 `json:"min_ram_mb"`
 	MinDiskGB float64 `json:"min_disk_gb"`
 }
+type LeadIdentity struct {
+	Tool    string `json:"tool"`
+	Account string `json:"account"`
+	Known   bool   `json:"known"`
+}
+
+func leadIdentity(profiles map[string]Profile) LeadIdentity {
+	result := LeadIdentity{Tool: "claude"}
+	dir := os.Getenv("CLAUDE_CONFIG_DIR")
+	if dir == "" {
+		if p, ok := profiles["claude"]; ok && p.DefaultAccount != "" {
+			result.Account = p.DefaultAccount
+			result.Known = true
+		}
+		return result
+	}
+	expected := filepath.Join(os.Getenv("USERPROFILE"), ".herdr-accounts", "claude")
+	if strings.EqualFold(filepath.Clean(filepath.Dir(dir)), filepath.Clean(expected)) {
+		result.Account = filepath.Base(dir)
+		result.Known = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`).MatchString(result.Account)
+	}
+	return result
+}
+
 type GuardState struct {
 	Reservations []Reservation
 	Deliveries   []Delivery
@@ -150,6 +174,11 @@ func (a *App) launchGuard(p paneRequest) error {
 		return fmt.Errorf("research route unavailable: no server-search-only adapter has been independently verified in this Deck; pane/browser routes are refused")
 	}
 	profile := a.profiles[p.Profile]
+	if profile.Kind == "claude" {
+		if !a.lead.Known || p.Account == "" || p.Account == a.lead.Account {
+			return fmt.Errorf("account guard: pick another account; lead identity is unknown, empty, or matches the selected account")
+		}
+	}
 	if p.Helper && profile.Kind == "claude" {
 		if p.Account == "" || p.LeadAccount == "" {
 			return fmt.Errorf("helper account identity unknown: choose an explicit helper account and lead account")

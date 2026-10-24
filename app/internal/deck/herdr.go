@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -147,7 +148,9 @@ type Profile struct {
 		Env  map[string]string
 		Args []string
 	} `json:"-"`
-	Accounts []string `json:"accounts"`
+	Accounts       []string `json:"accounts"`
+	DefaultAccount string   `json:"default_account"`
+	AccountsError  string   `json:"accounts_error,omitempty"`
 }
 
 func readProfiles(root string) (map[string]Profile, error) {
@@ -157,7 +160,8 @@ func readProfiles(root string) (map[string]Profile, error) {
 	}
 	// Decode a private wire type: launch arguments never go to the browser.
 	var v struct {
-		Agents map[string]struct {
+		AccountNames map[string]string `json:"accountNames"`
+		Agents       map[string]struct {
 			Kind, Command, Model, ModelFlag, Effort, Provider, ProviderFlag string
 			Args, EffortArgs                                                []string
 			Account                                                         *struct {
@@ -172,7 +176,24 @@ func readProfiles(root string) (map[string]Profile, error) {
 	}
 	profiles := map[string]Profile{}
 	for name, p := range v.Agents {
-		profiles[name] = Profile{Name: name, Kind: p.Kind, Command: p.Command, Model: p.Model, ModelFlag: p.ModelFlag, Args: p.Args, Effort: p.Effort, EffortArgs: p.EffortArgs, Provider: p.Provider, ProviderFlag: p.ProviderFlag, Account: p.Account}
+		entry := Profile{Name: name, Kind: p.Kind, Command: p.Command, Model: p.Model, ModelFlag: p.ModelFlag, Args: p.Args, Effort: p.Effort, EffortArgs: p.EffortArgs, Provider: p.Provider, ProviderFlag: p.ProviderFlag, Account: p.Account, Accounts: []string{}}
+		if p.Account != nil {
+			entry.DefaultAccount = v.AccountNames[p.Account.Tool]
+			if entry.DefaultAccount != "" {
+				entry.Accounts = append(entry.Accounts, entry.DefaultAccount)
+			}
+			dirs, e := os.ReadDir(filepath.Join(os.Getenv("USERPROFILE"), ".herdr-accounts", p.Account.Tool))
+			if e != nil && !os.IsNotExist(e) {
+				entry.AccountsError = e.Error()
+			}
+			for _, dir := range dirs {
+				if dir.IsDir() && regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`).MatchString(dir.Name()) {
+					entry.Accounts = append(entry.Accounts, dir.Name())
+				}
+			}
+			sort.Strings(entry.Accounts)
+		}
+		profiles[name] = entry
 	}
 	return profiles, nil
 }

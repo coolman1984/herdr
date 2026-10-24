@@ -1,5 +1,89 @@
 # Herdr Deck API — backend contract
 
+## STOP HANDOFF — 2026-10-24, owner shutdown request (authoritative status)
+
+Work stopped at the owner's request. No git commands or live-owner-session writes were performed.
+**Current build:** build.ps1 PASS (format/vet/test/build, exit 0); direct go test PASS,
+30 behavioral tests passed, 1 lab-only test skipped because lab is now stopped. The direct socket
+test passed separately earlier. Exe: **8,573,440 bytes / 8.18 MiB**, SHA256
+`2E3D42A9BC5E5DFA0E5FB1BCD33ECE8B1637EB280E6D21825D9BDA3A48E4A491`.
+Evidence: tests/evidence/final-go-tests.txt, tests/evidence/lab-results.txt, tests/mutation-result.txt.
+The following status table supersedes optimistic wording and older shapes later in this file.
+DONE means backend behavior verified; it does not certify every frontend button.
+
+| Endpoint(s) | Status | Evidence / limits |
+|---|---|---|
+| GET /api/state, /api/events | DONE | curl state, SSE sample, lab shell/fixture/HUD/blocked state; row-diff/scroll/overflow tests |
+| GET /api/profiles | PARTIAL | Sanitized profiles plus account directory names implemented; final account selection not live-tested |
+| GET /api/accounts, /api/usage | PARTIAL | Existing herdr-agents bridge; JSON/stdin bridge tested; actual account usage not live-tested |
+| POST /api/visible, /api/visibility | DONE | Used by lab/soak; hidden polling pauses; keep SSE open |
+| POST /api/read-only | DONE | Unit and real lab mutation returns 403 |
+| POST /api/action | PARTIAL | Legacy action route implemented; core prompt/keys/rename/close tested, not every action |
+| POST /api/reopen | DONE | Second instance reached existing headless instance, exit 0; visible Edge focus not verified |
+| /api/pane/prompt, /keys, /text, /rename, /split, /close | DONE | Real lab computed output, offline foreground codex.exe fixture, blocked rejection 409, rename/down-split/close JSON read-back |
+| /api/pane/resize, /swap, /move, /zoom, /focus | PARTIAL | Validated handlers implemented; live geometry/drag/focus not verified |
+| /api/tab/create, /rename, /close, /focus; /api/workspace/rename, /close, /focus | PARTIAL | IDs validated against fresh snapshot; CLI help inspected; live UI not verified |
+| POST /api/shell | PARTIAL | Handler implemented, split path verified; empty-session workspace path not separately exercised |
+| POST /api/agent/start, /stop, /focus | PARTIAL | Existing helper plus busy fallback; no paid AI agents started for verification; main-account normalization and next-account guard need review |
+| POST /api/herdr/start, /reload-config | PARTIAL | Implemented; not invoked; named-session Start currently uses default launcher and MUST be fixed before lab use |
+| GET /api/tasks, /api/tasks/read, /api/docs, /api/runs, /api/runs/read | DONE | Allow-list/traversal/docs tests; task list real lab. Actual run-history content not inspected |
+| GET /api/docs?name=KEYS | PARTIAL | Calls existing help -List; not live-tested. GUIDE and master skill documents supported |
+| GET /api/health | PARTIAL | RAM/disks/process RSS/handles/goroutines measured; pane process memory implemented. R21 ram_free_mb alias still missing (actual field ram_available_mb) |
+| POST /api/panes/close-finished | PARTIAL | Validates idle/done before any close; no live multi-close test |
+| GET /api/signin, POST /api/signin/open | PARTIAL | Three read-only probes; unsupported tools honestly unknown; per-account probes and login panes not tested |
+| GET /api/git | PARTIAL | Read-only status/stat handler; R24 paths/root fields NOT STARTED |
+| POST /api/check | PARTIAL | Fixed script handler. Direct setup check has 3 external/concurrent-document failures; see README |
+| POST /api/lessons/append | DONE | Temp-directory behavior test confirms append-only numbered content; real lesson not appended through UI |
+| GET /api/jobs | PARTIAL | Bounded job results implemented; asynchronous live toolkit jobs not verified |
+| GET /api/folders/recent, /list | PARTIAL | Directory names only, local paths, bounded listing; not UI-tested |
+| POST /api/workspace/open, /api/columns | PARTIAL | Reuses original folder/columns scripts; not live-tested |
+| GET /api/layouts; POST /api/layouts/build, /save | PARTIAL | Script-compatible plans/presets and atomic save; not live-tested |
+| GET /api/spaces; POST /api/spaces/join, /separate | PARTIAL | Reuses spaces script; not live-tested |
+| POST /api/stop-all | PARTIAL | Requires literal stop; invokes original verified-stop function; endpoint itself not exercised |
+| GET /api/agents/tools, /status, /read, /diff, /history, /watch, /accounts, /usage, /collect | PARTIAL | Existing-script adapters; collect is an async job, requires names query; not all commands exercised |
+| POST /api/agents/ask, /fanout, /team, /handoff | PARTIAL | Existing helper, bounded async jobs/temp plans; no actual agent dispatch or handoff tested |
+| POST /api/headless, /api/trial, /api/sync-skills | PARTIAL | Fixed-script adapters, bounded jobs. Not run: they launch agents/change external account copies |
+| /debug/pprof/* | PARTIAL | Token-protected, off unless --debug; not profiled |
+| /assets/* cache, WOFF2 MIME | PARTIAL | ETag/immutable/font/woff2 implemented for /assets; frontend currently uses /fonts, which still lacks immutable caching |
+
+### Every safeguard — exact current status
+
+| Guard | Status | Evidence / unfinished work |
+|---|---|---|
+| Auth/localhost/origin/cookie, hidden children, deadlines, bounded screen/queues | DONE | Unit tests, process stub has no console, PE GUI subsystem=2, disconnect/goroutine and queue-resync tests |
+| Blocked prompt guard + R17 status flicker | DONE | Real waiting fixture rejects 409 without answering; metadata-only poll regression passes |
+| Task readiness | DONE | /api/tasks/validate phrase warnings tested; frontend owns launch integration; wording presence is not proof |
+| File ownership reservations / R19 | PARTIAL | Overlap normalization tested; current API requires repo, uses owner-based release and absolute paths. Task/id/release route/409 conflict shape and persisted reload NOT STARTED |
+| Bounded waves / R21 | PARTIAL | Global capacity/RAM/disk floors and explicit queued release implemented. Frontend floor payload and ram_free_mb alias NOT STARTED |
+| Helper accounts / R20 | PARTIAL | Non-secret lead field + empty/same/unknown rejection implemented; error currently 502, not requested 409. Default account normalization and profile next need audit; no credential reads |
+| Research route / R22 | PARTIAL | Agent-start research rejected as unavailable. GET /api/headless/routes NOT STARTED; normal Cline coding headless still exists; never advertise it as verified research |
+| Proof checklist + citation audit | DONE | /api/proof/audit tests: mentions/URLs never become verified; no pages opened. Frontend also implements its own view |
+| Scope drift / R24 | PARTIAL | Separate baseline/check handlers bounded and read-only; no live git baseline tested; requested git paths/root fields missing |
+| Uncertain delivery / R23 | PARTIAL | Latest 100 /api/deliveries records, rejected vs unknown, no replay tested. Requested dispatch_id/text_sha/key route and HTTP 504 NOT STARTED |
+| Failure recovery cards | DONE | Error kind/next_step/cause fields + frontend classification; unknown causes explicitly unknown |
+
+### NEXT STEPS (phone-friendly order)
+
+1. Read this block, README shutdown handoff, PERF.md, then API-REQUESTS.md R19–R24.
+2. Fix the six frontend/backend mismatches above before adding features. Fix /herdr/start session
+   targeting, main-account alias normalization and next-account helper protection first.
+3. Match reservation JSON/release route, lead-account 409s, ram_free_mb, research routes (empty
+   verified list), dispatch IDs/504/ledger, and git paths/root. Keep all refusal tests.
+4. Have Opus reduce the frontend: last measurement **257,316 bytes**, over the 150 KB budget.
+   Do not overwrite frontend-owned files. Add /fonts immutable cache/MIME parity.
+5. Rebuild; restart only workspace APPDATA lab; run verify-lab.ps1, mutation.ps1, then soak.ps1
+   for a COMPLETE 600 seconds. The improved soak was interrupted at 160 seconds by shutdown.
+6. Verify parity script controls in lab, native Edge opening/close/focus, font headers and screenshots;
+   frontend must finish its 60-fps/paint/input/page-memory evidence. No such claim is verified now.
+7. Resolve external App Path and concurrent HISTORY/LESSONS numbering with the lead, then rerun
+   check.ps1. Seven existing PowerShell suites already passed 155/155; no git work was done.
+
+Cleanup verified: workspace lab status=not_running; own headless Deck PID 12796 stopped;
+soak runner exited (cleanup reported server_not_running because shutdown stopped lab first).
+No owner panes/session were stopped. Remaining test files are bounded evidence, not running work.
+
+---
+
 Backend owns this file. Frontend owns `API-REQUESTS.md`. Version 2, 2026-10-24.
 
 ## Frontend requests accepted — R1–R7

@@ -252,8 +252,9 @@ async function health() {
     const idle = [...X.S.panes.values()].filter((p) => ['idle', 'done'].includes(X.statusOf(p)) && (p.name || p.agent));
     box.append(el('h3', { text: 'Health' }), bar('RAM', h.ram_used_pct ?? 0),
       ...(h.disks || []).map((d) => el('div', { class: 'small', text: `${d.drive} ${(+d.free_gb).toFixed(1)} GB free` })),
-      el('div', { class: 'small', text: `${X.S.panes.size} panes, ${idle.length} idle agents` }),
+      el('div', { class: 'small hp' }),
       idle.length ? el('button', { class: 'small-btn', text: 'Close finished panes', 'data-w': '1', onclick: () => closeFinished(idle) }) : '');
+    X.schedule();
   } catch (e) {
     box.textContent = '';
     box.append(el('h3', { text: 'Health' }), el('div', { class: 'small muted', text: missing(e) ? 'not available (backend endpoint missing)' : e.message }));

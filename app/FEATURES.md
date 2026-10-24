@@ -212,14 +212,68 @@ backend, "Open login pane" button; the owner types/pastes codes in the pane (Pas
 19. Activity timeline: when each agent started/finished/blocked today (frontend-observed).
 20. Queued prompts: send when the agent becomes idle (owner queues it explicitly).
 
-## Test log (evidence)
+## STATUS (stopped 2026-10-24 ~18:40 on the owner's request)
 
-(filled in as features are tested)
+Test method: `deck.exe` built from the current tree into the agent's scratch folder, run
+`--headless --session lab` against an ISOLATED lab Herdr (scratch APPDATA), page driven in headless
+Edge over CDP (throwaway profile). Mock = `/?mock=1` (add `&perf=1` overlay, `&stress=8`).
 
-## Measurements
+### P0 - DONE (verified live in the lab session)
+| Feature | Status | Evidence |
+|---|---|---|
+| Live grid, focus/zoom, 1/2/3 cols | DONE | 4 lab panes live; `z`/Esc zoom; `3` sets 3 columns |
+| Status dots / blocked highlight + toast | DONE (backend bug R17) | trust prompt in lab pane -> card "blocked", inbox 1, title "(1!)", screen unchanged 3 s (nothing auto-sent) |
+| Prompt box | DONE | `echo deck-test-4242` echoed in 1.66 s; box clears at once (local-first) |
+| Key buttons | DONE | Esc -> toast "Esc sent to w1:p2" |
+| Rename / close | DONE | rename "deck-renamed" via dialog; close dialog focuses Cancel; pane closed |
+| + Shell / split | DONE | split right created w1:p3 |
+| + Agent | PARTIAL | dialog works in mock; NOT verified live (delegates may not start agents) |
+| Herdr-not-running state | DONE | lab stopped -> "Herdr is not running" + real error + Start button; restart -> grid back in 8 s |
+| Rail (spaces/tabs/agent rows) | DONE | |
+| Ctrl+K palette, Ctrl+B chords | DONE | palette filters + arrows; Ctrl+B z zooms; Ctrl+B i opens guide |
 
-(filled in at step 4)
+### P1
+| Feature | Status | Evidence / gap |
+|---|---|---|
+| Copy/paste: Paste to pane | DONE | "code-ABC-123" reached the lab pane, no Enter |
+| Copy screen | PARTIAL | not verified (headless clipboard) |
+| Attention inbox + notifications | PARTIAL | inbox verified; Windows notification not verified |
+| Task launcher + preview | DONE | 35 tasks listed, preview loads |
+| Broadcast / compare | DONE | "echo bcast-77" reached 2 panes after confirm |
+| Usage | PARTIAL | raw `herdr-agents usage` table shown; bars need a parser for its table format |
+| Health + close finished | PARTIAL | RAM/disk shown; close-finished not run live |
+| Team presets | PARTIAL | UI only; should call `/api/agents/team` presets `claude-codex` / `claude-codex-gemini` |
+| Sign-in helper | DONE (read-only) | 6 tools listed with honest states; login pane not opened |
+
+### Parity A1-A17: UI built for all; live-verified: A1 splits view (2 dividers), A2/A3 header + rail rows, A10 board, A12 guide, A16 hub (status output empty), A5 folder picker (recent 1, browse 10), A9 builder opens (0 presets). NOT verified live: resize/swap drag, A6/A7/A8/A11/A13/A14 writes, A17 headless/sync.
+### BUILD NOW 1-10: DONE in mock (readiness check, overlap flag, account guard refuses lead account 2040, launch queue, delivery-unknown card with Resend, failure cards, proof slots, scope drift, citation audit). Live: need backend R19-R24.
+### P2: themes, density, font, layouts, snippets, queue prompts, raw mode, export, timeline, safe mode = built, mostly mock-only; check runner / runs / docs = built, not verified live.
+
+### Measurements
+- Mock stress 8 panes x 20 lines/s, 20 s headless: render p95 3.8 ms, max frame 10.1 ms, 0 frames > 16.7 ms, 0 long tasks, heap 4.6 MB, 2368 DOM nodes. 5-minute run NOT done.
+- First paint 152-164 ms (headless, local). Hidden window: 0 timers, 0 rAF, 0 fetches in 10 s.
+- Size: product JS+CSS+HTML 206 KB raw / 62 KB gzip (+ font 30 KB) - OVER the 150 KB budget.
+- No external requests; no console errors in the final runs.
+
+### Known flaws (open)
+1. Size over budget (206 KB > 150 KB) - trim duplicated code (panels.js vs parity.js), maybe ask owner whether gzip counts.
+2. 900 px: page still scrolls sideways by 66 px (top bar) - hide/shrink more top-bar items.
+3. (lead a) light theme not applied in a mock screenshot - harness sets `localStorage deck.theme` after load; real switch is Ctrl+B s / palette "Theme: light". Light did apply in the lab shots (lab-*-light.png). Check the param path.
+4. (lead b) blocked toast overlaps the card header (loud toasts top-right at 68 px) - move loud toasts to bottom or offset below the header.
+5. (lead c) help icon cut off at 1440 px - top bar too wide; same fix as 2.
+6. Backend R17: blocked status flaps in SSE (frontend dedupes toasts 30 s).
+7. Focus ring on keyboard Tab not verified headless.
+
+### NEXT STEPS (in order)
+1. Fix top-bar width (flaws 2, 5) and loud-toast position (4); re-shoot 1100/1440/2560 dark+light.
+2. Trim size below 150 KB; re-measure.
+3. Backend: R17 flapping, R19-R24 endpoints; then verify BUILD NOW rows live.
+4. Verify live: drag resize/swap, columns, spaces, layout build, stop-all (typed), copy screen, notifications.
+5. 5-minute stress run + real Edge app window perf; write the FRONTEND section of app/PERF.md (not written yet).
 
 ## For HISTORY/LESSONS
-
-(frontend lines for the BACKEND agent to merge)
+- Edge/Chrome: setting `scrollTop` after DOM writes forces a synchronous layout; with 8 streaming
+  cards this cost 20+ ms/frame. Batch: all sizes, then all scrollTops, then rows (render p95 22 ms -> 3.8 ms).
+- A generic `div.row` flex rule silently re-laid out terminal rows named `.row`; keep screen classes unique (`.trow`).
+- Herdr `pane send-keys` accepts esc, ctrl+c, enter, up, down, left, right, tab, backspace, space,
+  shift+tab, ctrl+<x>, f1-f12; it rejects pageup, home, delete.
