@@ -61,6 +61,7 @@ cat > "$PREFIX/bin/dev" <<LAUNCH
 # dev update   -> update everything now
 # dev <cmd...> -> run one command inside the workbench
 termux-wake-lock 2>/dev/null || true
+export PROOT_NO_SECCOMP=1  # radar: proot new_child crash workaround
 binds=()
 [ -d /storage/emulated/0 ] && binds+=(--bind /storage/emulated/0:/sdcard)
 run() { exec proot-distro login $DISTRO --shared-tmp "\${binds[@]}" -- bash -lc "\$1"; }
@@ -73,10 +74,14 @@ esac
 LAUNCH
 chmod +x "$PREFIX/bin/dev"
 
+say "installing radar (scan, repair and report: type radar)"
+fetch radar.sh "$PREFIX/bin/radar" && chmod +x "$PREFIX/bin/radar"
+
 say "keeping the herdr server alive after phone reboot (needs the Termux:Boot app)"
 mkdir -p "$HOME/.termux/boot"
 cat > "$HOME/.termux/boot/10-herdr-server" <<BOOT
 #!/data/data/com.termux/files/usr/bin/bash
+export PROOT_NO_SECCOMP=1  # radar: proot new_child crash workaround
 termux-wake-lock
 proot-distro login $DISTRO --shared-tmp -- bash -lc 'cd ~/code && exec herdr server >> ~/.workbench/server.log 2>&1' &
 BOOT
@@ -84,7 +89,7 @@ chmod +x "$HOME/.termux/boot/10-herdr-server"
 
 grep -q 'herdr-mobile' "$HOME/.bashrc" 2>/dev/null || cat >> "$HOME/.bashrc" <<'RC'
 # herdr-mobile: type `dev` to open herdr, `dev shell` for a shell
-echo "type: dev  (herdr)  |  dev shell  |  dev update"
+echo "type: dev  (herdr)  |  dev shell  |  dev update  |  radar (fix everything)"
 RC
 
 say "done. type:  dev"
