@@ -97,7 +97,7 @@ scan() {
     done
     echo "gh auth: $(gh auth status >/dev/null 2>&1 && echo signed-in || echo NOT signed-in)"
     echo "git user: $(git config --global user.name) <$(git config --global user.email | sed "s/^\(..\).*@/\1***@/")>"
-    echo "herdr server running: $(pgrep -f "herdr server" >/dev/null && echo yes || echo no)"
+    echo "herdr server running: $(pgrep -x herdr >/dev/null && echo yes || echo no)"
     echo "binaries named herdr/hermes:"; find / -xdev \( -path /proc -o -path /sys -o -path /data -o -path /storage -o -path /sdcard \) -prune -o -type f \( -name herdr -o -name hermes \) -print 2>/dev/null | head -10
     echo "PATH lines in shell files:"; grep -hs "PATH" ~/.bashrc ~/.profile ~/.bash_profile /etc/profile.d/*.sh | head -10
     echo "dpkg audit: $(dpkg --audit 2>&1 | head -3)"
@@ -133,7 +133,8 @@ termux_health() {
   else bad "proot-distro still broken"; log "termux repair FAILED: $(head -1 "$PREFIX/bin/proot-distro")"; tail -20 "$STATE/termux-repair.log" >> "$REPORT"; fi
 }
 
-hermes_ok() { wb 'command -v hermes >/dev/null && timeout 60 hermes --version >/dev/null 2>&1' >/dev/null; }
+# --version alone passed on the device while Hermes printed "dependency repair failed"
+hermes_ok() { wb 'out="$(timeout 120 hermes --version 2>&1)" && ! printf "%s" "$out" | grep -qiE "repair failed|update failed|refusing to update|Traceback"' >/dev/null; }
 
 # --- 3. repair ------------------------------------------------------------
 repair() {
@@ -184,11 +185,20 @@ repair() {
       curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser
       ls -dt "$H"/hermes-agent.broken-* 2>/dev/null | tail -n +3 | xargs -r rm -rf' | tail -40 | redact >> "$REPORT"
   fi
+  # Files created from Termux outside proot belong to the app uid (10362 on the
+  # device); Hermes refuses to update a tree it does not own as root.
+  log "--- hermes ownership + dependency repair"
+  wb 'H="${HERMES_HOME:-$HOME/.hermes}"
+      chown -R 0:0 "$H/hermes-agent" "$HOME/.local/bin" 2>&1 | tail -2
+      timeout 900 hermes pm repair </dev/null 2>&1 | tail -15
+      timeout 1800 hermes update </dev/null 2>&1 | tail -25' | redact >> "$REPORT"
   log "--- hermes doctor --fix"
   wb 'timeout 300 hermes doctor --fix' | tail -40 | redact >> "$REPORT"
-  hermes_ok && log "hermes: WORKING" || log "hermes: STILL BROKEN"
+  hermes_ok && log "
+hermes: WORKING" || log "
+hermes: STILL BROKEN"
 
-  if ! wb 'pgrep -f "herdr server" >/dev/null' >/dev/null; then
+  if wb 'command -v herdr' >/dev/null && ! wb 'pgrep -x herdr >/dev/null' >/dev/null; then
     (proot-distro login "$DISTRO" --shared-tmp -- bash -c "$WB_PATH"'mkdir -p ~/code ~/.workbench; cd ~/code && exec herdr server >> ~/.workbench/server.log 2>&1' >/dev/null 2>&1 &)
     log "started herdr server"
   fi
@@ -236,7 +246,7 @@ cp "$REPORT" "$HOME/storage/downloads/radar-report.md" 2>/dev/null
 upload || echo "report saved: ~/storage/downloads/radar-report.md"
 
 step "summary"
-grep -E "MISSING|NOT signed-in|STILL BROKEN|WORKING|assertion" "$REPORT" | sort -u | sed 's/^/  /'
+grep -oE "^[a-z]+ +MISSING|NOT signed-in|hermes: (STILL BROKEN|WORKING)|assertion failed|Error code: 402[^,]*" "$REPORT" | sort -u | sed 's/^/  /'
 hermes_ok && ok "Hermes works" || bad "Hermes still broken (the report tells Claude why)"
 if [ "$MODE" != "scan" ] && [ -t 0 ]; then
   echo; echo "opening herdr..."; sleep 2

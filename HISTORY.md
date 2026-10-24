@@ -1097,3 +1097,10 @@ and `radar.sh` (self-updating scan, repair and redacted report to the private re
 **Lesson:** on Termux, never install single packages on a stale system (always full-upgrade first), and never write into
 a proot-distro container by its disk path. Hermes' own Termux APT package is marked broken upstream (2026-10), so Hermes
 runs inside the Ubuntu workbench. Not verified on the device: herdr agent detection under proot, the Hermes reinstall.
+**First device report (phone-radar, 2026-10-24 16:36 UTC):** herdr was never installed in the workbench (the
+"herdr server running: yes" line was `pgrep -f` matching its own command; now `pgrep -x herdr`). Hermes answered
+`--version` but could not update: `venv/bin/ty is owned by uid 10362, not the current uid 0` (files written from Termux
+outside proot), then `ImportError: cannot import name 'YAML' from 'ruamel.yaml'` in its PM runtime. radar now runs
+`chown -R 0:0 ~/.hermes/hermes-agent ~/.local/bin`, `hermes pm repair` and `hermes update`, and counts Hermes as
+broken when its output says "repair failed". The Hermes chat provider (kilocode) returned HTTP 402 "Low Credit" with a
+negative balance; the xAI fallback has no token. That is the owner's billing/provider choice, not something radar changes.
