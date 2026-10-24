@@ -40,11 +40,12 @@ redact() {
     -e 's/((api[_-]?key|token|secret|password|authorization|bearer)[^:=]{0,20}[:=][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig' \
     -e 's/[A-Za-z0-9_+\/=-]{40,}/[REDACTED-LONG]/g'
 }
+WB_PATH='export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$HOME/bin:/usr/local/bin:$PATH" HERDR_PROCESS_DETECTION=child-groups; unset TERMUX_VERSION PREFIX; '
 wb() { # run a command inside the workbench, bounded. Plain (non-login) bash:
   # the login profile starts a background update that would keep proot open.
-  timeout "${WB_TIMEOUT:-900}" proot-distro login "$DISTRO" --shared-tmp -- bash -c \
-    'export PATH="$HOME/.local/bin:$HOME/.hermes/bin:/usr/local/bin:$PATH" HERDR_PROCESS_DETECTION=child-groups
-     unset TERMUX_VERSION PREFIX; '"$1" 2>&1
+  # proot-distro is a script; run it through Termux bash so `timeout` can always exec it.
+  timeout --foreground "${WB_TIMEOUT:-900}" "$PREFIX/bin/bash" "$PREFIX/bin/proot-distro" login "$DISTRO" --shared-tmp -- \
+    bash -c "$WB_PATH$1" 2>&1
 }
 
 # --- 1. self-update -------------------------------------------------------
@@ -91,6 +92,8 @@ scan() {
     echo "gh auth: $(gh auth status >/dev/null 2>&1 && echo signed-in || echo NOT signed-in)"
     echo "git user: $(git config --global user.name) <$(git config --global user.email | sed "s/^\(..\).*@/\1***@/")>"
     echo "herdr server running: $(pgrep -f "herdr server" >/dev/null && echo yes || echo no)"
+    echo "binaries named herdr/hermes:"; find / -xdev \( -path /proc -o -path /sys -o -path /data -o -path /storage -o -path /sdcard \) -prune -o -type f \( -name herdr -o -name hermes \) -print 2>/dev/null | head -10
+    echo "PATH lines in shell files:"; grep -hs "PATH" ~/.bashrc ~/.profile ~/.bash_profile /etc/profile.d/*.sh | head -10
     echo "dpkg audit: $(dpkg --audit 2>&1 | head -3)"
     echo "last update: $(cat ~/.workbench/last-update 2>/dev/null | xargs -I{} date -d @{} 2>/dev/null || echo never)"
     echo; echo "--- update.log (tail)"; tail -n 30 ~/.workbench/update.log 2>/dev/null
@@ -109,7 +112,12 @@ hermes_ok() { wb 'command -v hermes >/dev/null && timeout 60 hermes --version >/
 repair() {
   step "repairing"
   section "repairs"
-  pkg install -y proot-distro git gh curl termux-api >/dev/null 2>&1 && log "termux packages: ok"
+  # install only what is missing; upgrading proot-distro mid-run broke the first device run
+  local missing=()
+  for p in proot-distro git gh curl termux-api; do dpkg -s "$p" >/dev/null 2>&1 || missing+=("$p"); done
+  if [ ${#missing[@]} -gt 0 ]; then
+    pkg install -y "${missing[@]}" >> "$REPORT" 2>&1; hash -r; log "installed: ${missing[*]}"
+  else log "termux packages: ok"; fi
 
   if [ ! -d "$ROOTFS/usr" ]; then
     log "workbench missing: running full setup"
@@ -130,7 +138,15 @@ repair() {
   mkdir -p "$ROOTFS/root/.workbench"
   curl -fsSL "$RAW/tools.conf" -o "$ROOTFS/root/.workbench/tools.conf.default" 2>/dev/null
 
-  if wb 'for t in herdr claude codex gemini; do command -v $t >/dev/null || exit 1; done'; then
+  [ -f "$ROOTFS/root/.workbench/tools.conf" ] || cp "$ROOTFS/root/.workbench/tools.conf.default" "$ROOTFS/root/.workbench/tools.conf"
+  if ! wb 'command -v dev-update >/dev/null' >/dev/null; then
+    # an older hand-made workbench: install our helpers and missing tools once
+    log "--- workbench helpers missing: running workbench-setup.sh"
+    curl -fsSL "$RAW/workbench-setup.sh" -o "$ROOTFS/root/.workbench/setup.sh"
+    WB_TIMEOUT=3600 wb 'bash ~/.workbench/setup.sh </dev/tty' | tee "$STATE/workbench-setup.log"
+    tail -60 "$STATE/workbench-setup.log" | redact >> "$REPORT"
+  fi
+  if wb 'for t in herdr claude codex gemini; do command -v $t >/dev/null || exit 1; done' >/dev/null; then
     log "core tools present"
   else
     log "--- tools missing: dev-update --now"
@@ -151,8 +167,8 @@ repair() {
   wb 'timeout 300 hermes doctor --fix' | tail -40 | redact >> "$REPORT"
   hermes_ok && log "hermes: WORKING" || log "hermes: STILL BROKEN"
 
-  if ! wb 'pgrep -f "herdr server" >/dev/null'; then
-    (proot-distro login "$DISTRO" --shared-tmp -- bash -c 'export PATH="$HOME/.local/bin:$PATH" HERDR_PROCESS_DETECTION=child-groups; cd ~/code && exec herdr server >> ~/.workbench/server.log 2>&1' >/dev/null 2>&1 &)
+  if ! wb 'pgrep -f "herdr server" >/dev/null' >/dev/null; then
+    (proot-distro login "$DISTRO" --shared-tmp -- bash -c "$WB_PATH"'mkdir -p ~/code ~/.workbench; cd ~/code && exec herdr server >> ~/.workbench/server.log 2>&1' >/dev/null 2>&1 &)
     log "started herdr server"
   fi
   endsection
@@ -164,6 +180,14 @@ upload() {
   local token user repo path
   token="$(gh auth token 2>/dev/null || true)"
   [ -n "$token" ] || token="$(wb 'gh auth token' 2>/dev/null | tail -1 | tr -d '\r')"
+  case "$token" in gh*_*|github_pat_*) ;; *)
+    if : </dev/tty 2>/dev/null; then
+      printf '\n  \033[1;33mGitHub sign-in (one time):\033[0m copy the 8-letter code, press Enter, then paste it in the page that opens.\n'
+      printf '  تسجيل دخول GitHub مرة واحدة: انسخ الكود، اضغط Enter، والصقه في الصفحة اللي هتفتح.\n\n'
+      gh auth login --hostname github.com --git-protocol https --web </dev/tty
+      token="$(gh auth token 2>/dev/null || true)"
+    fi ;;
+  esac
   case "$token" in gh*_*|github_pat_*) ;; *) bad "not signed in to GitHub; report kept on the phone"; return 1 ;; esac
   export GH_TOKEN="$token"
   user="$(gh api user -q .login 2>/dev/null)" || { bad "GitHub not reachable"; return 1; }

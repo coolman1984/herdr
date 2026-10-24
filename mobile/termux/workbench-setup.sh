@@ -9,7 +9,7 @@ WB="$HOME/.workbench"
 export DEBIAN_FRONTEND=noninteractive
 # Hermes' installer refuses Termux; this is a glibc Ubuntu, so hide Termux markers.
 unset TERMUX_VERSION PREFIX || true
-export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$PATH"
 
 say() { printf '\n\033[1;35m[workbench] %s\033[0m\n' "$*"; }
 try() { "$@" || printf '\033[1;33mwarning:\033[0m failed: %s (continuing)\n' "$*"; }
@@ -46,7 +46,7 @@ cat > /usr/local/bin/dev-update <<'UPD'
 # dev-update --now  -> update everything now
 WB="$HOME/.workbench"; . "$WB/tools.conf"
 unset TERMUX_VERSION PREFIX || true
-export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$PATH" DEBIAN_FRONTEND=noninteractive
+export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$PATH" DEBIAN_FRONTEND=noninteractive
 stamp="$WB/last-update"
 if [ "${1:-}" != "--now" ]; then
   [ "${UPDATE_EVERY_HOURS:-0}" -gt 0 ] || exit 0
@@ -107,7 +107,7 @@ mkdir -p "$HOME/code"
 # login shells (`dev`, `dev shell`) read /etc/profile.d; Ubuntu's .bashrc
 # returns early for non-interactive shells, so the environment lives here
 cat > /etc/profile.d/herdr-mobile.sh <<'RC'
-export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$PATH"
 export LANG=en_US.UTF-8 EDITOR=nano
 # proot hides the terminal foreground process group; let herdr infer agents
 export HERDR_PROCESS_DETECTION=child-groups
