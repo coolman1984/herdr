@@ -9,7 +9,6 @@ set -euo pipefail
 
 REPO_RAW="${HERDR_MOBILE_RAW:-https://raw.githubusercontent.com/coolman1984/herdr/${HERDR_MOBILE_REF:-main}/mobile/termux}"
 DISTRO="${HERDR_MOBILE_DISTRO:-ubuntu}"
-ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -35,7 +34,7 @@ if [ ! -d "$HOME/storage" ]; then
   termux-setup-storage || true
 fi
 
-if [ ! -d "$ROOTFS/usr" ]; then
+if ! proot-distro login "$DISTRO" -- true >/dev/null 2>&1; then
   say "installing the $DISTRO workbench (one time, a few minutes)"
   proot-distro install "$DISTRO"
 else
@@ -43,10 +42,14 @@ else
 fi
 
 say "setting up tools inside the workbench"
-mkdir -p "$ROOTFS/root/.workbench"
-fetch workbench-setup.sh "$ROOTFS/root/.workbench/setup.sh"
-fetch tools.conf "$ROOTFS/root/.workbench/tools.conf.default"
-[ -f "$ROOTFS/root/.workbench/tools.conf" ] || cp "$ROOTFS/root/.workbench/tools.conf.default" "$ROOTFS/root/.workbench/tools.conf"
+# copy files in through stdin: the container's directory on disk differs
+# between proot-distro versions
+put() { proot-distro login "$DISTRO" -- bash -c 'mkdir -p "$(dirname ~/"$1")" && cat > ~/"$1"' _ "$2" < "$1"; }
+tmp="$(mktemp -d)"
+fetch workbench-setup.sh "$tmp/setup.sh" && put "$tmp/setup.sh" .workbench/setup.sh
+fetch tools.conf "$tmp/tools.conf" && put "$tmp/tools.conf" .workbench/tools.conf.default
+proot-distro login "$DISTRO" -- bash -c '[ -f ~/.workbench/tools.conf ] || cp ~/.workbench/tools.conf.default ~/.workbench/tools.conf'
+rm -rf "$tmp"
 if : </dev/tty 2>/dev/null; then
   proot-distro login "$DISTRO" --shared-tmp -- bash /root/.workbench/setup.sh </dev/tty
 else

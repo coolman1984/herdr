@@ -20,7 +20,7 @@ fi
 
 RAW="${HERDR_MOBILE_RAW:-https://raw.githubusercontent.com/coolman1984/herdr/${HERDR_MOBILE_REF:-main}/mobile/termux}"
 DISTRO="${HERDR_MOBILE_DISTRO:-ubuntu}"
-ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO"
+ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO"  # only a hint; newer proot-distro stores containers elsewhere
 MODE="${1:-fix}"
 STATE="$HOME/.radar"; mkdir -p "$STATE"
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
@@ -39,6 +39,12 @@ redact() {
     -e 's/(sk-|sk-ant-|xox[abp]-|AIza)[A-Za-z0-9_-]+/\1[REDACTED]/g' \
     -e 's/((api[_-]?key|token|secret|password|authorization|bearer)[^:=]{0,20}[:=][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig' \
     -e 's/[A-Za-z0-9_+\/=-]{40,}/[REDACTED-LONG]/g'
+}
+wb_alive() { timeout 120 "$PREFIX/bin/proot-distro" login "$DISTRO" -- true >/dev/null 2>&1; }
+wb_put() { # wb_put <local file> <path under the workbench home>: copy through stdin,
+  # because the container's directory on disk differs between proot-distro versions
+  timeout 120 "$PREFIX/bin/proot-distro" login "$DISTRO" -- bash -c \
+    'mkdir -p "$(dirname ~/"$1")" && cat > ~/"$1"' _ "$2" < "$1"
 }
 WB_PATH='export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$HOME/bin:/usr/local/bin:$PATH" HERDR_PROCESS_DETECTION=child-groups; unset TERMUX_VERSION PREFIX; '
 wb() { # run a command inside the workbench, bounded. Plain (non-login) bash:
@@ -76,11 +82,12 @@ scan() {
     done
     echo "boot script: $([ -x "$HOME/.termux/boot/10-herdr-server" ] && echo yes || echo no)"
     echo "launcher seccomp fix: $(grep -q PROOT_NO_SECCOMP "$PREFIX/bin/dev" 2>/dev/null && echo yes || echo no)"
-    echo "workbench rootfs: $([ -d "$ROOTFS/usr" ] && echo present || echo missing)"
+    echo "workbench: $(wb_alive && echo starts || echo DOES-NOT-START)  (legacy rootfs dir: $([ -d "$ROOTFS/usr" ] && echo yes || echo no))"
+    echo "proot-distro: $("$PREFIX/bin/proot-distro" --version 2>&1 | head -1)"
   } >> "$REPORT" 2>&1
   endsection
 
-  [ -d "$ROOTFS/usr" ] || { bad "workbench missing"; return; }
+  wb_alive || { bad "workbench does not start"; return; }
   section "workbench"
   wb 'set +e
     echo "os: $(. /etc/os-release; echo $PRETTY_NAME)"
@@ -134,7 +141,7 @@ repair() {
   section "repairs"
   termux_health
 
-  if [ ! -d "$ROOTFS/usr" ]; then
+  if ! wb_alive; then
     log "workbench missing: running full setup"
     curl -fsSL "$RAW/setup.sh" | bash >> "$REPORT" 2>&1
   fi
@@ -150,14 +157,13 @@ repair() {
   wb 'dpkg --configure -a; apt-get -f install -y' | tail -5 | redact >> "$REPORT"
 
   # refresh the workbench helpers from main without the full first-time setup
-  mkdir -p "$ROOTFS/root/.workbench"
-  curl -fsSL "$RAW/tools.conf" -o "$ROOTFS/root/.workbench/tools.conf.default" 2>/dev/null
+  curl -fsSL "$RAW/tools.conf" -o "$STATE/tools.conf" && wb_put "$STATE/tools.conf" .workbench/tools.conf.default
 
-  [ -f "$ROOTFS/root/.workbench/tools.conf" ] || cp "$ROOTFS/root/.workbench/tools.conf.default" "$ROOTFS/root/.workbench/tools.conf"
+  wb '[ -f ~/.workbench/tools.conf ] || cp ~/.workbench/tools.conf.default ~/.workbench/tools.conf' >/dev/null
   if ! wb 'command -v dev-update >/dev/null' >/dev/null; then
     # an older hand-made workbench: install our helpers and missing tools once
     log "--- workbench helpers missing: running workbench-setup.sh"
-    curl -fsSL "$RAW/workbench-setup.sh" -o "$ROOTFS/root/.workbench/setup.sh"
+    curl -fsSL "$RAW/workbench-setup.sh" -o "$STATE/workbench-setup.sh" && wb_put "$STATE/workbench-setup.sh" .workbench/setup.sh
     WB_TIMEOUT=3600 wb 'bash ~/.workbench/setup.sh </dev/tty' | tee "$STATE/workbench-setup.log"
     tail -60 "$STATE/workbench-setup.log" | redact >> "$REPORT"
   fi
