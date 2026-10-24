@@ -49,7 +49,7 @@ wb_put() { # wb_put <local file> <path under the workbench home>: copy through s
   timeout 120 "$PREFIX/bin/proot-distro" login "$DISTRO" -- bash -c \
     'mkdir -p "$(dirname ~/"$1")" && cat > ~/"$1"' _ "$2" < "$1"
 }
-WB_PATH='export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$HOME/bin:/usr/local/bin:$PATH" HERDR_PROCESS_DETECTION=child-groups; unset TERMUX_VERSION PREFIX; '
+WB_PATH='export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$HOME/bin:/usr/local/bin:$PATH" HERDR_PROCESS_DETECTION=child-groups HERDR_SOCKET_PATH=/tmp/herdr.sock; unset TERMUX_VERSION PREFIX; '
 wb() { # run a command inside the workbench, bounded. Plain (non-login) bash:
   # the login profile starts a background update that would keep proot open.
   timeout --foreground "${WB_TIMEOUT:-900}" "$PREFIX/bin/proot-distro" login "$DISTRO" --shared-tmp -- \
@@ -101,6 +101,21 @@ scan() {
     echo "gh auth: $(gh auth status >/dev/null 2>&1 && echo signed-in || echo NOT signed-in)"
     echo "git user: $(git config --global user.name) <$(git config --global user.email | sed "s/^\(..\).*@/\1***@/")>"
     echo "herdr server running: $(pgrep -x herdr >/dev/null && echo yes || echo no)"
+    echo "HERDR_SOCKET_PATH in login profile: $(grep -hs HERDR_SOCKET_PATH /etc/profile.d/*.sh | head -1)"
+    # does a herdr server answer on a socket at this path? (isolated config dir)
+    probe() {
+      rm -rf "$1"; mkdir -p "$1"
+      env -u HERDR_SOCKET_PATH XDG_CONFIG_HOME="$1" timeout 25 herdr server >"$1.log" 2>&1 &
+      local pid=$! r=no i
+      for i in $(seq 1 20); do
+        sleep 1
+        python3 -c "import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(2); s.connect(sys.argv[1])" "$1/herdr/herdr-client.sock" 2>/dev/null && { r="yes (${i}s)"; break; }
+      done
+      kill $pid 2>/dev/null; wait $pid 2>/dev/null
+      echo "herdr socket probe $1: $r"; [ "$r" = no ] && tail -3 "$1.log"
+      rm -rf "$1" "$1.log"
+    }
+    if command -v herdr >/dev/null; then probe /tmp/rprobe; probe /root/.rprobe-long; fi
     echo "binaries named herdr/hermes:"; find / -xdev \( -path /proc -o -path /sys -o -path /data -o -path /storage -o -path /sdcard \) -prune -o -type f \( -name herdr -o -name hermes \) -print 2>/dev/null | head -10
     echo "PATH lines in shell files:"; grep -hs "PATH" ~/.bashrc ~/.profile ~/.bash_profile /etc/profile.d/*.sh | head -10
     echo "dpkg audit: $(dpkg --audit 2>&1 | head -3)"
@@ -137,7 +152,9 @@ termux_health() {
 }
 
 # --version alone passed on the device while Hermes printed "dependency repair failed"
-hermes_ok() { wb_ok 'out="$(timeout 120 hermes --version 2>&1)" && ! printf "%s" "$out" | grep -qiE "repair failed|update failed|refusing to update|Traceback"'; }
+# `hermes --version` printed a version while every real command crashed with
+# "No module named 'ruamel'", so judge Hermes by `hermes status`.
+hermes_ok() { wb_ok 'command -v hermes && out="$(timeout 180 hermes status </dev/null 2>&1)"; ! printf "%s" "$out" | grep -qiE "Traceback|ModuleNotFoundError|ImportError|retry limit reached|refusing to update|repair failed"'; }
 
 # --- 3. repair ------------------------------------------------------------
 repair() {
@@ -156,6 +173,10 @@ repair() {
       log "added proot crash workaround to $f"
     fi
   done
+
+  printf '%s\n' '# radar: herdr sockets must stay under the 107-byte unix socket limit' \
+    'export HERDR_SOCKET_PATH=/tmp/herdr.sock' > "$STATE/herdr-sockets.sh"
+  wb_put "$STATE/herdr-sockets.sh" ../etc/profile.d/herdr-sockets.sh && log "herdr socket profile installed"
 
   log "--- fixing apt/dpkg inside the workbench"
   wb 'dpkg --configure -a; apt-get -f install -y' | tail -5 | redact >> "$REPORT"
@@ -250,7 +271,7 @@ upload || echo "report saved: ~/storage/downloads/radar-report.md"
 
 step "summary"
 # summarize the final state only (after repair when there was one)
-{ grep -q '^# after repair' "$REPORT" && sed -n '/^# after repair/,$p' "$REPORT" || cat "$REPORT"; } | grep -oE "^[a-z]+ +MISSING|NOT signed-in|hermes: (STILL BROKEN|WORKING)|assertion failed|Error code: 402[^,]*" | sort -u | sed 's/^/  /'
+{ grep -q '^# after repair' "$REPORT" && sed -n '/^# after repair/,$p' "$REPORT" || cat "$REPORT"; } | grep -oE "herdr socket probe /tmp[^ ]*: [a-z]+|^[a-z]+ +MISSING|NOT signed-in|hermes: (STILL BROKEN|WORKING)|assertion failed|Error code: 402[^,]*" | sort -u | sed 's/^/  /'
 hermes_ok && ok "Hermes works" || bad "Hermes still broken (the report tells Claude why)"
 if [ "$MODE" != "scan" ] && [ -t 0 ]; then
   echo; echo "opening herdr..."; sleep 2

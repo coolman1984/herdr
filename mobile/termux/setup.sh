@@ -68,9 +68,11 @@ cat > "$PREFIX/bin/dev" <<LAUNCH
 # dev <cmd...> -> run one command inside the workbench
 termux-wake-lock 2>/dev/null || true
 export PROOT_NO_SECCOMP=1  # radar: proot new_child crash workaround
-binds=()
-[ -d /storage/emulated/0 ] && binds+=(--bind /storage/emulated/0:/sdcard)
-run() { exec proot-distro login $DISTRO --shared-tmp "\${binds[@]}" -- bash -lc "\$1"; }
+# --shared-tmp: herdr's sockets live in /tmp (see workbench profile); the default
+# path under the container is longer than a unix socket path may be.
+# --no-kill-on-exit: the herdr server keeps running after you detach.
+# proot-distro already binds /sdcard.
+run() { exec proot-distro login $DISTRO --shared-tmp --no-kill-on-exit -- bash -lc "\$1"; }
 case "\${1:-}" in
   "")     run 'cd ~/code && exec herdr' ;;
   shell)  run 'cd ~/code && exec bash -l' ;;
@@ -89,7 +91,7 @@ cat > "$HOME/.termux/boot/10-herdr-server" <<BOOT
 #!/data/data/com.termux/files/usr/bin/bash
 export PROOT_NO_SECCOMP=1  # radar: proot new_child crash workaround
 termux-wake-lock
-proot-distro login $DISTRO --shared-tmp -- bash -lc 'cd ~/code && exec herdr server >> ~/.workbench/server.log 2>&1' &
+proot-distro login $DISTRO --shared-tmp --no-kill-on-exit -- bash -lc 'mkdir -p ~/code ~/.workbench; cd ~/code && exec herdr server >> ~/.workbench/server.log 2>&1' &
 BOOT
 chmod +x "$HOME/.termux/boot/10-herdr-server"
 

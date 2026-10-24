@@ -293,3 +293,11 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 66. **A PowerShell function must never share its name with the program it wraps:** `function Git { & git ... }`
     resolves `git` to the function itself (names ignore case, functions beat programs) and loops forever
     with no error - the first autosync dry run hung for 2 minutes. Name wrappers `Invoke-Git`.
+
+70. **Herdr inside Termux proot-distro needs a short socket path.** A unix socket path may hold at most
+    107 bytes. proot translates `/root/.config/herdr/herdr-client.sock` to
+    `/data/data/com.termux/files/usr/var/lib/proot-distro/containers/ubuntu/rootfs/root/...` (114 bytes), so
+    the client never connects ("server did not become ready within 15s"). Set `HERDR_SOCKET_PATH=/tmp/herdr.sock`
+    and log in with `--shared-tmp` (host path 46 bytes). Natively herdr 0.9.5 refuses a too-long path outright:
+    "local socket name length exceeds capacity of sun_path of sockaddr_un". Also: `proot-distro login`
+    (5.10) always exits 0 and kills every process at logout unless `--no-kill-on-exit` is given.

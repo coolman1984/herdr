@@ -1112,3 +1112,10 @@ under proot's fake root did not change the uid Hermes sees, so a broken Hermes n
 `~/.hermes` kept) with `hermes pm repair` only as a second step. The `dev` launcher was never written (only the
 workbench half of setup ran); radar now runs `setup.sh --launchers`. The first `herdr` attach timed out after 15 s
 while radar's own background `herdr server` was starting; radar no longer starts a server.
+**Third device report (2026-10-24 17:48 UTC):** dev launcher and boot script installed; `herdr` still "did not become
+ready within 15s". Cause: the client socket's host path is 114 bytes, over the 107-byte unix socket limit (LESSONS #70);
+reproduced natively with herdr 0.9.5. Fix: `HERDR_SOCKET_PATH=/tmp/herdr.sock` in `/etc/profile.d` (radar installs it on
+old workbenches), `--shared-tmp --no-kill-on-exit` in `dev` and the boot script, no duplicate `/sdcard` bind. radar now
+probes a short and a long socket path in an isolated config dir and reports which one answers. Hermes still crashed
+(`No module named 'ruamel'`) while `hermes --version` printed a version, so radar judged it healthy and skipped the clean
+reinstall; radar now judges Hermes by `hermes status`.
