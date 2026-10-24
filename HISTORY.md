@@ -706,3 +706,15 @@ was faster. Haiku's version merged after two lead corrections: fixture fix, foot
 without the footer rule); round2 18/18; batch A 48/48. LIVE: `ask haiku "..."` on a real Claude
 pane -> first version BLOCKED (false positive), final version DONE.
 **Lesson:** #59.
+
+## Phase 34 - Herdr app source merged into `main` (2026-10-24)
+
+**Symptom:** the GitHub repo held two unrelated histories: `main` / `windows-toolkit` (this
+toolkit) and `master` / `herdr-app` / `feature/custom-command-menus` (the upstream Herdr source,
+1868 commits, plus the owner's custom-menus commit `b14199c`). The owner wanted everything in `main`.
+**Fix:** subtree merge of `herdr-app` into `main` under `herdr-app/` (history kept; no toolkit file
+touched). Not under `herdr/`: that path is the owner's local upstream clone (ignored), and a tracked
+`herdr/` would collide with it on `git pull`.
+**Proof:** `git merge -s ours --allow-unrelated-histories` + `git read-tree --prefix=herdr-app/`;
+3107 files added, `git diff HEAD~1 --stat -- . ':!herdr-app'` shows only this entry and FILES.md.
+`check.ps1` not run (no pwsh in the cloud session).

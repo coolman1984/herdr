@@ -42,6 +42,7 @@
 | `herdr-skill.md` | Herdr's own agent skill (`herdr --skill`), for reference |
 | `config.toml.backup` | Herdr config before our key bindings |
 | `herdr/` | Upstream source clone (own git; branch `feature/custom-command-menus`) - not tracked here |
+| `herdr-app/` | Copy of the Herdr app source with the owner's custom-menus commit, merged from branch `herdr-app` with full history (Phase 34) |
 
 ## Outside this folder (changed by this setup)
 
