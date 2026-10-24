@@ -1119,3 +1119,12 @@ old workbenches), `--shared-tmp --no-kill-on-exit` in `dev` and the boot script,
 probes a short and a long socket path in an isolated config dir and reports which one answers. Hermes still crashed
 (`No module named 'ruamel'`) while `hermes --version` printed a version, so radar judged it healthy and skipped the clean
 reinstall; radar now judges Hermes by `hermes status`.
+**Fourth device report (2026-10-24 18:16 UTC):** herdr opens on the phone (owner screenshot: workspace "code",
+welcome dialog). Correction: radar's socket probe answered on both a short and a 119-byte host path, so the
+socket-length cause written in the previous entry was wrong; LESSONS #70 now says so. The fresh `/tmp/herdr.sock`
+path still fixed it, most likely by avoiding a stale server on the default socket. Hermes: the clean reinstall
+(v0.22.5) failed the same way (`cannot import name 'YAML' from 'ruamel.yaml' (unknown location)`), and radar again
+printed "hermes: WORKING" because `command -v hermes && ...; ! grep` was true when hermes was missing. Fixed the check
+(tested against stubs: missing, crashing, healthy). The reinstall now also moves the old Hermes uv cache aside
+(it survived the first reinstall) and sets `UV_LINK_MODE=copy`; the scan reports foreign-owned files under
+`~/.hermes` and the installed `ruamel/yaml/__init__.py`. Not yet confirmed on the device.

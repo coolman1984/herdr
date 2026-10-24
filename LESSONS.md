@@ -294,10 +294,11 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     resolves `git` to the function itself (names ignore case, functions beat programs) and loops forever
     with no error - the first autosync dry run hung for 2 minutes. Name wrappers `Invoke-Git`.
 
-70. **Herdr inside Termux proot-distro needs a short socket path.** A unix socket path may hold at most
-    107 bytes. proot translates `/root/.config/herdr/herdr-client.sock` to
-    `/data/data/com.termux/files/usr/var/lib/proot-distro/containers/ubuntu/rootfs/root/...` (114 bytes), so
-    the client never connects ("server did not become ready within 15s"). Set `HERDR_SOCKET_PATH=/tmp/herdr.sock`
-    and log in with `--shared-tmp` (host path 46 bytes). Natively herdr 0.9.5 refuses a too-long path outright:
-    "local socket name length exceeds capacity of sun_path of sockaddr_un". Also: `proot-distro login`
-    (5.10) always exits 0 and kills every process at logout unless `--no-kill-on-exit` is given.
+70. **Herdr inside Termux proot-distro: give it a fresh, short socket and `--shared-tmp`.** On the phone `herdr`
+    kept failing with "server did not become ready within 15s" until `HERDR_SOCKET_PATH=/tmp/herdr.sock` was set;
+    then it opened. The first guess (host socket path over the 107-byte limit) was wrong: radar's probe showed a
+    119-byte host path answering under proot 5.1.107, so proot handles long socket paths. The likely cause is a
+    stale or wedged server on the default socket, left by radar's own background `herdr server`; not proven.
+    Natively, herdr 0.9.5 refuses a socket path over the limit ("local socket name length exceeds capacity of
+    sun_path"). Also: `proot-distro login` (5.10) always exits 0, and kills every process at logout unless
+    `--no-kill-on-exit` is given.
