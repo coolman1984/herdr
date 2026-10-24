@@ -686,3 +686,23 @@ Sonnet and Haiku 5.5 (effort defaults, failure modes, counter-measures) from Ant
 **Proof:** the lead checked both claims on Anthropic's pages (Haiku prompting guide; Claude Code
 memory docs, "AGENTS.md" table).
 **Lesson:** #57, #58.
+
+## Phase 33 - `ask` startup-dialog guard; first real-task model trial (2026-10-24)
+
+**Symptom:** a task prompt sent to an agent at a startup dialog was lost and its Enter answered
+the dialog for the owner (LESSONS #53).
+**Fix:** `Get-AgentDialog` + a guard in `ask`: before any prompt (and before `-Fresh`) it reads
+the visible screen; a trust / browser / model dialog (phrase in the last 20 lines AND a selection
+footer in the last 6) or a sign-in message (last 6 lines) -> `BLOCKED ... the owner answers it in
+the pane`, run saved, exit 3, nothing sent. A failed read never blocks.
+**How it was built (owner's idea: tests must improve the app):** the first real-task trial -
+Claude Sonnet 5.5 high and Claude Haiku 5.5 xhigh (account 1984, own worktrees) implemented the
+same spec against the lead's hidden tests. Both 14/14 and honestly PARTIAL with the same proven
+root cause (a round-2 fixture consumed by the new read - the lead's spec conflict); Haiku
+($0.45, 9 min) also found that Codex's "Trust this folder?" was not matched; Sonnet ($0.78, 5 min)
+was faster. Haiku's version merged after two lead corrections: fixture fix, footer rule.
+**Proof:** hidden tests 17/17 (reference 17/17, unchanged code 2/14 earlier, 2 mutants caught);
+`tests/test-dialog-guard.ps1` 26/26 (23 fail on the old code; Haiku's own mutation: 4 fail
+without the footer rule); round2 18/18; batch A 48/48. LIVE: `ask haiku "..."` on a real Claude
+pane -> first version BLOCKED (false positive), final version DONE.
+**Lesson:** #59.

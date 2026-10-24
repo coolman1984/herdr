@@ -32,6 +32,7 @@
 | `check.ps1` | Verifies the whole setup |
 | `tests/test-batch-a.ps1` | Offline regression tests for delegation, Claude limits and setup checks; `-SourceRoot` tests baseline script copies |
 | `tests/test-round2-agents.ps1` | Offline fresh Codex conversation and model trial tests; `-SourceRoot` / `-OnlyA` test baseline copies |
+| `tests/test-dialog-guard.ps1`, `tests/fixture-claude-answer-mentions-trust.txt` | Offline tests for the `ask` startup-dialog guard; the fixture is a real Claude screen that must NOT count as a dialog |
 | `tests/test-headless.ps1` | Offline tests for the headless Cline runner (arguments, result parsing, refusals, main flow) |
 | `tests/test-hud-cline.ps1` | Offline tests for the HUD's Cline session, model and token values |
 | `docs/TEAM-PLAYBOOK.md` | How the lead solves hard problems with the agent team: strategies, control cards, verification ladder, loops |

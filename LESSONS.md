@@ -212,3 +212,9 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     Anthropic's defaults: Haiku and Sonnet start at `medium`, Opus at `medium`; `max` showed
     timeouts / scope violations for Sonnet. Codex SOL 6.1 medium found this headless with
     `codex --search exec` in 19 min, every claim with an official URL (lead spot-checked two).
+59. **A screen-text guard must look for the dialog's FOOTER, not its words:** the first dialog guard
+    blocked a normal Claude pane because the agent's own answer on screen said "Trust this folder?".
+    Real choice dialogs end with a selection footer (Antigravity `↑/↓ Navigate · enter Confirm`,
+    Claude `Enter to confirm · Esc to ...`); a reply that only mentions the words has none. Mocked
+    tests passed both designs; only the live `ask` on a real pane showed the false positive (third
+    time on 2026-10-23/24 that a live check beat green mocks - always do it).
