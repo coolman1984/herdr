@@ -39,6 +39,7 @@
 | `tests/test-hud-cline.ps1` | Offline tests for the HUD's Cline session, model and token values |
 | `docs/TEAM-PLAYBOOK.md` | How the lead solves hard problems with the agent team: strategies, control cards, verification ladder, loops |
 | `tests/test-batch-b.ps1` | Offline regression tests for installer, launchers, folder team model, spaces and Stop; `-SourceRoot` tests baseline copies, including the launcher binary |
+| `linux/` | Linux port: `install.sh`, `herdr-agents`, `herdr-layout`, `keys.toml`, `README.md` (Phase 46) |
 | `install.cmd`, `install.ps1` | Official installers as reviewed (Phase 2) |
 | `install-custom-build.ps1` | Installs a self-built Herdr (parked, Phase 8) |
 | `herdr-skill.md` | Herdr's own agent skill (`herdr --skill`), for reference |

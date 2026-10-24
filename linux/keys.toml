@@ -1,0 +1,7 @@
+# Linux key bindings (paths use herdr-layout on PATH after install.sh).
+# Merged into ~/.config/herdr/config.toml only when that file does not exist yet.
+
+[[keys.command]]
+key = "prefix+shift+b"
+type = "shell"
+command = 'herdr-layout'

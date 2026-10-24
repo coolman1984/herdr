@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# Open a Herdr workspace with six agent columns: claude, codex, grok, gemini, cline, opencode.
+# Same split logic as herdr-layout.ps1 / herdr-columns.ps1 (ratio = share the original pane keeps).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERDR_HOME="${HERDR_HOME:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+HERDR_BIN="${HERDR_BIN:-herdr}"
+AGENTS_TOOL="${HERDR_AGENTS:-$SCRIPT_DIR/herdr-agents}"
+DEFAULT_PROFILES=(claude codex grok gemini cline opencode)
+
+usage() {
+  cat <<EOF
+Usage: herdr-layout [--cwd PATH] [--label NAME] [--dry-run]
+
+  Opens a new Herdr space with ${#DEFAULT_PROFILES[@]} side-by-side panes and starts each agent
+  (profiles from agents.json). Requires Herdr server running (launch Herdr first if needed).
+
+  HERDR_HOME  repo root (default: parent of linux/)
+EOF
+}
+
+CWD="$HERDR_HOME"
+LABEL="team"
+DRY_RUN=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cwd) CWD="$2"; shift 2 ;;
+    --label) LABEL="$2"; shift 2 ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+CWD="$(cd "$CWD" && pwd -P)"
+[[ -d "$CWD" ]] || { echo "ERROR: folder not found: $CWD" >&2; exit 1; }
+
+invoke_herdr() {
+  local out code=0
+  out="$("$HERDR_BIN" "$@" 2>&1)" || code=$?
+  HERDR_LAST_OUT="$out"
+  HERDR_LAST_CODE=$code
+}
+
+json_pane_id() {
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$HERDR_LAST_OUT" | jq -r '.result.pane.pane_id // .result.root_pane.pane_id // empty'
+  else
+    printf '%s' "$HERDR_LAST_OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const j=JSON.parse(s);const p=j.result?.pane?.pane_id||j.result?.root_pane?.pane_id; if(p)console.log(p)}catch{}})'
+  fi
+}
+
+ratio_for() {
+  local remaining="$1"
+  awk -v n="$remaining" 'BEGIN { printf "%.4f", 1.0/n }'
+}
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "DRY-RUN: would create workspace label=$LABEL cwd=$CWD"
+  echo "DRY-RUN: columns: ${DEFAULT_PROFILES[*]}"
+  for p in "${DEFAULT_PROFILES[@]}"; do
+    echo "DRY-RUN:   herdr-agents start $p --pane <id> --cwd $CWD"
+  done
+  exit 0
+fi
+
+command -v "$HERDR_BIN" >/dev/null 2>&1 || { echo "ERROR: herdr not found" >&2; exit 1; }
+[[ -x "$AGENTS_TOOL" || -f "$AGENTS_TOOL" ]] || { echo "ERROR: herdr-agents not found at $AGENTS_TOOL" >&2; exit 1; }
+
+invoke_herdr workspace create --cwd "$CWD" --label "$LABEL" --focus
+[[ "$HERDR_LAST_CODE" -eq 0 ]] || { echo "ERROR: workspace create failed: $HERDR_LAST_OUT" >&2; exit 1; }
+
+profile_cmd() {
+  local p="$1"
+  if command -v jq >/dev/null 2>&1; then
+    jq -r --arg p "$p" '.agents[$p].command // empty' "$HERDR_HOME/agents.json"
+  else
+    node -e 'const j=require(process.argv[1]);console.log(j.agents[process.argv[2]]?.command||"")' "$HERDR_HOME/agents.json" "$p"
+  fi
+}
+
+profiles=()
+for p in "${DEFAULT_PROFILES[@]}"; do
+  cmd="$(profile_cmd "$p")"
+  [[ -n "$cmd" ]] || { echo "SKIP: $p (not in agents.json)"; continue; }
+  if command -v "$cmd" >/dev/null 2>&1; then
+    profiles+=("$p")
+  else
+    echo "SKIP: $p ($cmd not installed)"
+  fi
+done
+[[ ${#profiles[@]} -gt 0 ]] || { echo "ERROR: no agent CLIs installed for the default layout" >&2; exit 1; }
+
+panes=()
+pane_id="$(json_pane_id)"
+[[ -n "$pane_id" ]] || { echo "ERROR: no root pane from workspace create" >&2; exit 1; }
+panes+=("$pane_id")
+
+target="$pane_id"
+for ((i = 1; i < ${#profiles[@]}; i++)); do
+  remaining=$((${#profiles[@]} - i + 1))
+  ratio="$(ratio_for "$remaining")"
+  invoke_herdr pane split "$target" --direction right --ratio "$ratio" --cwd "$CWD" --no-focus
+  [[ "$HERDR_LAST_CODE" -eq 0 ]] || { echo "ERROR: split column $((i + 1)): $HERDR_LAST_OUT" >&2; exit 1; }
+  target="$(json_pane_id)"
+  panes+=("$target")
+done
+
+export HERDR_ENV=1
+export HERDR_PANE_ID="${panes[0]}"
+problems=()
+for ((i = 0; i < ${#profiles[@]}; i++)); do
+  code=0
+  out="$("$AGENTS_TOOL" start "${profiles[$i]}" --pane "${panes[$i]}" --cwd "$CWD" 2>&1)" || code=$?
+  printf '%s\n' "$out"
+  if [[ "$code" -ne 0 ]]; then
+    problems+=("${profiles[$i]}: exit $code")
+  else
+    name="$(printf '%s' "$out" | sed -n 's/^STARTED name=\([^ ]*\).*/\1/p')"
+    if [[ -n "$name" ]]; then
+      invoke_herdr pane rename "${panes[$i]}" "$name" || true
+    fi
+  fi
+done
+
+if [[ ${#problems[@]} -gt 0 ]]; then
+  echo "LAYOUT opened with problems:" >&2
+  printf '  %s\n' "${problems[@]}" >&2
+  exit 2
+fi
+echo "LAYOUT ready: ${profiles[*]} in space '$LABEL' ($CWD)"

@@ -1,0 +1,512 @@
+#!/usr/bin/env bash
+# herdr-agents: launch agent CLIs in Herdr panes (Linux port of herdr-agents.ps1).
+#
+#   herdr-agents tools
+#   herdr-agents start <profile> [--model M] [--effort E] [--account A] [--name N]
+#       [--direction right|down] [--cwd PATH] [--pane ID]
+#   herdr-agents status | read <name> [--visible] [--lines N] | stop <name>
+#
+# Approval: agents.json "args" set each agent's approval mode (owner choice since 2026-10-22;
+# CLAUDE.md rule 3). This script passes those args through unchanged — never weaken them.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERDR_HOME="${HERDR_HOME:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+REGISTRY="$HERDR_HOME/agents.json"
+HERDR_BIN="${HERDR_BIN:-herdr}"
+STATE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/herdr"
+STATE_PATH="$STATE_DIR/herdr-agents-panes.json"
+ACCOUNTS_ROOT="${HERDR_ACCOUNTS_ROOT:-$HOME/.herdr-accounts}"
+
+DEFAULT_HOMES_claude="$HOME/.claude"
+DEFAULT_HOMES_codex="$HOME/.codex"
+DEFAULT_HOMES_grok="$HOME/.grok"
+
+fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+have_jq() { command -v jq >/dev/null 2>&1; }
+
+# --- JSON helpers (jq preferred, else node) ---
+json_agents() {
+  if have_jq; then
+    jq -r '.agents // empty | keys[]' "$REGISTRY"
+  else
+    node -e '
+      const j = require(process.argv[1]);
+      Object.keys(j.agents || {}).forEach(k => console.log(k));
+    ' "$REGISTRY"
+  fi
+}
+
+json_profile() {
+  local profile="$1" key="$2"
+  if have_jq; then
+    jq -r --arg p "$profile" --arg k "$key" '.agents[$p][$k] // empty' "$REGISTRY"
+  else
+    node -e '
+      const j = require(process.argv[1]), p = process.argv[2], k = process.argv[3];
+      const v = j.agents?.[p]?.[k];
+      if (v === undefined || v === null) process.exit(0);
+      if (typeof v === "object") console.log(JSON.stringify(v));
+      else console.log(v);
+    ' "$REGISTRY" "$profile" "$key"
+  fi
+}
+
+json_alias_resolve() {
+  local alias="$1"
+  if have_jq; then
+    jq -r --arg a "$alias" '
+      if .aliases[$a] then
+        [.aliases[$a].profile, .aliases[$a].account // "", .aliases[$a].name // ""] | @tsv
+      else empty end
+    ' "$REGISTRY"
+  else
+    node -e '
+      const j = require(process.argv[1]), a = process.argv[2], al = j.aliases?.[a];
+      if (!al) process.exit(0);
+      console.log([al.profile, al.account || "", al.name || ""].join("\t"));
+    ' "$REGISTRY" "$alias"
+  fi
+}
+
+json_array_args() {
+  local profile="$1" field="$2"
+  if have_jq; then
+    jq -r --arg p "$profile" --arg f "$field" '.agents[$p][$f][]? // empty' "$REGISTRY"
+  else
+    node -e '
+      const j = require(process.argv[1]), p = process.argv[2], f = process.argv[3];
+      const a = j.agents?.[p]?.[f];
+      if (Array.isArray(a)) a.forEach(x => console.log(x));
+    ' "$REGISTRY" "$profile" "$field"
+  fi
+}
+
+invoke_herdr() {
+  local out code=0
+  out="$("$HERDR_BIN" "$@" 2>&1)" || code=$?
+  HERDR_LAST_OUT="$out"
+  HERDR_LAST_CODE=$code
+  if command -v jq >/dev/null 2>&1; then
+    HERDR_LAST_JSON="$(printf '%s' "$out" | jq -c . 2>/dev/null || true)"
+  else
+    HERDR_LAST_JSON="$(printf '%s' "$out" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{JSON.parse(s);process.stdout.write(s)}catch{}})' 2>/dev/null || true)"
+  fi
+}
+
+json_field() {
+  printf '%s' "${HERDR_LAST_JSON:-}" | jq -r "$1" 2>/dev/null || true
+}
+
+server_id() {
+  local sock="${HERDR_SOCKET_PATH:-}"
+  local default_sock="$STATE_DIR/herdr.sock"
+  if [[ -z "$sock" || "$sock" == "default" ]]; then
+    echo default
+  elif [[ "${sock,,}" == "${default_sock,,}" ]]; then
+    echo default
+  else
+    echo "$sock" | tr '[:upper:]' '[:lower:]'
+  fi
+}
+
+load_state() {
+  [[ -f "$STATE_PATH" ]] || { STATE_JSON='[]'; return; }
+  STATE_JSON="$(cat "$STATE_PATH")"
+}
+
+save_state() {
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$STATE_JSON" >"$STATE_PATH"
+}
+
+account_default_home() {
+  case "$1" in
+    claude) echo "$DEFAULT_HOMES_claude" ;;
+    codex) echo "$DEFAULT_HOMES_codex" ;;
+    grok) echo "$DEFAULT_HOMES_grok" ;;
+    *) echo "" ;;
+  esac
+}
+
+linux_path() {
+  local s="$1"
+  s="${s//\\//}"
+  printf '%s' "$s"
+}
+
+setup_account() {
+  local profile="$1" account_name="$2"
+  local spec tool dir from item
+  spec="$(json_profile "$profile" account)"
+  [[ -n "$spec" && "$spec" != "null" ]] || fail "This agent has no separate-account support (agents.json 'account')."
+  if have_jq; then
+    tool="$(jq -r --arg p "$profile" '.agents[$p].account.tool' "$REGISTRY")"
+  else
+    tool="$(node -e 'const j=require(process.argv[1]);console.log(j.agents[process.argv[2]].account.tool)' "$REGISTRY" "$profile")"
+  fi
+  [[ "$account_name" =~ ^[a-z0-9][a-z0-9_-]{0,23}$ ]] || fail "Account name must match [a-z0-9][a-z0-9_-]{0,23}: $account_name"
+  dir="$ACCOUNTS_ROOT/$tool/$account_name"
+  if [[ ! -d "$dir" ]]; then
+    mkdir -p "$dir"
+    from="$(account_default_home "$tool")"
+    if [[ -n "$from" ]]; then
+      if have_jq; then
+        while IFS= read -r item; do
+          [[ -n "$item" ]] || continue
+          [[ -e "$from/$item" ]] && cp -a "$from/$item" "$dir/"
+        done < <(jq -r --arg p "$profile" '.agents[$p].account.copy[]? // empty' "$REGISTRY")
+      else
+        node -e '
+          const j=require(process.argv[1]),p=process.argv[2],from=process.argv[3],dir=process.argv[4];
+          const cp=j.agents[p].account.copy||[];
+          const fs=require("fs"),path=require("path");
+          for (const item of cp) {
+            const src=path.join(from,item);
+            if (fs.existsSync(src)) fs.cpSync(src, path.join(dir,item), {recursive:true});
+          }
+        ' "$REGISTRY" "$profile" "$from" "$dir"
+      fi
+    fi
+  fi
+  ACCOUNT_DIR="$dir"
+  ACCOUNT_TOOL="$tool"
+  ACCOUNT_ENVS=()
+  ACCOUNT_EXTRA_ARGS=()
+  if have_jq; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      ACCOUNT_ENVS+=("$line")
+    done < <(jq -r --arg p "$profile" --arg d "$dir" '
+      .agents[$p].account.env // {} | to_entries[] |
+      "\(.key)=\(.value | gsub("\\{dir\\}"; $d) | gsub("\\\\"; "/"))"
+    ' "$REGISTRY")
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      ACCOUNT_EXTRA_ARGS+=("$(linux_path "${line//\{dir\}/$dir}")")
+    done < <(jq -r --arg p "$profile" --arg d "$dir" '.agents[$p].account.args[]? // empty' "$REGISTRY" | sed "s|{dir}|$dir|g")
+  else
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      case "$line" in
+        ENV:*) ACCOUNT_ENVS+=("${line#ENV:}") ;;
+        ARG:*) ACCOUNT_EXTRA_ARGS+=("${line#ARG:}") ;;
+      esac
+    done < <(node -e '
+      const j=require(process.argv[1]),p=process.argv[2],dir=process.argv[3];
+      const acc=j.agents[p].account;
+      for (const [k,v] of Object.entries(acc.env||{}))
+        console.log("ENV:"+k+"="+String(v).replaceAll("{dir}",dir).replaceAll("\\\\","/"));
+      for (const a of acc.args||[])
+        console.log("ARG:"+String(a).replaceAll("{dir}",dir).replaceAll("\\\\","/"));
+    ' "$REGISTRY" "$profile" "$dir")
+  fi
+}
+
+env_herdr_flags() {
+  local kv
+  for kv in "${ACCOUNT_ENVS[@]:-}"; do
+    printf '%s\n' "--env" "$kv"
+  done
+}
+
+cmd_tools() {
+  [[ -f "$REGISTRY" ]] || fail "Cannot read agents.json"
+  local profile kind cmd model provider
+  while IFS= read -r profile; do
+    kind="$(json_profile "$profile" kind)"
+    cmd="$(json_profile "$profile" command)"
+    model="$(json_profile "$profile" model)"
+    provider="$(json_profile "$profile" provider)"
+    local installed=no
+    command -v "$cmd" >/dev/null 2>&1 && installed=yes
+    [[ -n "$model" ]] || model="(CLI default)"
+    local prov=""
+    [[ -n "$provider" && "$provider" != "null" ]] && prov=" provider=$provider"
+    printf '%-9s kind=%-8s installed=%-5s model=%s%s\n' "$profile" "$kind" "$installed" "$model" "$prov"
+  done < <(json_agents)
+}
+
+cmd_start() {
+  local target="${1:-}"
+  shift || true
+  local model="" effort="" account="" name="" direction="right" cwd="" pane="" provider="" explicit_name=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --model) model="$2"; shift 2 ;;
+      --effort) effort="$2"; shift 2 ;;
+      --account) account="$2"; shift 2 ;;
+      --name) name="$2"; explicit_name=1; shift 2 ;;
+      --direction) direction="$2"; shift 2 ;;
+      --cwd) cwd="$2"; shift 2 ;;
+      --pane) pane="$2"; shift 2 ;;
+      --provider) provider="$2"; shift 2 ;;
+      *) fail "Unknown option for start: $1" ;;
+    esac
+  done
+
+  if [[ -z "${HERDR_PANE_ID:-}" && -n "${HERDR_ACTIVE_PANE_ID:-}" ]]; then
+    export HERDR_PANE_ID="$HERDR_ACTIVE_PANE_ID"
+    export HERDR_ENV=1
+    [[ -z "$pane" && -z "$cwd" && -n "${HERDR_ACTIVE_PANE_CWD:-}" ]] && cwd="$HERDR_ACTIVE_PANE_CWD"
+  fi
+
+  local al_line profile_from_alias="" account_from_alias="" name_from_alias=""
+  if [[ -n "$target" ]]; then
+    al_line="$(json_alias_resolve "$target" || true)"
+    if [[ -n "$al_line" ]]; then
+      IFS=$'\t' read -r profile_from_alias account_from_alias name_from_alias <<<"$al_line"
+      [[ -z "$account" && -n "$account_from_alias" ]] && account="$account_from_alias"
+      [[ -z "$name" && -n "$name_from_alias" ]] && name="$name_from_alias"
+      target="$profile_from_alias"
+    fi
+  fi
+
+  if [[ "$target" == "next" ]]; then
+    fail "start next needs claude-limits (Windows); pick a profile and --account on Linux for now."
+  fi
+
+  if [[ -z "$pane" ]]; then
+    if [[ "${HERDR_ENV:-}" != "1" || -z "${HERDR_PANE_ID:-}" ]]; then
+      fail "start must run inside a Herdr pane (HERDR_ENV=1), or pass --pane."
+    fi
+  fi
+  [[ -n "$target" ]] || fail "start needs an agent profile. See: herdr-agents tools"
+
+  local kind cmd model_flag provider_flag
+  kind="$(json_profile "$target" kind)"
+  cmd="$(json_profile "$target" command)"
+  model_flag="$(json_profile "$target" modelFlag)"
+  provider_flag="$(json_profile "$target" providerFlag)"
+  [[ -n "$kind" && "$kind" != "null" ]] || fail "Unknown agent '$target'. See: herdr-agents tools"
+  command -v "$cmd" >/dev/null 2>&1 || fail "$cmd is not installed."
+
+  invoke_herdr agent list
+  [[ "$HERDR_LAST_CODE" -eq 0 ]] || fail "herdr agent list failed: $HERDR_LAST_OUT"
+  local live_names
+  live_names="$(json_field '.result.agents[]?.name // empty')"
+
+  if [[ "$explicit_name" -eq 0 ]]; then
+    [[ -n "$name" ]] || name="${account:+$target-$account}"
+    [[ -n "$name" ]] || name="$target"
+    local base="$name" n=2
+    while printf '%s\n' "$live_names" | grep -qx "$name"; do
+      name="${base}-${n}"
+      n=$((n + 1))
+    done
+  else
+    printf '%s\n' "$live_names" | grep -qx "$name" && fail "An agent named '$name' is already running."
+  fi
+  [[ "$name" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || fail "Name must match [a-z][a-z0-9_-]{0,31}: $name"
+
+  ACCOUNT_ENVS=()
+  ACCOUNT_EXTRA_ARGS=()
+  if [[ -n "$account" ]]; then
+    [[ "$account" =~ ^[a-z0-9][a-z0-9_-]{0,23}$ ]] || fail "Invalid account name: $account"
+    setup_account "$target" "$account"
+  fi
+
+  if [[ -n "$pane" ]]; then
+    invoke_herdr pane get "$pane"
+    [[ "$HERDR_LAST_CODE" -eq 0 ]] || fail "Could not read pane $pane: $HERDR_LAST_OUT"
+    local pane_cwd
+    pane_cwd="$(json_field '.result.pane.cwd')"
+    [[ -n "$pane_cwd" ]] || fail "Could not read pane $pane cwd."
+    if [[ -n "$cwd" && "$cwd" != "$pane_cwd" ]]; then
+      fail "-Cwd differs from pane $pane's folder $pane_cwd."
+    fi
+    cwd="$pane_cwd"
+  fi
+  if [[ -z "$cwd" ]]; then
+    cwd="$(pwd -P)"
+    [[ -d "$cwd" ]] || fail "Folder not found: $cwd"
+  fi
+
+  local agent_args=()
+  while IFS= read -r a; do [[ -n "$a" ]] && agent_args+=("$a"); done < <(json_array_args "$target" args)
+
+  local prov="${provider:-$(json_profile "$target" provider)}"
+  if [[ -n "$prov" && "$prov" != "null" && -n "$provider_flag" && "$provider_flag" != "null" ]]; then
+    agent_args+=("$provider_flag" "$prov")
+  fi
+  local mdl="${model:-$(json_profile "$target" model)}"
+  if [[ -n "$mdl" && "$mdl" != "null" && -n "$model_flag" && "$model_flag" != "null" ]]; then
+    agent_args+=("$model_flag" "$mdl")
+  fi
+  if [[ -z "$effort" ]]; then
+    effort="$(json_profile "$target" effort)"
+    [[ "$effort" == "null" ]] && effort=""
+  fi
+  if [[ -n "$effort" ]]; then
+    local ea
+    ea="$(json_array_args "$target" effortArgs | paste -sd' ' - || true)"
+    [[ -n "$ea" ]] || fail "$target has no effort setting in agents.json."
+    # shellcheck disable=SC2206
+    local parts=( $ea )
+    local formatted=()
+    local i=0
+    for part in "${parts[@]}"; do
+      if [[ "$part" == *"{0}"* ]]; then
+        formatted+=("${part//\{0\}/$effort}")
+      else
+        formatted+=("$part")
+      fi
+    done
+    agent_args+=("${formatted[@]}")
+  fi
+  if [[ ${#ACCOUNT_EXTRA_ARGS[@]} -gt 0 ]]; then
+    agent_args+=("${ACCOUNT_EXTRA_ARGS[@]}")
+  fi
+
+  local created_pane=0 pane_id
+  if [[ -n "$pane" ]]; then
+    pane_id="$pane"
+    if [[ ${#ACCOUNT_ENVS[@]} -gt 0 ]]; then
+      local set_cmd=""
+      local k v
+      for kv in "${ACCOUNT_ENVS[@]}"; do
+        k="${kv%%=*}"
+        v="${kv#*=}"
+        set_cmd+="export ${k}=$(printf '%q' "$v"); "
+      done
+      invoke_herdr pane run "$pane_id" "$set_cmd"
+      [[ "$HERDR_LAST_CODE" -eq 0 ]] || fail "Could not set account environment: $HERDR_LAST_OUT"
+      sleep 0.8
+    fi
+  else
+    local -a split_args=(pane split "$HERDR_PANE_ID" --direction "$direction" --cwd "$cwd" --no-focus)
+    while IFS= read -r flag; do split_args+=("$flag"); done < <(env_herdr_flags)
+    invoke_herdr "${split_args[@]}"
+    [[ "$HERDR_LAST_CODE" -eq 0 ]] || fail "Could not open a pane: $HERDR_LAST_OUT"
+    pane_id="$(json_field '.result.pane.pane_id')"
+    created_pane=1
+  fi
+
+  local -a start_args=(agent start "$name" --kind "$kind" --pane "$pane_id" --timeout 120000)
+  if [[ ${#agent_args[@]} -gt 0 ]]; then
+    start_args+=(-- "${agent_args[@]}")
+  fi
+  invoke_herdr "${start_args[@]}"
+
+  local srv
+  srv="$(server_id)"
+  load_state
+  if [[ "$created_pane" -eq 1 || "$HERDR_LAST_CODE" -eq 0 ]]; then
+    if have_jq; then
+      STATE_JSON="$(jq -c --arg n "$name" --arg srv "$srv" \
+        --arg pane "$pane_id" --arg agent "$target" --arg kind "$kind" --arg mdl "$mdl" --arg cwd "$cwd" \
+        --arg acc "${account:-}" --arg tool "${ACCOUNT_TOOL:-}" --arg adir "${ACCOUNT_DIR:-}" \
+        'map(select(.name != $n or (.server // "default") != $srv))
+         + [{name:$n,pane:$pane,agent:$agent,agentKind:$kind,server:$srv,model:$mdl,cwd:$cwd,started:(now|strftime("%Y-%m-%dT%H:%M:%S")),
+             account:(if $acc=="" then null else $acc end), accountTool:(if $tool=="" then null else $tool end),
+             accountDir:(if $adir=="" then null else $adir end)}]' <<<"${STATE_JSON:-[]}")"
+    else
+      STATE_JSON="$(node -e '
+        let st=[]; try{st=JSON.parse(process.argv[1])}catch{}
+        const [n,srv,pane,agent,kind,mdl,cwd,acc,tool,adir]=process.argv.slice(2);
+        st=st.filter(r=>r.name!==n||(r.server||"default")!==srv);
+        st.push({name:n,pane,agent,agentKind:kind,server:srv,model:mdl,cwd,started:new Date().toISOString().slice(0,19),
+          account:acc||null,accountTool:tool||null,accountDir:adir||null});
+        console.log(JSON.stringify(st));
+      ' "${STATE_JSON:-[]}" "$name" "$srv" "$pane_id" "$target" "$kind" "$mdl" "$cwd" "${account:-}" "${ACCOUNT_TOOL:-}" "${ACCOUNT_DIR:-}")"
+    fi
+    save_state
+  fi
+
+  if [[ "$HERDR_LAST_CODE" -ne 0 ]]; then
+    local start_err="$HERDR_LAST_OUT"
+    invoke_herdr pane read "$pane_id" --source visible
+    printf 'NOT READY: %s in pane %s (%s)\n--- screen ---\n%s\n' "$name" "$pane_id" "$start_err" "$HERDR_LAST_OUT"
+    printf '--- If it asks to sign in or pick a model, the USER must do that in the pane. ---\n'
+    exit 2
+  fi
+  local where=""
+  [[ -n "$account" ]] && where+=" account=$account"
+  printf 'STARTED name=%s agent=%s kind=%s pane=%s model=%s cwd=%s%s\n' \
+    "$name" "$target" "$kind" "$pane_id" "${mdl:-(CLI default)}" "$cwd" "$where"
+}
+
+cmd_status() {
+  load_state
+  local srv; srv="$(server_id)"
+  invoke_herdr agent list
+  [[ "$HERDR_LAST_CODE" -eq 0 ]] || fail "herdr agent list failed: $HERDR_LAST_OUT"
+  printf '%s' "$HERDR_LAST_OUT" | jq -r '.result.agents[]? |
+    "\(.name // "(unnamed)")\t\(.agent)\t\(.agent_status)\t\(.pane_id)\t\(.cwd)"' 2>/dev/null | while IFS=$'\t' read -r an ag st pi cw; do
+    local tag=""
+    if have_jq && [[ -f "$STATE_PATH" ]]; then
+      tag="$(jq -r --arg srv "$srv" --arg pi "$pi" '
+        .[] | select((.server // "default")==$srv and .pane==$pi) |
+        "started-by-tool" + (if .account then " account="+.account else "" end)
+      ' "$STATE_PATH" 2>/dev/null | head -1)"
+    fi
+    printf '%-14s %-9s %-8s pane=%-7s %s %s\n' "$an" "$ag" "$st" "$pi" "$cw" "$tag"
+  done
+}
+
+cmd_read() {
+  local target="${1:-}"; shift || true
+  local visible=0 lines=200
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --visible) visible=1; shift ;;
+      --lines) lines="$2"; shift 2 ;;
+      *) fail "Unknown option: $1" ;;
+    esac
+  done
+  [[ -n "$target" ]] || fail "read needs an agent name."
+  local src=recent-unwrapped
+  [[ "$visible" -eq 1 ]] && src=visible
+  invoke_herdr agent read "$target" --source "$src" --lines "$lines"
+  [[ "$HERDR_LAST_CODE" -eq 0 ]] || fail "$HERDR_LAST_OUT"
+  printf '%s\n' "$HERDR_LAST_OUT"
+}
+
+cmd_stop() {
+  local target="${1:-}"
+  [[ -n "$target" ]] || fail "stop needs an agent name."
+  load_state
+  [[ -n "${STATE_JSON:-}" ]] || STATE_JSON='[]'
+  local srv; srv="$(server_id)"
+  # simplified: close pane from state
+  local pane_id
+  if have_jq; then
+    pane_id="$(jq -r --arg n "$target" --arg srv "$srv" '
+      .[] | select(.name==$n and (.server//"default")==$srv) | .pane' "$STATE_PATH" 2>/dev/null | head -1)"
+  else
+    pane_id="$(node -e '
+      const st=JSON.parse(require("fs").readFileSync(process.argv[1]));
+      const r=st.find(x=>x.name===process.argv[2]&&(x.server||"default")===process.argv[3]);
+      if(r) console.log(r.pane);
+    ' "$STATE_PATH" "$target" "$srv" 2>/dev/null || true)"
+  fi
+  [[ -n "$pane_id" ]] || fail "'$target' was not started by this tool; close it yourself in Herdr."
+  invoke_herdr pane close "$pane_id" || true
+  if have_jq; then
+    STATE_JSON="$(jq -c --arg n "$target" --arg srv "$srv" 'map(select(.name != $n or (.server // "default") != $srv))' <<<"$STATE_JSON")"
+  fi
+  save_state
+  printf 'STOPPED %s (pane %s closed or gone)\n' "$target" "$pane_id"
+}
+
+main() {
+  [[ -f "$REGISTRY" ]] || fail "Cannot read agents.json at $REGISTRY"
+  command -v "$HERDR_BIN" >/dev/null 2>&1 || fail "Herdr not found ($HERDR_BIN)."
+  have_jq || command -v node >/dev/null 2>&1 || fail "Need jq or node to read agents.json."
+
+  local cmd="${1:-}"
+  [[ -n "$cmd" ]] || fail "Usage: herdr-agents tools|start|status|read|stop ..."
+  shift || true
+  case "$cmd" in
+    tools) cmd_tools ;;
+    start) cmd_start "$@" ;;
+    status) cmd_status ;;
+    read) cmd_read "$@" ;;
+    stop) cmd_stop "$@" ;;
+    *) fail "Unknown command: $cmd" ;;
+  esac
+}
+
+main "$@"

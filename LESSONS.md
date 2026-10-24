@@ -293,3 +293,9 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 66. **A PowerShell function must never share its name with the program it wraps:** `function Git { & git ... }`
     resolves `git` to the function itself (names ignore case, functions beat programs) and loops forever
     with no error - the first autosync dry run hung for 2 minutes. Name wrappers `Invoke-Git`.
+70. **Linux port of this setup lives in `linux/`**, not the Windows `install.ps1` path.
+    `HERDR_HOME` is the repo directory; state and config use XDG (`~/.config/herdr/`,
+    `~/.herdr-accounts/<tool>/<name>`). Bash `local a="$1" b="$2"` evaluates every RHS in
+    one `local` line before any name exists - split assignments. Herdr's Gemini CLI integration
+    target is `antigravity-cli` (profile `gemini` runs `agy`). Cline has no `herdr integration`
+    target yet.

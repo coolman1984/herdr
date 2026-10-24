@@ -1104,3 +1104,15 @@ outside proot), then `ImportError: cannot import name 'YAML' from 'ruamel.yaml'`
 `chown -R 0:0 ~/.hermes/hermes-agent ~/.local/bin`, `hermes pm repair` and `hermes update`, and counts Hermes as
 broken when its output says "repair failed". The Hermes chat provider (kilocode) returned HTTP 402 "Low Credit" with a
 negative balance; the xAI fallback has no token. That is the owner's billing/provider choice, not something radar changes.
+
+## Phase 46 - Linux box port (2026-10-24)
+
+**Goal:** run the owner's Herdr fork on a Linux PC with the same agent profiles and a
+six-column team layout (claude, codex, grok, gemini, cline, opencode).
+**Fix:** `linux/` - `herdr-agents` and `herdr-layout` (bash, `agents.json` + jq/node),
+`install.sh` (symlinks into `~/.local/bin`, copies skills and `AGENTS.md` only when missing,
+seeds `~/.config/herdr/config.toml` only when absent, `herdr integration install` for
+installed CLIs; Gemini/Agy -> `antigravity-cli`). `HERDR_HOME` defaults to the repo root
+(not `I:\herdr`). Verified: `bash -n` on all scripts, `install.sh --dry-run`, real
+`install.sh` on the box, `herdr-agents tools`.
+**Lesson:** #70.
