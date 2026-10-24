@@ -111,6 +111,9 @@ export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$PATH"
 export LANG=en_US.UTF-8 EDITOR=nano
 # proot hides the terminal foreground process group; let herdr infer agents
 export HERDR_PROCESS_DETECTION=child-groups
+# the default socket path, translated by proot to the container's directory on
+# disk, is longer than the 107-byte unix socket limit; /tmp is Termux's short tmp
+export HERDR_SOCKET_PATH=/tmp/herdr.sock
 unset TERMUX_VERSION PREFIX
 alias fd=fdfind 2>/dev/null
 (dev-update >> "$HOME/.workbench/update.log" 2>&1 &)
