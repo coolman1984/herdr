@@ -1,0 +1,8 @@
+goos: windows
+goarch: amd64
+pkg: herdrdeck/internal/deck
+cpu: 12th Gen Intel(R) Core(TM) i5-12400F
+BenchmarkRowDiff2000Lines-12    	   30168	     39535 ns/op	   65536 B/op	       2 allocs/op
+BenchmarkParseSnapshot-12       	  514202	      2341 ns/op	    1288 B/op	      24 allocs/op
+PASS
+ok  	herdrdeck/internal/deck	3.806s

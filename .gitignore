@@ -1,4 +1,5 @@
 # Upstream Herdr source: its own git repository
+/herdr-app/
 /herdr/
 # Never commit secrets or machine state
 *.key

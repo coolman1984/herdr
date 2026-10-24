@@ -1,0 +1,14 @@
+{
+  "duration_sec": 600,
+  "samples": 120,
+  "four_panes": true,
+  "streaming_panes": 2,
+  "rss_start_mb": 50.352,
+  "rss_end_mb": 53.117,
+  "rss_slope_mb_per_min": 0.2788,
+  "cpu_mean_one_core_pct": 0.57,
+  "cpu_peak_one_core_pct": 2.482,
+  "goroutine_growth": 0,
+  "handle_growth": 44,
+  "sse_bytes_per_sec": 52342.33
+}

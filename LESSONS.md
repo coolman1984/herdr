@@ -268,3 +268,25 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     and hangs the shell by opening the full-screen app; use `grok login` (device code, no paste) and
     `cursor-agent status` / `claude auth status` to read sign-in state without printing secrets.
     `herdr-agents start` still hits `agent_pane_busy` (see #60); `herdr pane run <pane> "<cmd>"` works.
+66. **Setup checks must validate destinations and each account copy.** Matching key text
+    does not prove its -File exists; a .lnk can exist with a missing destination. Claude
+    accounts keep independent skill copies, including an absent skills folder when the
+    profile copy list requires it. Check mode must report the account path without syncing.
+67. **Pane IDs need server identity in display readers too.** Offline fixtures with the same
+    pane ID on default and lab reproduced incorrect HUD model/account selection. Normalize
+    missing and default-socket identities consistently before selecting ownership records.
+    Unreadable ownership JSON must abort, never become an empty successful read.
+68. **A one-pass command must preserve failure and avoid writes.** HUD -Once used to publish
+    metadata and return success after failed discovery. Print-only must skip metadata writes;
+    command failures must reach its caller or the background diagnostic log. Collect waits
+    on existing tasks, so it must skip the prompt-start grace period needed after a new ask.
+    Herdr 0.9.5 read-back is `status server --json` with top-level status=not_running;
+    this was verified against an inactive lab session without starting or stopping anything.
+69. **Herdr's public API on Windows is newline-delimited JSON over a named pipe.**
+    The pipe name is `\\.\pipe\` followed by the socket marker path. Protocol 22 closes
+    ordinary RPC connections after one response; a persistent request/reply client fails
+    with "The pipe is being closed" on its next request. Deck's lab test passed six direct
+    reads through six short pipe connections, without CLI processes. The persistent
+    event subscription is a different surface; output-match subscriptions fire on match
+    transitions, not every screen update. `pane read` CLI emits terminal text directly,
+    while the socket returns `result.read.text`. Preserve this distinction in adapters.

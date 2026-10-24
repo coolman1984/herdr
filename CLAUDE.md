@@ -62,7 +62,7 @@ Then run `pwsh -File check.ps1` - it must pass.
    never run `herdr server stop` (it kills every pane) unless the owner asks.
 6. **Back up before you overwrite** anything outside this folder (config.toml,
    registry values, skills) and say where the backup is.
-7. **Never edit `herdr/`** for a quick fix: it is the upstream clone. Changes there
+7. **Never edit `herdr-app/`** for a quick fix: it is the upstream clone. Changes there
    need Zig 0.16 + MSVC Build Tools to build (LESSONS #9) and are kept on a branch.
 
 ## 3. Engineering rules

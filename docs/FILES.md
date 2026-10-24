@@ -25,6 +25,7 @@
 | `herdr-headless.ps1` | Run a Cline profile headless (no pane): waits, saves the JSONL log, prints DONE/FAILED, answer and tokens |
 | `herdr-trial.ps1` | Run one model trial, grade it and append results.csv; leave the agent for review |
 | `agents.json` | Agent profiles for the delegation tool |
+| `app/` | Herdr Deck: one Windows GUI exe, Go standard-library backend, embedded vanilla web UI; API.md contract, build.ps1, tests/, PERF.md measurements and FEATURES.md evidence |
 | `config/keys.toml` | Master copy of the key bindings added to Herdr's config |
 | `config/settings.toml` | Master copy of other settings added there (Windows notifications) |
 | `skills/herdr-team/`, `skills/herdr-workspace/` | Master copies of the Claude skills |

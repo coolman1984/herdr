@@ -1,0 +1,9 @@
+/HerdrDeck.exe
+/tests/go-cache/
+/tests/go-tmp/
+/tests/runtime/
+/tests/*.log
+/tests/*.png
+/tests/*.exe
+/tests/*address*.json
+/tests/evidence/

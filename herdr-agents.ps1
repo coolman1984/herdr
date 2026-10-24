@@ -145,7 +145,11 @@ function Start-FreshConversation([string]$AgentName) {
 }
 
 function Get-Registry {
-    (Get-Content -LiteralPath $registryPath -Raw | ConvertFrom-Json).agents
+    try {
+        $config = Get-Content -LiteralPath $registryPath -Raw | ConvertFrom-Json
+        if (-not $config.agents -or @($config.agents.PSObject.Properties).Count -eq 0) { throw 'No agent profiles found.' }
+        $config.agents
+    } catch { Fail "Cannot read agents.json: $($_.Exception.Message)" }
 }
 
 function Get-LiveAgents {
@@ -156,7 +160,7 @@ function Get-LiveAgents {
 
 function Get-State {
     if (Test-Path -LiteralPath $statePath) {
-        try { return @(Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json) } catch { }
+        try { return @(Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json) } catch { Fail "Cannot read ownership state ${statePath}: $($_.Exception.Message)" }
     }
     @()
 }
@@ -182,13 +186,13 @@ function Get-RecordServer($Record) {
 }
 
 # Turn the result of "agent prompt --wait" into DONE / BLOCKED / FAILED with the text to show.
-function Complete-Ask([string]$AgentName, $Result) {
+function Complete-Ask([string]$AgentName, $Result, [switch]$Collected) {
     # Not "$lines": PowerShell names ignore case, and $Lines is a parameter.
     $out = New-Object System.Collections.Generic.List[string]
     $status = if ($Result.Json -and $Result.Json.result.agent) { $Result.Json.result.agent.agent_status } else { $null }
     $outcome = "DONE"
     # A settled prompt result can precede the turn's first working state (LESSONS #44).
-    if ($Result.Ok -and $status -in @("done", "idle")) {
+    if (-not $Collected -and $Result.Ok -and $status -in @("done", "idle")) {
         $began = Get-Date
         $deadline = $began.AddSeconds([Math]::Min(10, $TimeoutSec))
         while ((Get-Date) -lt $deadline) {
@@ -280,7 +284,7 @@ $accountsRoot = Join-Path $env:USERPROFILE ".herdr-accounts"
 $defaultHomes = @{ claude = (Join-Path $env:USERPROFILE ".claude"); codex = (Join-Path $env:USERPROFILE ".codex") }
 function Get-Account($Entry, [string]$AccountName) {
     if (-not $Entry.PSObject.Properties["account"] -or -not $Entry.account) { Fail "This agent has no separate-account support (agents.json 'account')." }
-    if ($AccountName -notmatch '^[a-z0-9][a-z0-9_-]{0,23}$') { Fail "Account name must match [a-z0-9][a-z0-9_-]{0,23}: $AccountName" }
+    if ($AccountName -cnotmatch '^[a-z0-9][a-z0-9_-]{0,23}$') { Fail "Account name must match [a-z0-9][a-z0-9_-]{0,23}: $AccountName" }
     $spec = $Entry.account
     $dir = Join-Path $accountsRoot (Join-Path $spec.tool $AccountName)
     if (-not (Test-Path -LiteralPath $dir)) {
@@ -314,6 +318,9 @@ function Invoke-Git([string]$Dir, [string[]]$Arguments) {
 
 if ($Fresh -and $Command -ne 'ask') { Fail "-Fresh is valid only for ask." }
 if (-not (Test-Path -LiteralPath $herdr)) { Fail "Herdr is not installed at $herdr." }
+
+# Validate before shared account readers can fall back to a misleading main-account label.
+$null = Get-Registry
 
 switch ($Command) {
     "tools" {
@@ -364,10 +371,13 @@ switch ($Command) {
         $a = $entryProfile.Value
         if (-not (Get-Command $a.command -ErrorAction SilentlyContinue)) { Fail "$($a.command) is not installed." }
 
-        $acc = if ($Account) { Get-Account $a $Account } else { $null }
+        $acc = $null
+        if ($Account -and $Account -cnotmatch '^[a-z0-9][a-z0-9_-]{0,23}$') { Fail "Invalid account name: $Account" }
+        # Validate ownership state before any account or pane is created.
+        $null = Get-State
         $live = @(Get-LiveAgents | ForEach-Object { $_.name } | Where-Object { $_ })
         if (-not $explicitName) {
-            if (-not $Name) { $Name = if ($acc) { "$Target-$Account" } else { $Target } }
+            if (-not $Name) { $Name = if ($Account) { "$Target-$Account" } else { $Target } }
             $baseName = $Name
             $n = 2
             while ($live -contains $Name) { $Name = "$baseName-$n"; $n++ }
@@ -375,6 +385,7 @@ switch ($Command) {
             Fail "An agent named '$Name' is already running."
         }
         if ($Name -cnotmatch '^[a-z][a-z0-9_-]{0,31}$') { Fail "Name must match [a-z][a-z0-9_-]{0,31}: $Name" }
+        $acc = if ($Account) { Get-Account $a $Account } else { $null }
         if ($Pane -and -not $Worktree) {
             $p = Invoke-Herdr @("pane", "get", $Pane)
             if (-not $p.Ok -or -not $p.Json.result.pane.cwd) { Fail "Could not read pane ${Pane}: $($p.Text)" }
@@ -438,7 +449,11 @@ switch ($Command) {
                 # An existing pane already has its environment: set the account's variables in
                 # its PowerShell before the agent starts there.
                 $set = ($acc.Env.Keys | ForEach-Object { "`$env:$_='$($acc.Env[$_].Replace("'", "''"))'" }) -join "; "
-                if ($set) { [void](Invoke-Herdr @("pane", "run", $pane, $set)); Start-Sleep -Milliseconds 800 }
+                if ($set) {
+                    $configured = Invoke-Herdr @("pane", "run", $pane, $set)
+                    if (-not $configured.Ok) { Fail "Could not set account environment: $($configured.Text)" }
+                    Start-Sleep -Milliseconds 800
+                }
             }
         } else {
             $split = Invoke-Herdr (@("pane", "split", $env:HERDR_PANE_ID, "--direction", $Direction, "--cwd", $Cwd, "--no-focus") + $envArgs)
@@ -634,7 +649,7 @@ switch ($Command) {
         }
         $results = @($jobs | Wait-Job | Receive-Job)
         $jobs | Remove-Job
-        $answers = foreach ($n in $names) { Complete-Ask $n ($results | Where-Object { $_.Name -eq $n } | Select-Object -First 1) }
+        $answers = foreach ($n in $names) { Complete-Ask $n ($results | Where-Object { $_.Name -eq $n } | Select-Object -First 1) -Collected }
         $body = ($answers | ForEach-Object { "### $($_.Name): $($_.Outcome)`n`n``````text`n$($_.Text)`n```````n" }) -join "`n"
         $summary = ($answers | ForEach-Object { "$($_.Name)=$($_.Outcome)" }) -join " "
         $log = Save-Run ("collect-" + ($names -join "-")) "(collect)" $summary $body

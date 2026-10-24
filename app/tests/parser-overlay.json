@@ -1,0 +1,5 @@
+{
+  "Replace": {
+    "I:\\herdr\\app\\internal\\deck\\model.go": "I:\\herdr\\app\\tests\\parser-mutant.txt"
+  }
+}

@@ -1,0 +1,7 @@
+--- FAIL: TestSnapshotUsesRealEnvelopeAndMetadata (0.00s)
+    model_test.go:13: Herdr returned an empty pane ID
+--- FAIL: TestRefreshDisplaysBlockedAndRecoversFromOffline (0.00s)
+    server_test.go:94: missing guard: {Session:lab Panes:[] Workspaces:[] Tabs:[] Error:Herdr returned an empty pane ID Herdr:{Running:false Error:Herdr returned an empty pane ID} Profiles:[] Layouts:[] FocusedPane:}
+FAIL
+FAIL	herdrdeck/internal/deck	1.058s
+FAIL

@@ -23,6 +23,15 @@ function Show-Error([string]$Message) {
     [System.Windows.Forms.MessageBox]::Show($Message, "Herdr - open folder", "OK", "Error") | Out-Null
 }
 
+function Start-FolderAgent([string]$ProfileName, [string]$PaneId) {
+    $output = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'herdr-agents.ps1') start $ProfileName -Pane $PaneId 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Show-Error "Workspace created, but $ProfileName is not ready:`n$($output -join "`n")"
+        return $false
+    }
+    return $true
+}
+
 function Select-Folder([string]$Start) {
     # A hidden top-most owner keeps the dialog in front of Windows Terminal.
     $owner = New-Object System.Windows.Forms.Form -Property @{
@@ -90,33 +99,17 @@ if ($Agent) {
         exit 1
     }
     $first = if ($Agent -eq "team") { "claude" } else { $Agent }
-    $output = & $herdr pane run $paneId $first 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Show-Error "The workspace was created, but $first could not be started:`n$($output -join "`n")"
-        exit 1
-    }
+    if (-not (Start-FolderAgent $first $paneId)) { exit 1 }
 
     if ($Agent -eq "team") {
-        # Codex goes in a pane to the right, named so Claude can address it
-        # ("codex-w3" for workspace w3): herdr agent prompt codex-w3 "...".
         $output = & $herdr pane split $paneId --direction right --cwd $Path --no-focus 2>&1
+        $splitCode = $LASTEXITCODE
         $codexPane = $null
         try { $codexPane = (($output -join "`n") | ConvertFrom-Json).result.pane.pane_id } catch { }
-        if (-not $codexPane) {
+        if ($splitCode -ne 0 -or -not $codexPane) {
             Show-Error "Claude started, but the pane for Codex could not be created:`n$($output -join "`n")"
             exit 1
         }
-        $name = "codex-" + ($paneId -split ":")[0]
-        $modelArgs = @()
-        $profilesPath = Join-Path $PSScriptRoot "agents.json"
-        if (Test-Path -LiteralPath $profilesPath) {
-            $codexProfile = (Get-Content -LiteralPath $profilesPath -Raw | ConvertFrom-Json).agents.codex
-            if ($codexProfile.modelFlag -and $codexProfile.model) { $modelArgs = @("--", $codexProfile.modelFlag, $codexProfile.model) }
-        }
-        $output = & $herdr agent start $name --kind codex --pane $codexPane --timeout 90000 @modelArgs 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Show-Error "Claude started, but Codex did not become ready in its pane:`n$($output -join "`n")"
-            exit 1
-        }
+        if (-not (Start-FolderAgent 'codex' $codexPane)) { exit 1 }
     }
 }

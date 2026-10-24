@@ -192,19 +192,18 @@ try {
             [IO.Path]::IsPathFullyQualified($resolved) -and $resolved -eq (Join-Path $SourceRoot 'docs')
         } finally { [Environment]::CurrentDirectory = $previous }
     }
-    Check 'F17 team uses only Codex profile model arguments' {
-        Reset-Fixture; $Agent = 'team'; $paneId = 'w1:p1'; $Path = 'C:\project'; $null = . $team 'C:\fake'
-        $start = @($calls | Where-Object { $_[0] -eq 'agent' -and $_[1] -eq 'start' })[0]
-        ($start[-3..-1] -join ',') -eq '--,-m,chosen-model' -and $start -notcontains 'SHOULD-NOT-PASS'
+    Check 'F17 team uses shared profile start and records its pane' {
+        Reset-Fixture
+        function Start-FolderAgent($ProfileName, $PaneId) { $script:calls.Add(@('profile', $ProfileName, $PaneId)); $true }
+        $Agent = 'team'; $paneId = 'w1:p1'; $Path = 'C:\project'; $null = . $team 'C:\fake'
+        $started = @($calls | Where-Object { $_[0] -eq 'profile' })
+        $started.Count -eq 1 -and ($started[0] -join '|') -eq 'profile|codex|right'
     }
-    Check 'F17 missing model keeps existing start arguments' {
-        $safe = $true
-        foreach ($profile in '{"agents":{}}','{"agents":{"codex":{"modelFlag":"-m"}}}') {
-            Reset-Fixture; $script:profileJson = $profile
-            $Agent = 'team'; $paneId = 'w1:p1'; $Path = 'C:\project'; $null = . $team 'C:\fake'
-            $start = @($calls | Where-Object { $_[0] -eq 'agent' -and $_[1] -eq 'start' })[0]
-            $safe = $safe -and $start.Count -eq 9 -and $start -notcontains '--'
-        }; $safe
+    Check 'F17 missing model still uses shared profile start' {
+        Reset-Fixture; $script:profileJson = '{"agents":{}}'
+        function Start-FolderAgent($ProfileName, $PaneId) { $script:calls.Add(@('profile', $ProfileName, $PaneId)); $true }
+        $Agent = 'team'; $paneId = 'w1:p1'; $Path = 'C:\project'; $null = . $team 'C:\fake'
+        @($calls | Where-Object { $_[0] -eq 'profile' -and $_[1] -eq 'codex' }).Count -eq 1
     }
     Check 'F18 equal row recurrence for 2 3 and 5 panes' {
         $equal = $true

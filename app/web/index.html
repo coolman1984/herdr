@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Herdr Deck</title>
+<link rel="preload" href="fonts/Alexandria-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<a class="skip" href="#grid">Skip to panes</a>
+<header class="top" role="banner">
+  <button id="btn-rail" class="icon" aria-label="Hide or show the sidebar (Ctrl+B B)" data-tip="Sidebar · Ctrl+B b"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM9 5v14"/></svg></button>
+  <div class="brand"><span class="mark" aria-hidden="true"></span><span>Herdr Deck</span><span id="session" class="sess"></span></div>
+  <div class="tgroup" role="group" aria-label="Create">
+    <button id="btn-agent" class="primary" data-tip="Start an agent">+ Agent</button>
+    <button id="btn-shell" data-tip="New shell next to the current pane">+ Shell</button>
+    <button id="btn-folder" data-tip="Open folder · Ctrl+B f">Folder</button>
+    <button id="btn-layout" class="icon" aria-label="Layout builder (Ctrl+B Shift+B)" data-tip="Layout builder · Ctrl+B Shift+B"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM9 4v16M15 4v16"/></svg></button>
+    <button id="btn-team" class="icon" aria-label="Team presets" data-tip="Team presets"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.3a3.5 3.5 0 0 1 0 6.4M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg></button>
+  </div>
+  <div class="tgroup seg" role="group" aria-label="View">
+    <button data-cols="1" aria-pressed="false" data-tip="1 column · 1">1</button>
+    <button data-cols="2" aria-pressed="false" data-tip="2 columns · 2">2</button>
+    <button data-cols="3" aria-pressed="false" data-tip="3 columns · 3">3</button>
+    <button data-view="layout" aria-pressed="false" data-tip="Herdr's real splits · L">Splits</button>
+  </div>
+  <div id="counts" class="counts" aria-label="Agent states"></div>
+  <span class="grow"></span>
+  <div class="tgroup" role="group" aria-label="Panels">
+    <button id="btn-search" class="icon" aria-label="Search all screens (Ctrl+Shift+F)" data-tip="Search · Ctrl+Shift+F"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg></button>
+    <button id="btn-board" class="icon" aria-label="Agent board (Ctrl+B A)" data-tip="Agent board · Ctrl+B a"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg></button>
+    <button id="btn-agents" class="icon" aria-label="Agents hub (Ctrl+B M)" data-tip="herdr-agents · Ctrl+B m"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></button>
+    <button id="btn-tools" class="icon" aria-label="Tools (Ctrl+B .)" data-tip="Tools · Ctrl+B ."><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.8-.7-.7-2.8z"/></svg></button>
+    <button id="btn-usage" data-tip="Usage and limits">Usage <span id="usage-n" class="badge-n"></span></button>
+    <button id="btn-inbox" data-tip="Attention inbox · I">Inbox <span id="inbox-n" class="badge-n" hidden></span></button>
+    <button id="btn-palette" class="cmd" data-tip="Command palette"><span>Commands</span> <kbd>Ctrl K</kbd></button>
+    <button id="btn-help" class="icon" aria-label="Keys and guide (?)" data-tip="Keys · ?"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.5v.01"/></svg></button>
+    <label class="safe-t" data-tip="Read-only: every write is refused"><input type="checkbox" id="safe"> Safe</label>
+  </div>
+</header>
+<div id="banner" class="banner" hidden role="alert"></div>
+<div id="rawbar" class="rawbar" hidden role="status"><span id="rawbar-text"></span><button id="rawbar-stop">Stop typing</button></div>
+<form id="bcast" class="bcast" hidden aria-label="Broadcast">
+  <span id="bcast-n" class="chip"></span>
+  <input id="bcast-text" aria-label="Prompt for every selected pane" placeholder="One prompt for every selected pane">
+  <button type="submit" class="primary">Send to all</button>
+  <button type="button" id="bcast-compare">Compare</button>
+  <button type="button" id="bcast-clear">Clear</button>
+</form>
+<div class="body">
+  <nav class="rail" aria-label="Spaces and tabs">
+    <div id="rail-nav" class="rail-nav"></div>
+    <section id="health" class="health" aria-label="Health"></section>
+  </nav>
+  <main class="main">
+    <div id="empty" class="empty" hidden></div>
+    <p id="grid-note" class="grid-note" aria-live="polite"></p>
+    <div id="grid" class="grid" aria-label="Panes"></div>
+  </main>
+  <aside id="drawer" class="drawer" hidden aria-labelledby="drawer-title">
+    <div class="drawer-h"><h2 id="drawer-title"></h2><button id="drawer-close" class="icon" aria-label="Close panel (Esc)"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div id="drawer-body" class="drawer-body"></div>
+  </aside>
+</div>
+<footer id="statusbar" class="statusbar" data-ok="0"><span class="conn" aria-hidden="true"></span><span id="status-text" aria-live="polite">connecting…</span><span class="grow"></span><span id="status-age" class="muted"></span></footer>
+<div id="chord" class="chord" hidden role="status"></div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<div id="toasts-loud" class="toasts loud" aria-live="assertive"></div>
+<noscript>Herdr Deck needs JavaScript.</noscript>
+</body>
+</html>

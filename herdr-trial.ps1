@@ -15,11 +15,22 @@ param(
 )
 $ErrorActionPreference = "Stop"
 if (-not $PSBoundParameters.ContainsKey('TrialRoot')) {
-    $TrialRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'HERDR-trials\model-trial'
+    $TrialRoot = Join-Path $PSScriptRoot 'trials\model-trial'
 }
 $herdr = Join-Path $env:LOCALAPPDATA 'Programs\Herdr\bin\herdr.exe'
 
-function Fail([string]$Message) { Write-Output "ERROR: $Message"; exit 1 }
+$script:trialAgent = $null
+function Remove-TrialAgent {
+    if (-not $script:trialAgent) { return }
+    $result = Invoke-TrialProcess (Join-Path $PSHOME 'pwsh.exe') @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'herdr-agents.ps1'), 'stop', $script:trialAgent)
+    if ($result.Code -ne 0) { throw "Trial pane cleanup failed: $($result.Text)" }
+    $script:trialAgent = $null
+}
+function Fail([string]$Message) {
+    Write-Output "ERROR: $Message"
+    try { Remove-TrialAgent } catch { Write-Output "ERROR: $($_.Exception.Message)" }
+    exit 1
+}
 
 # Redirect both streams and create no console, including when invoked from a detached pane.
 function Invoke-TrialProcess([string]$File, [string[]]$Arguments) {
@@ -49,7 +60,7 @@ function New-TrialRun([string]$TrialRoot, [string]$Run) {
     $folder = Join-Path $TrialRoot (Join-Path 'runs' $Run)
     if (Test-Path -LiteralPath $folder) { Fail "Run folder exists: $folder" }
     $kit = Join-Path $TrialRoot 'kit'
-    if (-not (Test-Path -LiteralPath $kit -PathType Container)) { Fail "Trial kit not found: $kit" }
+    if (-not (Test-Path -LiteralPath $kit -PathType Container)) { Fail "Trial kit not found: $kit. Supply -TrialRoot with a kit folder and grade.ps1." }
     [IO.Directory]::CreateDirectory((Join-Path $TrialRoot 'runs')) | Out-Null
     Copy-Item -LiteralPath $kit -Destination $folder -Recurse
     (Resolve-Path -LiteralPath $folder).ProviderPath
@@ -66,6 +77,7 @@ function Start-TrialAgent([Alias('Profile')] [string]$AgentProfile, [string]$Fol
     if ($Model) { $arguments += @('-Model', $Model) }
     if ($Effort) { $arguments += @('-Effort', $Effort) }
     $started = Invoke-TrialProcess (Join-Path $PSHOME 'pwsh.exe') $arguments
+    if ($started.Code -in @(0, 2)) { $script:trialAgent = $name }
     if ($started.Code -eq 2) {
         Write-Host $started.Text
         Fail "Agent not ready - the owner answers its question in the pane, then rerun with -Run <existing> is NOT supported: stop it and start again."
@@ -80,11 +92,19 @@ function Send-TrialPrompt([string]$AgentName) {
     if (-not $sent.Ok) { Fail "Trial prompt failed: $($sent.Text)" }
 }
 
-function Wait-TrialReport([string]$Folder, [int]$TimeoutMin, [int]$PollSec) {
+function Wait-TrialReport([string]$Folder, [int]$TimeoutMin, [int]$PollSec, [string]$AgentName) {
     $deadline = (Get-Date).AddMinutes($TimeoutMin)
     $report = Join-Path $Folder 'REPORT.md'
     $previous = $null
     while ($true) {
+        if ($AgentName) {
+            $agent = Invoke-Herdr @('agent', 'get', $AgentName)
+            if (-not $agent.Ok) { Fail "Trial agent $AgentName is gone or unreadable: $($agent.Text)" }
+            $status = [string]$agent.Json.result.agent.agent_status
+            if ($status -in @('blocked', 'exited', 'failed', 'stopped') -or -not $agent.Json.result.agent) {
+                Fail "Trial agent $AgentName cannot continue ($status)."
+            }
+        }
         if (Test-Path -LiteralPath $report -PathType Leaf) {
             $size = (Get-Item -LiteralPath $report).Length
             if ($null -ne $previous -and $size -eq $previous) { return 'DONE' }
@@ -149,7 +169,7 @@ function Invoke-Trial([Alias('Profile')] [string]$AgentProfile, [string]$Model, 
     $name = Start-TrialAgent $AgentProfile $folder $Model $Effort
     $began = Get-Date
     Send-TrialPrompt $name
-    $outcome = Wait-TrialReport $folder $TimeoutMin $PollSec
+    $outcome = Wait-TrialReport $folder $TimeoutMin $PollSec $name
     $minutes = ((Get-Date) - $began).TotalMinutes.ToString('F1', [Globalization.CultureInfo]::InvariantCulture)
     $grade = Invoke-TrialGrade $TrialRoot $folder
     $tokens = Get-TrialTokens $spec.kind $folder
@@ -165,4 +185,5 @@ function Invoke-Trial([Alias('Profile')] [string]$AgentProfile, [string]$Model, 
     Write-Output "Review REVIEW.md yourself, then: herdr-agents stop $name"
 }
 
-Invoke-Trial $AgentProfile $Model $Effort $Run $TrialRoot $TimeoutMin $PollSec
+try { Invoke-Trial $AgentProfile $Model $Effort $Run $TrialRoot $TimeoutMin $PollSec }
+catch { Fail $_.Exception.Message }

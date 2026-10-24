@@ -1,0 +1,314 @@
+{
+  "_comment": "Agent CLIs that herdr-agents.ps1 can start in Herdr panes. kind = Herdr agent kind; modelFlag = how the CLI takes a model; args = always passed (safety first: tools need approval); model = default when -Model is not given (empty = the CLI's own default); effortArgs = how -Effort is passed ({0} = the level); effort = the default level when -Effort is not given; contextWindow = tokens the HUD divides by for 'ctx %'. Which agent suits which task, and what works now: docs/AGENT-ROSTER.md. Edit freely. account = how -Account <name> gives a profile its own sign-in folder (%USERPROFILE%\\.herdr-accounts\\<tool>\\<name>): env vars / args with {dir}, the login command, and settings copied from the default folder (never sign-in files). Antigravity has no account support (its sign-in is not in a folder we can move).",
+  "agents": {
+    "claude": {
+      "kind": "claude",
+      "command": "claude",
+      "modelFlag": "--model",
+      "model": "claude-opus-5-5",
+      "args": [
+        "--permission-mode",
+        "auto"
+      ],
+      "effortArgs": [
+        "--effort",
+        "{0}"
+      ],
+      "contextWindow": 1000000,
+      "account": {
+        "tool": "claude",
+        "env": {
+          "CLAUDE_CONFIG_DIR": "{dir}"
+        },
+        "args": [],
+        "login": "claude auth login",
+        "copy": [
+          "settings.json",
+          "CLAUDE.md",
+          "statusline.js",
+          "skills"
+        ]
+      }
+    },
+    "codex": {
+      "kind": "codex",
+      "command": "codex",
+      "modelFlag": "-m",
+      "model": "gpt-6.1-sol",
+      "args": [
+        "-a",
+        "never",
+        "-s",
+        "workspace-write"
+      ],
+      "effortArgs": [
+        "-c",
+        "model_reasoning_effort={0}"
+      ],
+      "account": {
+        "tool": "codex",
+        "env": {
+          "CODEX_HOME": "{dir}"
+        },
+        "args": [],
+        "login": "codex login",
+        "copy": [
+          "config.toml",
+          "AGENTS.md",
+          "skills"
+        ]
+      }
+    },
+    "gemini": {
+      "kind": "agy",
+      "command": "agy",
+      "modelFlag": "--model",
+      "model": "gemini-4-argon-high",
+      "args": [
+        "--dangerously-skip-permissions"
+      ],
+      "effortArgs": [
+        "--effort",
+        "{0}"
+      ]
+    },
+    "gemini-flash": {
+      "kind": "agy",
+      "command": "agy",
+      "modelFlag": "--model",
+      "model": "gemini-3.8-flash-medium",
+      "args": [
+        "--dangerously-skip-permissions"
+      ],
+      "effortArgs": [
+        "--effort",
+        "{0}"
+      ]
+    },
+    "cline": {
+      "kind": "cline",
+      "command": "cline",
+      "modelFlag": "-m",
+      "model": "cline-pass/glm-5.3",
+      "args": [
+        "--tui",
+        "--auto-approve",
+        "true"
+      ],
+      "providerFlag": "-P",
+      "provider": "cline-pass",
+      "effortArgs": [
+        "--thinking",
+        "{0}"
+      ],
+      "account": {
+        "tool": "cline",
+        "env": {},
+        "args": [
+          "--config",
+          "{dir}",
+          "--data-dir",
+          "{dir}\\data"
+        ],
+        "login": "cline auth cline-pass --config \"{dir}\" --data-dir \"{dir}\\data\"",
+        "copy": []
+      }
+    },
+    "deepseek": {
+      "kind": "cline",
+      "command": "cline",
+      "modelFlag": "-m",
+      "model": "cline-pass/deepseek-v4-pro",
+      "args": [
+        "--tui",
+        "--auto-approve",
+        "true"
+      ],
+      "providerFlag": "-P",
+      "provider": "cline-pass",
+      "effortArgs": [
+        "--thinking",
+        "{0}"
+      ],
+      "account": {
+        "tool": "cline",
+        "env": {},
+        "args": [
+          "--config",
+          "{dir}",
+          "--data-dir",
+          "{dir}\\data"
+        ],
+        "login": "cline auth cline-pass --config \"{dir}\" --data-dir \"{dir}\\data\"",
+        "copy": []
+      }
+    },
+    "opencode": {
+      "kind": "opencode",
+      "command": "opencode",
+      "modelFlag": "-m",
+      "model": "",
+      "args": [],
+      "account": {
+        "tool": "opencode",
+        "env": {
+          "XDG_DATA_HOME": "{dir}\\data",
+          "XDG_CONFIG_HOME": "{dir}\\config"
+        },
+        "args": [],
+        "login": "opencode auth login",
+        "copy": []
+      }
+    },
+    "grok": {
+      "kind": "grok",
+      "command": "grok",
+      "modelFlag": "-m",
+      "model": "",
+      "args": [
+        "--always-approve"
+      ],
+      "account": {
+        "tool": "grok",
+        "env": {
+          "GROK_HOME": "{dir}"
+        },
+        "args": [],
+        "login": "grok login",
+        "copy": []
+      }
+    },
+    "agy": {
+      "kind": "agy",
+      "command": "agy",
+      "modelFlag": "--model",
+      "model": "",
+      "args": [
+        "--dangerously-skip-permissions"
+      ],
+      "effortArgs": [
+        "--effort",
+        "{0}"
+      ]
+    },
+    "cursor": {
+      "kind": "cursor",
+      "command": "cursor-agent",
+      "modelFlag": "--model",
+      "model": "composer-2.5",
+      "args": [
+        "--force"
+      ]
+    },
+    "cline-flash": {
+      "kind": "cline",
+      "command": "cline",
+      "modelFlag": "-m",
+      "model": "cline-pass/glm-5.3-flash",
+      "args": [
+        "--tui",
+        "--auto-approve",
+        "true"
+      ],
+      "providerFlag": "-P",
+      "provider": "cline-pass",
+      "effortArgs": [
+        "--thinking",
+        "{0}"
+      ],
+      "account": {
+        "tool": "cline",
+        "env": {},
+        "args": [
+          "--config",
+          "{dir}",
+          "--data-dir",
+          "{dir}\\data"
+        ],
+        "login": "cline auth cline-pass --config \"{dir}\" --data-dir \"{dir}\\data\"",
+        "copy": []
+      }
+    },
+    "ds-flash": {
+      "kind": "cline",
+      "command": "cline",
+      "modelFlag": "-m",
+      "model": "cline-pass/deepseek-v4.1-flash",
+      "args": [
+        "--tui",
+        "--auto-approve",
+        "true"
+      ],
+      "providerFlag": "-P",
+      "provider": "cline-pass",
+      "effortArgs": [
+        "--thinking",
+        "{0}"
+      ],
+      "effort": "high",
+      "account": {
+        "tool": "cline",
+        "env": {},
+        "args": [
+          "--config",
+          "{dir}",
+          "--data-dir",
+          "{dir}\\data"
+        ],
+        "login": "cline auth cline-pass --config \"{dir}\" --data-dir \"{dir}\\data\"",
+        "copy": []
+      }
+    },
+    "kimi": {
+      "kind": "cline",
+      "command": "cline",
+      "modelFlag": "-m",
+      "model": "cline-pass/kimi-k3",
+      "args": [
+        "--tui",
+        "--auto-approve",
+        "true"
+      ],
+      "providerFlag": "-P",
+      "provider": "cline-pass",
+      "effortArgs": [
+        "--thinking",
+        "{0}"
+      ],
+      "account": {
+        "tool": "cline",
+        "env": {},
+        "args": [
+          "--config",
+          "{dir}",
+          "--data-dir",
+          "{dir}\\data"
+        ],
+        "login": "cline auth cline-pass --config \"{dir}\" --data-dir \"{dir}\\data\"",
+        "copy": []
+      }
+    }
+  },
+  "accountNames": {
+    "claude": "2030"
+  },
+  "aliases": {
+    "2030": {
+      "profile": "claude",
+      "name": "claude-2030",
+      "note": "Claude Code on the main sign-in (the owner's main account, 2030)"
+    },
+    "2040": {
+      "profile": "claude",
+      "account": "2040",
+      "name": "claude-2040",
+      "note": "Claude Code on the mflma2040 Pro account"
+    },
+    "1984": {
+      "profile": "claude",
+      "account": "1984",
+      "name": "claude-1984",
+      "note": "Claude Code on the mflma1984 Pro account (third account, signed in 2026-10-22)"
+    }
+  }
+}

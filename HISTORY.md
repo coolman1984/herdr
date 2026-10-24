@@ -1010,3 +1010,47 @@ and Desktop `Stop Herdr.lnk` (both `conhost.exe --headless pwsh ...`), added `I:
 Backups (old shortcuts, raw PATH + kind) in `%APPDATA%\herdr\backup\shortcuts-20261024-122942`.
 **Proof:** `check.ps1`: All checks passed, no WARN. Not tested live: clicking the shortcuts.
 **Lesson:** first try failed on a parameter named `$args` (automatic variable, AGENTS.md rule 6).
+## Phase 43 - Fix independent toolkit review findings (2026-10-24)
+
+**Symptom:** setup checks missed broken script/shortcut targets and stale Claude account skills;
+folder shortcuts bypassed profiles; HUD, trials and ownership handling could hide failures.
+**Cause:** text/existence-only checks, pane IDs without server identity, ignored command results,
+and silent read failures. Offline regressions reproduced the failures on HEAD copies.
+**Fix:**
+- Findings 1-4: check master/live key script targets and shortcut destinations; sync/check every
+  existing Claude account whose skills exist or whose profile copy list requires them; use
+  herdr-app for custom builds; folder shortcuts call herdr-agents start for flags and ownership.
+- Findings 5-11: validate lowercase accounts and agent names before account creation; scope HUD
+  records by normalized server identity; log background HUD errors; verify stop exit/result and
+  explicit stopped status; show the confirmation owner; keep HUD -Once read-only; give missing
+  trial kits a clear -TrialRoot error, check agent health while waiting, and clean up owned trial
+  agents on failure; skip prompt-start polling during collect; reject unreadable ownership JSON.
+  Validate agents.json before dispatch so the shared account reader cannot quietly call
+  account 2030 'main' after a registry read failure; the shared reader stays outside this scope.
+- Additional LOW 12: failed pane account-environment setup was ignored before agent start;
+  abort with its command error. The new fixture proves it stops before continuing.
+- Additional LOW 13: HUD discovery returned false, while -Once always exited zero; throw a
+  clear discovery error so the one-pass command fails and the background loop logs it.
+- Additional LOW 14: failed pane metadata writes were ignored; throw their command error,
+  retain the last successful cache, and let the background error log record the failure.
+
+**Proof:** all seven offline suites pass: batch A 48/48, batch B 18/18, dialog 26/26,
+headless 9/9, Cline HUD 11/11, round2 18/18, review fixes 25/25 (155/155).
+`tests/test-review-fixes.ps1 -SourceRoot <temporary HEAD copies>`: 0/25 pass, 25/25 fail;
+current sources: 25/25 pass. The old copies were obtained only with the proof-required
+read-only git show; no git mutations. The batch B model-only fixtures were updated for the
+now-required shared profile start. Offline `herdr.exe --session lab status server --json`
+returns status=not_running, confirming the stop read-back shape without starting a server.
+
+**Not done / doubts:** check.ps1 reports 5 FAIL: four stale/missing account skill copies
+(1984 and 2040, two skills each) and unavailable/broken App Path registration; user PATH
+also warns. Account sync is explicitly reserved for the lead: run sync-skills.ps1, then
+-Check and check.ps1. No external repair, live session, pane, build/install, shortcut click,
+approval setting or sign-in was changed/tested. Shortcut destinations all exist; key targets
+all exist. No claim that the setup check passes before the lead completes external repairs.
+**Lesson:** #66, #67, #68.
+**Cleanup limitation:** automatic approval review rejected removal of the proof-only temporary
+baseline folder twice, including an exact LiteralPath attempt, stating only "blocked by policy".
+Left tests/.review-old-32db5c5becec4590a36494f1668372b5 and tests/.review-baseline-path.txt for
+lead cleanup; no further deletion method was attempted. Final review-fixes run: 25/25;
+final check.ps1: 5 FAIL (the external issues listed above).

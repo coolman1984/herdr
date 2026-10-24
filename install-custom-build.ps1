@@ -1,4 +1,4 @@
-# Build our Herdr (the source in .\herdr, with the "menu" feature) and make it
+# Build our Herdr (the source in .\herdr-app, with the "menu" feature) and make it
 # the herdr.exe that the Herdr shortcut, the "herdr" command and PATH run.
 #
 # - Builds with cargo in release mode (first build takes several minutes).
@@ -8,7 +8,7 @@
 #   until it restarts (herdr server stop, then open Herdr again - this closes panes).
 #
 # After "herdr update" installs a newer official version, run this script again
-# (after pulling the new upstream source into .\herdr) to put the menus back.
+# (after pulling the new upstream source into .\herdr-app) to put the menus back.
 [CmdletBinding()]
 param(
     [switch]$Restore,
@@ -16,7 +16,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$source = Join-Path $PSScriptRoot "herdr"
+$source = Join-Path $PSScriptRoot "herdr-app"
 $alias = Join-Path $env:LOCALAPPDATA "Programs\Herdr\bin"
 $target = (Get-Item -LiteralPath $alias -Force).Target   # the active release folder
 if (-not $target) { $target = $alias }

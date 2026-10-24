@@ -63,6 +63,24 @@ try {
     Bad "agents.json unreadable: $($_.Exception.Message)"
 }
 
+function Test-KeyTarget([string]$CommandText, [string]$Label) {
+    $match = [regex]::Match($CommandText, '(?i)(?:^|\s)-File\s+(?:"([^"]+)"|([^\s]+))')
+    if (-not $match.Success) { return }
+    $path = if ($match.Groups[1].Success) { $match.Groups[1].Value } else { $match.Groups[2].Value }
+    if (Test-Path -LiteralPath $path -PathType Leaf) { Ok "$Label target exists: $path" }
+    else { Bad "$Label target missing: $path" }
+}
+function Test-Shortcut([string]$Link) {
+    if (-not (Test-Path -LiteralPath $Link -PathType Leaf)) { Warn "shortcut missing: $Link"; return }
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($Link)
+        $target = [Environment]::ExpandEnvironmentVariables($shortcut.TargetPath)
+        if ($target -and (Test-Path -LiteralPath $target -PathType Leaf)) { Ok "shortcut $Link -> $target" }
+        else { Warn "shortcut target missing: $Link -> $target" }
+    } catch { Warn "shortcut unreadable: $Link ($($_.Exception.Message))" }
+}
+
 # 4. Key bindings present in Herdr's live config
 function Get-KeyCommands([string]$Text, [string]$Source) {
     $map = @{}
@@ -86,10 +104,13 @@ $liveText = if (Test-Path -LiteralPath $live) { Get-Content -LiteralPath $live -
 $masterKeys = Get-KeyCommands $master 'config/keys.toml'
 $liveKeys = Get-KeyCommands $liveText $live
 foreach ($key in $masterKeys.Keys) {
+    Test-KeyTarget $masterKeys[$key]['command'] "master key $key"
     if ($liveKeys.ContainsKey($key) -and $masterKeys[$key]['type'] -and $masterKeys[$key]['command'] -and
         $liveKeys[$key]['type'] -ceq $masterKeys[$key]['type'] -and $liveKeys[$key]['command'] -ceq $masterKeys[$key]['command']) { Ok "key $key in Herdr config" }
     else { Bad "key $key from config/keys.toml missing or different in $live" }
 }
+
+foreach ($key in $liveKeys.Keys) { Test-KeyTarget $liveKeys[$key]['command'] "live key $key" }
 
 # 4b. Settings present in Herdr's live config (config/settings.toml)
 foreach ($line in (Get-Content -LiteralPath (Join-Path $root "config\settings.toml"))) {
@@ -110,10 +131,11 @@ $appPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\herdr.exe"
 $target = (Get-ItemProperty -LiteralPath $appPath -ErrorAction SilentlyContinue).'(default)'
 if ($target -and (Test-Path -LiteralPath $target)) { Ok "'herdr' in Explorer -> $target" } else { Bad "App Path herdr.exe missing or broken (docs/SETUP.md step 7)" }
 foreach ($lnk in @((Join-Path ([Environment]::GetFolderPath('Desktop')) "Herdr.lnk"), (Join-Path ([Environment]::GetFolderPath('Programs')) "Herdr.lnk"))) {
-    if (Test-Path -LiteralPath $lnk) { Ok "shortcut $lnk" } else { Warn "shortcut missing: $lnk" }
+    Test-Shortcut $lnk
 }
 $hudLink = Join-Path ([Environment]::GetFolderPath('Startup')) "Herdr HUD.lnk"
-if (Test-Path -LiteralPath $hudLink) { Ok "pane HUD starts at sign-in ($hudLink)" } else { Warn "pane HUD not started at sign-in: $hudLink missing" }
+Test-Shortcut $hudLink
+Test-Shortcut (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Stop Herdr.lnk')
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User") -split ";"
 if ($userPath -contains $root) { Ok "this folder on user PATH (herdr-agents)" } else { Warn "this folder is not on the user PATH" }
 if (Test-Path -LiteralPath $herdr) {

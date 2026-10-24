@@ -224,19 +224,32 @@ function Get-ClineUsage([string]$File) {
     [pscustomobject]@{ model = $o.model; fresh = $fresh; out = $out }
 }
 
+function ConvertTo-HudServer([string]$Socket) {
+    if (-not $Socket -or $Socket -eq 'default' -or $Socket -ieq (Join-Path $env:APPDATA 'herdr\herdr.sock')) { return 'default' }
+    $Socket.Trim().ToLowerInvariant()
+}
+function Write-HudError([string]$Message) {
+    $log = Join-Path $env:APPDATA 'herdr\hud-errors.log'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
+    Add-Content -LiteralPath $log -Value "$((Get-Date).ToString('s')) $Message"
+}
+function Get-PaneRecords {
+    if (Test-Path -LiteralPath $panesState) {
+        try {
+            @(Get-Content -LiteralPath $panesState -Raw | ConvertFrom-Json) | Where-Object {
+                (ConvertTo-HudServer ([string]$_.server)) -eq (ConvertTo-HudServer $env:HERDR_SOCKET_PATH)
+            }
+        } catch { throw "Cannot read HUD pane records: $($_.Exception.Message)" }
+    }
+}
 function Get-PaneAccounts {
     $map = @{}
-    if (Test-Path -LiteralPath $panesState) {
-        try { foreach ($e in @(Get-Content -LiteralPath $panesState -Raw | ConvertFrom-Json)) { if ($e.PSObject.Properties["account"] -and $e.account) { $map[$e.pane] = $e.account } } } catch { }
-    }
+    foreach ($e in @(Get-PaneRecords)) { if ($e.account) { $map[$e.pane] = $e.account } }
     $map
 }
-
 function Get-StartedModels {
     $map = @{}
-    if (Test-Path -LiteralPath $panesState) {
-        try { foreach ($e in @(Get-Content -LiteralPath $panesState -Raw | ConvertFrom-Json)) { if ($e.model) { $map[$e.pane] = $e.model } } } catch { }
-    }
+    foreach ($e in @(Get-PaneRecords)) { if ($e.model) { $map[$e.pane] = $e.model } }
     $map
 }
 
@@ -259,14 +272,15 @@ $last = @{}
 $lastSent = @{}
 function Update-Panes {
     $ws = Invoke-Herdr @("workspace", "list")
-    if (-not $ws.Ok) { return $false }
+    if (-not $ws.Ok) { throw "HUD workspace list failed: $($ws.Text)" }
     $labels = @{}
     foreach ($w in $ws.Json.result.workspaces) { $labels[$w.workspace_id] = $w.label }
     $agents = @{}
     $al = Invoke-Herdr @("agent", "list")
-    if ($al.Ok) { foreach ($a in $al.Json.result.agents) { $agents[$a.pane_id] = $a } }
+    if (-not $al.Ok) { throw "HUD agent list failed: $($al.Text)" }
+    foreach ($a in $al.Json.result.agents) { $agents[$a.pane_id] = $a }
     $pl = Invoke-Herdr @("pane", "list")
-    if (-not $pl.Ok) { return $false }
+    if (-not $pl.Ok) { throw "HUD pane list failed: $($pl.Text)" }
     $panes = @($pl.Json.result.panes)
     # Pane names (ctrl+b shift+p): "label" in pane list, absent when the pane has none.
     $names = @{}
@@ -346,13 +360,15 @@ function Update-Panes {
         if ($paneAccounts[$p.pane_id]) { $parts += "account $($paneAccounts[$p.pane_id])"; $tokens.account = $paneAccounts[$p.pane_id] }
         $title = $parts -join " · "
         $sig = "$title|$(($tokens.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join '|')"
-        if ($Once) { Write-Output ("{0,-8} {1}" -f $p.pane_id, $title) }
+        if ($Once) { Write-Output ("{0,-8} {1}" -f $p.pane_id, $title); continue }
         # Send on change, and again before the TTL runs out (stale data disappears if the HUD stops).
         if ($last[$p.pane_id] -eq $sig -and $lastSent[$p.pane_id] -and ($now - $lastSent[$p.pane_id]).TotalMilliseconds -lt ($ttlMs / 2)) { continue }
         $args_ = @("pane", "report-metadata", $p.pane_id, "--source", $source, "--title", $title, "--ttl-ms", "$ttlMs")
         if (-not $tokens.Contains("name")) { $args_ += @("--clear-token", "name") }
         foreach ($t in $tokens.GetEnumerator()) { $args_ += @("--token", "$($t.Key)=$($t.Value)") }
-        if ((Invoke-Herdr $args_).Ok) { $last[$p.pane_id] = $sig; $lastSent[$p.pane_id] = $now }
+        $sent = Invoke-Herdr $args_
+        if (-not $sent.Ok) { throw "HUD metadata failed for $($p.pane_id): $($sent.Text)" }
+        $last[$p.pane_id] = $sig; $lastSent[$p.pane_id] = $now
     }
     $true
 }
@@ -366,6 +382,6 @@ $mutex = New-Object System.Threading.Mutex($false, "Local\herdr-hud")
 if (-not $mutex.WaitOne(0)) { exit 0 }
 while ($true) {
     $ok = $false
-    try { $ok = Update-Panes } catch { $ok = $false }
+    try { $ok = Update-Panes } catch { Write-HudError $_.Exception.Message; $ok = $false }
     Start-Sleep -Seconds $(if ($ok) { $IntervalSec } else { 30 })
 }
