@@ -1077,3 +1077,23 @@ blocked creating the Startup shortcut and the hidden background loop (persistenc
 ran `herdr-autosync.ps1 -Once` and checked `git log origin/main..HEAD` = 0.
 **Lesson:** a handoff must name what cannot be done from the web (build, run, live tests) so the
 web session writes code and docs and marks everything "not verified" until the PC is back.
+
+## Phase 45 - Android phone workbench and radar (2026-10-24)
+
+**Goal:** the owner's phone (Termux) as an all-day coding platform: herdr, the agent CLIs and
+Hermes Agent in an Ubuntu proot workbench, pushing to GitHub from anywhere.
+**Fix:** `mobile/termux/` - `setup.sh` (Termux side: proot-distro Ubuntu, `dev` launcher, Termux:Boot
+server start), `workbench-setup.sh` (inside Ubuntu: Node 22, gh, herdr, Claude/Codex/Gemini/OpenCode/
+Copilot, Hermes via its Linux installer, `dev-update` every 12 h, `ship` = commit + push with retries),
+and `radar.sh` (self-updating scan, repair and redacted report to the private repo `<owner>/phone-radar`).
+**Symptoms seen on the device and their causes:**
+- proot `new_child: assertion failed` / signal 6 in herdr panes -> `PROOT_NO_SECCOMP=1` in `dev`, boot and radar (not yet confirmed on the device).
+- `PREFIX: unbound variable` -> radar was pasted inside Ubuntu; radar now says "type exit" when `$PREFIX/bin/pkg` is missing.
+- `proot-distro: .../python3.14: bad interpreter`, then `CANNOT LINK EXECUTABLE "curl"` -> radar installed one package on a
+  stale Termux (partial upgrade). Recovered with `apt update && apt full-upgrade -y`; radar now does a full apt upgrade when
+  proot-distro does not run, never a single-package install.
+- `bash: /root/.workbench/setup.sh: No such file` -> radar wrote into `installed-rootfs/ubuntu` on disk, but the current
+  proot-distro keeps the container elsewhere; files now go in through stdin of `proot-distro login`.
+**Lesson:** on Termux, never install single packages on a stale system (always full-upgrade first), and never write into
+a proot-distro container by its disk path. Hermes' own Termux APT package is marked broken upstream (2026-10), so Hermes
+runs inside the Ubuntu workbench. Not verified on the device: herdr agent detection under proot, the Hermes reinstall.
