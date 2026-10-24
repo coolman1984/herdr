@@ -9,6 +9,8 @@ WB="$HOME/.workbench"
 export DEBIAN_FRONTEND=noninteractive
 # Hermes' installer refuses Termux; this is a glibc Ubuntu, so hide Termux markers.
 unset TERMUX_VERSION PREFIX || true
+# keep Termux's bionic binaries (python3.14) out of glibc installs, see radar.sh
+PATH="$(printf %s "$PATH" | tr : "\n" | grep -v "^/data/data/com.termux" | paste -sd: -)"
 export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$PATH"
 
 say() { printf '\n\033[1;35m[workbench] %s\033[0m\n' "$*"; }
@@ -46,6 +48,8 @@ cat > /usr/local/bin/dev-update <<'UPD'
 # dev-update --now  -> update everything now
 WB="$HOME/.workbench"; . "$WB/tools.conf"
 unset TERMUX_VERSION PREFIX || true
+# keep Termux's bionic binaries (python3.14) out of glibc installs, see radar.sh
+PATH="$(printf %s "$PATH" | tr : "\n" | grep -v "^/data/data/com.termux" | paste -sd: -)"
 export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.cargo/bin:$PATH" DEBIAN_FRONTEND=noninteractive
 stamp="$WB/last-update"
 if [ "${1:-}" != "--now" ]; then
