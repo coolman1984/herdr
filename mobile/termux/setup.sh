@@ -2,12 +2,12 @@
 # One-command Android workbench: Termux + an Ubuntu userland (proot) holding
 # herdr, git, gh, node, the coding-agent CLIs and Hermes Agent.
 #
-#   curl -fsSL https://raw.githubusercontent.com/coolman1984/herdr/master/mobile/termux/setup.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/coolman1984/herdr/main/mobile/termux/setup.sh | bash
 #
 # Safe to re-run: every step skips work that is already done.
 set -euo pipefail
 
-REPO_RAW="${HERDR_MOBILE_RAW:-https://raw.githubusercontent.com/coolman1984/herdr/${HERDR_MOBILE_REF:-master}/mobile/termux}"
+REPO_RAW="${HERDR_MOBILE_RAW:-https://raw.githubusercontent.com/coolman1984/herdr/${HERDR_MOBILE_REF:-main}/mobile/termux}"
 DISTRO="${HERDR_MOBILE_DISTRO:-ubuntu}"
 ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/$DISTRO"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"

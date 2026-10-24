@@ -11,7 +11,7 @@
 2. افتح Termux والصق:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/coolman1984/herdr/claude/termux-android-dev-setup-ksbbus/mobile/termux/setup.sh | HERDR_MOBILE_REF=claude/termux-android-dev-setup-ksbbus bash
+curl -fsSL https://raw.githubusercontent.com/coolman1984/herdr/main/mobile/termux/setup.sh | bash
 ```
 
 3. هيسألك عن اسمك وإيميلك، ويديك كود تسجيل دخول GitHub تفتحه في المتصفح.
