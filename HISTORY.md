@@ -659,3 +659,19 @@ first, buggy version). Live: `herdr-headless.ps1 -Profile ds-flash -Task ...` ->
 `master` = 5bd900d8 before and after.
 **Lesson:** #55. An honest agent disclosed its own mistake (a case-insensitive name clash
 started the real cline twice) and added a test that catches it - keep asking for that.
+
+## Phase 31 - Owner rules: no own subagents, headless research, close panes, no browser (2026-10-24)
+
+**Symptom:** the lead used an in-session Claude subagent (its own account's tokens); headless
+Argon research drove the owner's Chrome (31 processes / 3.5 GB -> 23 / 2.0 GB after stopping it);
+a finished trial pane (Gemini Flash) stayed open overnight; the PC is short on RAM and disk.
+**Fix (rules, CLAUDE.md section 0 + AGENTS.md):**
+- Claude helpers only on the owner's OTHER accounts (1984 / 2040), in panes beside the lead;
+  never subagents of the lead's own session.
+- Research runs headless (Codex `--search exec`); only coding, review and fix work gets a pane.
+- Close every pane once its task is done and no more work is planned; remove merged worktrees and
+  temp copies.
+- AGENTS.md rule 7: no browser tools for delegates. Antigravity's route into Chrome is the
+  "Antigravity Browser Extension" (owner's setting, chrome://extensions).
+**Proof:** Chrome RAM before/after stopping Argon (above); `t-gflash` pane graded (41/41) and closed.
+**Lesson:** #56.

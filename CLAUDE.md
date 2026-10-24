@@ -18,6 +18,16 @@ stays only in a chat.
 
 **Agent panes (owner's rule, 2026-10-23):** only Codex, Antigravity and Claude agents get panes,
 split vertically to the right of the lead. Cline models run headless with no pane (LESSONS #47).
+Only coding, review and fix work gets a pane; research runs headless.
+**Close finished panes (owner's rule, 2026-10-24):** the PC is short on RAM and disk; the lead
+stops every pane it opened as soon as the task is done and no more work is planned, and removes
+merged worktrees and its temp copies.
+
+**Claude helpers and research (owner's rules, 2026-10-24):** the lead never uses subagents of
+its own Claude session. Claude helpers run on the owner's OTHER Claude accounts (`-Account 1984`
+/ `2040`, `start next`) in panes beside the lead, so each account's usage stays separate.
+Research is done headless by Codex GPT-6.1-Sol medium and Gemini 4 Argon High (results in
+files); the lead searches in parallel and adjusts its decisions when their results arrive.
 
 ## 1. The update rule
 

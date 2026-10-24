@@ -29,6 +29,8 @@ these rules apply.
 7. **Safety.** Never read or print secrets (`auth.json`, credentials, tokens). Never touch the
    owner's live Herdr session except as the spec allows; test in an isolated session. No git
    commit / push / reset / stash / checkout unless the spec says so. Do not start other agents.
+   **No browser tools** (no Chrome/Edge automation, no browser extension, no opening web pages):
+   the PC is short on RAM (LESSONS #56). Use the CLI's own server-side web search if research is needed.
 8. **Do not loop.** If you re-read or re-edit the same files twice without progress, stop and
    report what blocks you and the one question that would unblock you.
 9. **Answer exactly in the spec's format**, findings first and ordered by severity for reviews,

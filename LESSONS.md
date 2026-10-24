@@ -196,3 +196,11 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 55. **A one-word Cline prompt fails headless:** .NET `ArgumentList` passes a word without spaces
     unquoted, and cline answers `Prompt text must be passed as a single quoted argument` (exit 1).
     Real prompts (with spaces) are fine (found by DeepSeek, 2026-10-23).
+56. **Antigravity research drives the owner's Chrome:** `agy -p <research brief> --mode plan` used
+    its browser tools in the owner's running Chrome - stopping it dropped Chrome from 31 processes /
+    3.5 GB to 23 / 2.0 GB (2026-10-24). `agy --help` has no switch to turn the browser off. The PC
+    is short on RAM: do research with `codex --search exec ...` (OpenAI's server-side web search,
+    no local browser); use Antigravity only for coding/review, or when the owner accepts the RAM. Its route into Chrome is the
+    "Antigravity Browser Extension" in Chrome's Default profile (the owner can switch it off in
+    chrome://extensions). It also keeps its own Edge profiles under `~\.gemini\antigravity-cli\brain\<id>\scratch`
+    (521 MB from one 2026-10-17 session).
