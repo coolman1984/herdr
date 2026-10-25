@@ -1147,6 +1147,10 @@ installed CLIs; Gemini/Agy -> `antigravity-cli`). `HERDR_HOME` defaults to the r
 (not `I:\herdr`). Verified: `bash -n` on all scripts, `install.sh --dry-run`, real
 `install.sh` on the box, `herdr-agents tools`.
 **Lesson:** #72.
+**Review (2026-10-25):** `install.sh --dry-run` printed "copied ..." / "linked ..." for files it did not touch; those lines
+now print only on a real run. Open points for the owner, unchanged: `install.sh` runs `herdr integration install` itself
+(CLAUDE.md safety rule 4 says agents give that command to the owner instead), and it copies the repo's `AGENTS.md` to
+`~/.codex/AGENTS.md`, which makes these folder rules Codex's global rules on that machine.
 
 **Merge verification (2026-10-25, Windows):** merged PR #11 into current main,
 preserving both documentation histories and assigning the incoming Linux lesson #72
