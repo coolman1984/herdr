@@ -1135,3 +1135,27 @@ Python 3.14 (Ubuntu 25.10 has 3.13), so `uv python find --system` picked Termux'
 inside a glibc Ubuntu, which ends in `cannot import name 'YAML' from 'ruamel.yaml'`. Fix: radar's workbench commands,
 `workbench-setup.sh` and `dev-update` drop `/data/data/com.termux/*` from PATH; radar refreshes `dev-update` from main.
 The uv-cache and ownership guesses in the earlier entries were not the cause.
+
+## Phase 46 - Linux box port (2026-10-24)
+
+**Goal:** run the owner's Herdr fork on a Linux PC with the same agent profiles and a
+six-column team layout (claude, codex, grok, gemini, cline, opencode).
+**Fix:** `linux/` - `herdr-agents` and `herdr-layout` (bash, `agents.json` + jq/node),
+`install.sh` (symlinks into `~/.local/bin`, copies skills and `AGENTS.md` only when missing,
+seeds `~/.config/herdr/config.toml` only when absent, `herdr integration install` for
+installed CLIs; Gemini/Agy -> `antigravity-cli`). `HERDR_HOME` defaults to the repo root
+(not `I:\herdr`). Verified: `bash -n` on all scripts, `install.sh --dry-run`, real
+`install.sh` on the box, `herdr-agents tools`.
+**Lesson:** #72.
+
+**Merge verification (2026-10-25, Windows):** merged PR #11 into current main,
+preserving both documentation histories and assigning the incoming Linux lesson #72
+because main already uses #70 and #71. Git Bash syntax checks pass for all three
+scripts; installer and layout dry runs exit 0. No installation or agent launch ran.
+Existing offline suites: batch A 48/48, batch B 18/18, dialog guard 26/26,
+review fixes 25/25 and round2 18/18 pass. Headless is 8/9 (temporary path not found)
+and Cline HUD is 5/11; these PowerShell sources/tests are unchanged by this PR.
+The pre-merge main setup check has 28 failures: foreign I: key paths and master/live
+mismatches (20), stale installed skill copies (6), and existing duplicate history/lesson
+numbers (2). These machine setup and baseline issues were not repaired by this merge.
+Linux runtime behaviour remains unverified on this Windows PC.

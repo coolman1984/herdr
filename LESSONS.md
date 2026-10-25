@@ -307,3 +307,10 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     `/data/data/com.termux/files/usr`, and a PATH entry for it lets a glibc installer find a bionic binary
     (Termux's `python3.14`). Hermes then detected Android and built an unusable `linux-arm64-bionic` runtime.
     Filter `^/data/data/com.termux` out of PATH before installing or updating anything in the workbench.
+
+72. **Linux port of this setup lives in `linux/`**, not the Windows `install.ps1` path.
+    `HERDR_HOME` is the repo directory; state and config use XDG (`~/.config/herdr/`,
+    `~/.herdr-accounts/<tool>/<name>`). Bash `local a="$1" b="$2"` evaluates every RHS in
+    one `local` line before any name exists - split assignments. Herdr's Gemini CLI integration
+    target is `antigravity-cli` (profile `gemini` runs `agy`). Cline has no `herdr integration`
+    target yet.
