@@ -491,7 +491,10 @@ cmd_stop() {
   printf 'STOPPED %s (pane %s closed or gone)\n' "$target" "$pane_id"
 }
 
+usage() { sed -n '3,7p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
 main() {
+  case "${1:-}" in -h|--help|help) usage; return 0 ;; esac
   [[ -f "$REGISTRY" ]] || fail "Cannot read agents.json at $REGISTRY"
   command -v "$HERDR_BIN" >/dev/null 2>&1 || fail "Herdr not found ($HERDR_BIN)."
   have_jq || command -v node >/dev/null 2>&1 || fail "Need jq or node to read agents.json."

@@ -1163,3 +1163,22 @@ The pre-merge main setup check has 28 failures: foreign I: key paths and master/
 mismatches (20), stale installed skill copies (6), and existing duplicate history/lesson
 numbers (2). These machine setup and baseline issues were not repaired by this merge.
 Linux runtime behaviour remains unverified on this Windows PC.
+
+## Phase 46 - Phone workbench made lighter and faster (2026-10-25)
+
+**Owner order:** "do everything yourself, develop the program a lot, make it light and fast on the phone".
+**Fix:**
+- `radar` measures the workbench once a week (200 commands with and without `PROOT_NO_SECCOMP`) and keeps the
+  faster mode only when it wins by at least 30 %, because the crash-safe mode avoided a `new_child` assertion once.
+  The choice lives in `~/.radar/proot.env`, read by `radar`, `dev` and the boot script; `radar safe` pins the safe
+  mode, `radar fast` measures again. Tested against a stub proot (fast 433 ms vs safe 632 ms → fast).
+- Quick scan by default: no socket probes (the socket-length idea was disproved), no disk-wide `find`, no
+  `hermes doctor`/`dump`; those run with `radar deep`.
+- herdr on the phone: radar appends `[advanced] scrollback_limit_bytes = 2000000` (was 10 MB per pane) and
+  `[ui.sound] enabled = false` to `~/.config/herdr/config.toml` when those tables are absent; herdr 0.9.5 logged
+  `pane_scrollback_limit_bytes=2000000` with that file here.
+- `dev-update` runs at the lowest CPU/disk priority, the apt upgrade at most weekly, every 24 h by default (was 12).
+- `linux/herdr-agents --help` prints usage instead of failing when herdr is missing.
+- The owner's open points from the Phase 45 review stay as they are (owner-run installer, owner's choice).
+**Not verified on the device:** the measured mode, the herdr config, the lighter updates.
+

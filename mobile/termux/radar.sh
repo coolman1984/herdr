@@ -3,9 +3,12 @@
 # a redacted report to the private GitHub repo <you>/phone-radar so the
 # workbench can be diagnosed remotely.
 #
-#   radar           scan + repair + report + open herdr
-#   radar scan      scan + report (repairs only broken Termux packages)
+#   radar           scan + repair + report + open herdr (quick scan)
+#   radar scan      quick scan + report (repairs only broken Termux packages)
+#   radar deep      full scan (Hermes doctor/dump, every binary on disk) + repair
 #   radar hermes    force a clean Hermes reinstall (keeps ~/.hermes settings)
+#   radar fast      measure proot speed again and pick the faster safe mode
+#   radar safe      always use proot's slower crash-safe mode (if you ever see "assertion failed")
 #
 # radar updates itself from main on every run, so fixes ship by editing this file.
 set -uo pipefail
@@ -25,7 +28,11 @@ MODE="${1:-fix}"
 STATE="$HOME/.radar"; mkdir -p "$STATE"
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
 REPORT="$STATE/report-$STAMP.md"
-export PROOT_NO_SECCOMP=1   # works around proot's "new_child: assertion failed" crash
+# proot mode, chosen by `speed` below and shared with the dev launcher and boot script:
+# PROOT_NO_SECCOMP=1 avoided a "new_child: assertion failed" crash seen once on the device,
+# but makes every system call stop in proot; seccomp mode is faster when it is stable.
+PROOT_ENV="$STATE/proot.env"
+if [ -f "$PROOT_ENV" ]; then . "$PROOT_ENV"; else export PROOT_NO_SECCOMP=1; fi
 
 ok()   { printf '  \033[32m✔\033[0m %s\n' "$*"; }
 bad()  { printf '  \033[31m✘\033[0m %s\n' "$*"; }
@@ -95,7 +102,8 @@ scan() {
 
   wb_alive || { bad "workbench does not start"; return; }
   section "workbench"
-  wb 'set +e
+  wb "RADAR_DEEP=$DEEP"'
+    set +e
     echo "os: $(. /etc/os-release; echo $PRETTY_NAME)"
     for t in herdr git gh node npm python3 claude codex gemini opencode copilot hermes; do
       if command -v $t >/dev/null; then printf "%-8s %s\n" $t "$(timeout 30 $t --version 2>&1 | head -1)"
@@ -105,20 +113,9 @@ scan() {
     echo "git user: $(git config --global user.name) <$(git config --global user.email | sed "s/^\(..\).*@/\1***@/")>"
     echo "herdr server running: $(pgrep -x herdr >/dev/null && echo yes || echo no)"
     echo "HERDR_SOCKET_PATH in login profile: $(grep -hs HERDR_SOCKET_PATH /etc/profile.d/*.sh | head -1)"
-    # does a herdr server answer on a socket at this path? (isolated config dir)
-    probe() {
-      rm -rf "$1"; mkdir -p "$1"
-      env -u HERDR_SOCKET_PATH XDG_CONFIG_HOME="$1" timeout 25 herdr server >"$1.log" 2>&1 &
-      local pid=$! r=no i
-      for i in $(seq 1 20); do
-        sleep 1
-        python3 -c "import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(2); s.connect(sys.argv[1])" "$1/herdr/herdr-client.sock" 2>/dev/null && { r="yes (${i}s)"; break; }
-      done
-      kill $pid 2>/dev/null; wait $pid 2>/dev/null
-      echo "herdr socket probe $1: $r"; [ "$r" = no ] && tail -3 "$1.log"
-      rm -rf "$1" "$1.log"
-    }
-    if command -v herdr >/dev/null; then probe /tmp/rprobe; probe /root/.rprobe-long; fi
+    echo "herdr mobile tuning: $(grep -hs "radar mobile" ~/.config/herdr/config.toml | head -1)"
+    echo "memory: $(free -m 2>/dev/null | awk "/Mem:/{print \$3\" MB used of \"\$2}")"
+    [ "$RADAR_DEEP" = 1 ] || exit 0
     echo "binaries named herdr/hermes:"; find / -xdev \( -path /proc -o -path /sys -o -path /data -o -path /storage -o -path /sdcard \) -prune -o -type f \( -name herdr -o -name hermes \) -print 2>/dev/null | head -10
     echo "PATH lines in shell files:"; grep -hs "PATH" ~/.bashrc ~/.profile ~/.bash_profile /etc/profile.d/*.sh | head -10
     echo "dpkg audit: $(dpkg --audit 2>&1 | head -3)"
@@ -135,6 +132,30 @@ scan() {
   ' | redact >> "$REPORT"
   endsection
   grep -q "assertion" "$REPORT" && log "NOTE: proot assertion seen during scan"
+  log "proot mode: $(sed -n 's/.*mode=\([a-z]*\).*/\1/p' "$PROOT_ENV" 2>/dev/null | head -1 | grep . || echo safe) ($(head -1 "$PROOT_ENV" 2>/dev/null | sed 's/^# //' || echo 'not measured yet'))"
+}
+
+# --- proot speed: measure both modes once a week, keep the faster one -----
+# Seccomp mode must win clearly (>= 30 %) because the safe mode avoided a crash once.
+speed() {
+  [ -f "$STATE/proot-safe" ] && { log "proot mode: safe (owner chose radar safe)"; return; }
+  if [ "$MODE" != fast ] && [ -f "$PROOT_ENV" ] && [ -z "$(find "$PROOT_ENV" -mtime +7 2>/dev/null)" ]; then return; fi
+  step "measuring workbench speed (two short runs)"
+  bench() {
+    local t0 t1; t0=$(date +%s%N)
+    env "$@" timeout 180 "$PREFIX/bin/proot-distro" login "$DISTRO" -- \
+      bash -c 'for i in $(seq 200); do /bin/true; done; echo __RADAR_OK__' 2>/dev/null | grep -q __RADAR_OK__ || { echo fail; return; }
+    t1=$(date +%s%N); echo $(( (t1 - t0) / 1000000 ))
+  }
+  local safe fast; safe=$(bench PROOT_NO_SECCOMP=1); fast=$(bench -u PROOT_NO_SECCOMP)
+  if [ "$fast" != fail ] && [ "$safe" != fail ] && [ $(( fast * 10 )) -le $(( safe * 7 )) ]; then
+    printf '# radar %s: mode=fast (seccomp) %s ms vs safe %s ms for 200 commands\nunset PROOT_NO_SECCOMP\n' "$STAMP" "$fast" "$safe" > "$PROOT_ENV"
+    unset PROOT_NO_SECCOMP; ok "fast mode: ${fast} ms vs ${safe} ms"
+  else
+    printf '# radar %s: mode=safe %s ms vs seccomp %s ms for 200 commands\nexport PROOT_NO_SECCOMP=1\n' "$STAMP" "$safe" "$fast" > "$PROOT_ENV"
+    export PROOT_NO_SECCOMP=1; ok "safe mode kept: ${safe} ms vs ${fast} ms"
+  fi
+  log "proot speed: safe=${safe} ms seccomp=${fast} ms (200 commands)"
 }
 
 # Termux packages must move together: installing one package on a stale
@@ -174,12 +195,20 @@ repair() {
     curl -fsSL "$RAW/setup.sh" | bash >> "$REPORT" 2>&1
   fi
 
-  for f in "$PREFIX/bin/dev" "$HOME/.termux/boot/10-herdr-server"; do
-    if [ -f "$f" ] && ! grep -q PROOT_NO_SECCOMP "$f"; then
-      sed -i '2i export PROOT_NO_SECCOMP=1  # radar: proot new_child crash workaround' "$f"
-      log "added proot crash workaround to $f"
-    fi
-  done
+  speed
+
+  # herdr on a phone: less scrollback per pane (RAM), no sounds (no audio in proot)
+  wb 'f=~/.config/herdr/config.toml; mkdir -p ~/.config/herdr; touch "$f"
+      grep -q "radar mobile" "$f" && exit 0
+      python3 - "$f" <<"PY2"
+import sys, tomllib
+p = sys.argv[1]; cfg = tomllib.load(open(p, "rb"))
+add = ["", "# radar mobile tuning (2026-10-25): delete a section to undo it"]
+if "advanced" not in cfg: add += ["[advanced]", "scrollback_limit_bytes = 2000000"]
+if "sound" not in cfg.get("ui", {}): add += ["[ui.sound]", "enabled = false"]
+open(p, "a").write("\n".join(add) + "\n")
+print("herdr mobile tuning applied")
+PY2' | tail -2 >> "$REPORT"
 
   printf '%s\n' '# radar: herdr sockets must stay under the 107-byte unix socket limit' \
     'export HERDR_SOCKET_PATH=/tmp/herdr.sock' > "$STATE/herdr-sockets.sh"
@@ -243,7 +272,7 @@ hermes: STILL BROKEN"
 
   # the herdr client starts its own server; radar only makes sure the
   # Termux-side launchers (dev, boot script) exist and carry the proot fix
-  if ! grep -qs PROOT_NO_SECCOMP "$PREFIX/bin/dev" || [ ! -x "$HOME/.termux/boot/10-herdr-server" ]; then
+  if ! grep -qs 'radar/proot.env' "$PREFIX/bin/dev" || [ ! -x "$HOME/.termux/boot/10-herdr-server" ]; then
     curl -fsSL "$RAW/setup.sh" -o "$STATE/setup.sh" && bash "$STATE/setup.sh" --launchers >> "$REPORT" 2>&1 && log "installed dev launcher and boot script"
   fi
   endsection
@@ -279,6 +308,12 @@ upload() {
 }
 
 # --- run ------------------------------------------------------------------
+DEEP=0; [ "$MODE" = deep ] && DEEP=1
+case "$MODE" in
+  safe) touch "$STATE/proot-safe"; printf '# radar: mode=safe chosen by the owner\nexport PROOT_NO_SECCOMP=1\n' > "$PROOT_ENV"
+        ok "proot safe mode from now on (radar fast to measure again)"; exit 0 ;;
+  fast) rm -f "$STATE/proot-safe" ;;
+esac
 termux_health
 scan
 if [ "$MODE" != "scan" ]; then
@@ -291,7 +326,7 @@ upload || echo "report saved: ~/storage/downloads/radar-report.md"
 
 step "summary"
 # summarize the final state only (after repair when there was one)
-{ grep -q '^# after repair' "$REPORT" && sed -n '/^# after repair/,$p' "$REPORT" || cat "$REPORT"; } | grep -oE "herdr socket probe /tmp[^ ]*: [a-z]+|^[a-z]+ +MISSING|NOT signed-in|hermes: (STILL BROKEN|WORKING)|assertion failed|Error code: 402[^,]*" | sort -u | sed 's/^/  /'
+{ grep -q '^# after repair' "$REPORT" && sed -n '/^# after repair/,$p' "$REPORT" || cat "$REPORT"; } | grep -oE "proot mode: [a-z]+|^[a-z]+ +MISSING|NOT signed-in|hermes: (STILL BROKEN|WORKING)|assertion failed|Error code: 402[^,]*" | sort -u | sed 's/^/  /'
 hermes_ok && ok "Hermes works" || bad "Hermes still broken (the report tells Claude why)"
 if [ "$MODE" != "scan" ] && [ -t 0 ]; then
   echo; echo "opening herdr..."; sleep 2
