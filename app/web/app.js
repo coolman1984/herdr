@@ -7,6 +7,8 @@ import * as P from './panels.js';
 import * as Q from './parity.js';
 import * as G from './guard.js';
 import { initSplits, applySizes, layoutGrid, clearGrid } from './split.js';
+import { areaCells, sizeReporter } from './herdrsize.js';
+import { cellSize } from './screen.js';
 
 let prefs = {}, prefsTimer = 0, prefsReady = false, prefsWrite = Promise.resolve();
 function savePreferences() {
@@ -318,11 +320,24 @@ function renderMain() {
   }
   for (const h of grid.querySelectorAll('.divider')) if (!h.classList.contains('gd')) h.remove();   // grid dividers (.gd) stay
   if (lay) { clearGrid(grid); Q.placeLayout(grid, lay, cards); } else layoutGrid(grid, list.length, S.zoom ? 1 : S.cols);
+  herdrSize.soon();
   const hiddenN = [...S.panes.keys()].filter((k) => S.hidden.has(k)).length;
   $('#grid-note').textContent = S.view === 'layout' && !lay && !S.zoom ? 'Herdr layout view: pick a tab in the left rail (or a space) to see its real splits.'
     : list.length === 0 && S.panes.size ? 'No panes in this view.' : hiddenN ? `${hiddenN} hidden pane(s) - Ctrl+K "Show hidden panes"` : '';
 }
 
+// Herdr's pane area follows the cards (herdrsize.js, sizer.go). A zoomed card is not a Herdr split,
+// and safe mode writes nothing, so neither sends a size.
+let sizeError = '';
+const herdrSize = sizeReporter(() => {
+  if (S.zoom || S.safe || S.writeBlocked || document.hidden) return null;
+  const boxes = [...document.querySelectorAll('#grid .card:not([hidden]) .screen')].map((s) => s.getBoundingClientRect()).filter((r) => r.width > 0);
+  return areaCells(boxes, cellSize());
+}, (cols, rows) => api.size(cols, rows).then((r) => {
+  if (r.error && r.error !== sizeError) toast('Herdr pane size not set: ' + r.error, 'warn');
+  sizeError = r.error || '';
+  if (!r.attached) setTimeout(() => { herdrSize.reset(); herdrSize.soon(); }, 10000);   // retry later, not on every render
+}));
 const KEYS = [['Esc', 'esc'], ['Ctrl+C', 'ctrl+c'], ['Enter', 'enter'], ['↑', 'up', 'Up'], ['↓', 'down', 'Down'], ['Tab', 'tab'], ['y', 'y'], ['n', 'n']];
 const ibtn = (name, label, onclick, extra = {}) => el('button', { type: 'button', class: 'icon', 'aria-label': label, 'data-tip': label, onclick, ...extra }, icon(name));
 function makeCard(p) {
@@ -634,6 +649,8 @@ async function boot() {
   P.applyLook();
   bindTop();
   initSplits(LS);
+  if (globalThis.ResizeObserver) new ResizeObserver(() => herdrSize.soon()).observe($('#grid'));
+  document.addEventListener('visibilitychange', () => herdrSize.soon());
   try { await initApi(); } catch (e) { toast('Mock failed to load: ' + e.message, 'error'); return; }
   window.addEventListener('error', (e) => toast('Page error: ' + e.message, 'error'));
   window.addEventListener('unhandledrejection', (e) => toast('Page error: ' + (e.reason?.message || e.reason), 'error'));

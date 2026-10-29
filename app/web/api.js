@@ -12,7 +12,7 @@ export const ROUTES = {
   tasks: '/api/tasks', taskRead: '/api/tasks/read', usage: '/api/usage', health: '/api/health',
   closeFinished: '/api/panes/close-finished', signin: '/api/signin', signinOpen: '/api/signin/open',
   git: '/api/git', runs: '/api/runs', runRead: '/api/runs/read', docs: '/api/docs',
-  lesson: '/api/lessons/append', check: '/api/check', readOnly: '/api/read-only', accounts: '/api/accounts',
+  lesson: '/api/lessons/append', check: '/api/check', readOnly: '/api/read-only', accounts: '/api/accounts', size: '/api/size',
   // parity requests R8-R16 (API-REQUESTS.md); a 404 means "not built yet" and the UI says so
   paneFocus: '/api/pane/focus', paneZoom: '/api/pane/zoom', resize: '/api/pane/resize', swap: '/api/pane/swap', move: '/api/pane/move',
   tabCreate: '/api/tab/create', tabRename: '/api/tab/rename', tabClose: '/api/tab/close',
@@ -92,6 +92,7 @@ export const api = {
   raw: (key, text, keys = []) => post(ROUTES.raw, { key, text, keys }),
   prefs: (options) => get(ROUTES.prefs, options),
   savePrefs: (prefs) => post(ROUTES.prefs, { prefs }),
+  size: (cols, rows) => post(ROUTES.size, { cols, rows }),
   scopeBaseline: (id, repo, allowed) => post(ROUTES.scopeBaseline, { id, repo, allowed }),
   scopeCheck: (id, options) => get(ROUTES.scopeCheck + qs({ id }), options),
   // expect: 'agent' (default) or 'shell'; the backend refuses agent text when only a shell is left.

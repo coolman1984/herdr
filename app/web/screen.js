@@ -39,6 +39,9 @@ document.fonts?.ready.then(() => { charRatio = 0; for (const v of views) { v.fs 
 // shrunk; anything wider than the card wraps.
 export const fitState = { on: true, base: 13 };
 const PAD = 24;   // .trow left + right padding
+export const SCREEN_PAD = PAD;
+// One terminal cell at font size fs (row height follows --row-h = round(fs * 1.5)).
+export function cellSize(fs = fitState.base) { return { w: fs * monoRatio(), h: Math.round(fs * 1.5) }; }
 
 export class ScreenView {
   constructor(box, requestPaint, signal) {

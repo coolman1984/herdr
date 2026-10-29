@@ -19,6 +19,7 @@ import (
 
 type App struct {
 	herdr                           Herdr
+	sizer                           *Sizer // nil: Deck does not size Herdr's tabs (tests, HERDR_BIN)
 	token, origin, root             string
 	sessionName, herdrBin           string
 	profiles                        map[string]Profile
@@ -196,6 +197,27 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.setVisibleLocked("legacy", v.Visible)
 		a.mu.Unlock()
 		respond(w, 200, map[string]bool{"ok": true})
+	case "/api/size":
+		// The page's card area in terminal cells; Herdr sizes the panes from it (sizer.go).
+		var v struct {
+			Cols int `json:"cols"`
+			Rows int `json:"rows"`
+		}
+		if !readBody(w, r, &v) {
+			return
+		}
+		if v.Cols < 20 || v.Cols > 1000 || v.Rows < 5 || v.Rows > 500 {
+			failHTTP(w, 400, fmt.Errorf("size %dx%d is outside 20x5..1000x500", v.Cols, v.Rows))
+			return
+		}
+		a.mu.Lock()
+		readOnly := a.readOnly
+		a.mu.Unlock()
+		if a.sizer == nil || readOnly {
+			respond(w, 200, SizerStatus{Error: map[bool]string{true: "read-only mode: Deck leaves Herdr's size alone", false: "sizing is off in this Deck"}[readOnly]})
+			return
+		}
+		respond(w, 200, a.sizer.Set(uint16(v.Cols), uint16(v.Rows)))
 	case "/api/read-only":
 		var v struct {
 			Enabled bool `json:"enabled"`

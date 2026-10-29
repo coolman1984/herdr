@@ -135,6 +135,10 @@ func run(assets fs.FS) error {
 	}
 	app := newApp(bridge, identity, token, origin, root, profiles)
 	app.sessionName, app.herdrBin = *session, bin
+	if bridge.Socket != nil {
+		app.sizer = &Sizer{Path: clientSocketPath(identity), Dial: dialPipe}
+		defer app.sizer.Close()
+	}
 	app.debug = *debugMode
 	defer app.closeJobs()
 	var edge string
