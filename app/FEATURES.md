@@ -36,7 +36,9 @@ NOT DONE. Endpoint names refer to `API-REQUESTS.md`.
 
 ```
 +--------------------------------------------------------------------------------+
-| Herdr Deck  [lab] | + Agent  + Shell  Team v | Usage 41% | Inbox 2 | Ctrl+K  ?  |  top bar
+| [=] Herdr Deck [lab] | +Agent Shell Folder Team | 1 2 3 Splits [#] | 1 blocked 2 working  |
+|   Inbox 2  Usage 41% ............................ Search  Commands Ctrl K  ...More  Safe   |  top bar
+|   (round 5: 48 px, 4 groups; More = board, agents hub, tools, spaces, settings, keys, stop all)|
 +-----------+--------------------------------------------------------------------+
 | WORKSPACES| +-------------------------------+ +-------------------------------+ |
 | * herdr   | | claude-2040  I:\herdr  opus   | | codex-1  I:\herdr  gpt-6.1    | |

@@ -333,7 +333,7 @@ try {
                         Set-DeckSize $width 900
                         Open-DeckPage ("?theme=$theme"+$(if($mode -eq 'mock'){'&mock=1'}else{''}))
                         JS '(await import("./ui.js")).toast("Layout blocked fixture", "blocked", 60000)' | Out-Null
-                        $measure=JS '(()=>{const h=document.querySelector("#btn-help").getBoundingClientRect(),ts=[...document.querySelectorAll(".toast")].map(e=>e.getBoundingClientRect()),hs=[...document.querySelectorAll(".card:not([hidden]) .card-h")].map(e=>e.getBoundingClientRect());return {width:innerWidth,scroll:document.documentElement.scrollWidth,help:h.left>=0&&h.right<=innerWidth,overlap:ts.some(t=>hs.some(h=>t.left<h.right&&t.right>h.left&&t.top<h.bottom&&t.bottom>h.top)),theme:document.documentElement.dataset.theme,cards:hs.length}})()'
+                        $measure=JS '(()=>{const h=document.querySelector(".top .safe-t").getBoundingClientRect(),ts=[...document.querySelectorAll(".toast")].map(e=>e.getBoundingClientRect()),hs=[...document.querySelectorAll(".card:not([hidden]) .card-h")].map(e=>e.getBoundingClientRect());return {width:innerWidth,scroll:document.documentElement.scrollWidth,help:h.left>=0&&h.right<=innerWidth,overlap:ts.some(t=>hs.some(h=>t.left<h.right&&t.right>h.left&&t.top<h.bottom&&t.bottom>h.top)),theme:document.documentElement.dataset.theme,cards:hs.length}})()'
                         $row[$mode]=$measure
                         if($width -eq 1440 -and $mode -eq 'lab') { Save-DeckShot "r3-lab-$theme" | Out-Null }
                         Assert ($measure.scroll -le $width -and $measure.help -and -not $measure.overlap -and $measure.theme -eq $theme -and $measure.cards -gt 0) (J $measure)

@@ -1,6 +1,6 @@
 // Herdr Deck frontend: store, event stream, pane grid / Herdr layout, rail, keyboard. No framework.
 import { api, initApi, MOCK } from './api.js';
-import { el, $, toast, fail, confirm, ask, copyText, sameValues, queuePatch, openMenu } from './ui.js';
+import { el, $, toast, fail, confirm, ask, copyText, sameValues, queuePatch, openMenu, bindMenu } from './ui.js';
 import { ScreenView } from './screen.js';
 import { icon, glyph, ring } from './icons.js';
 import * as P from './panels.js';
@@ -243,21 +243,26 @@ function railItem(label, sub, status, active, onclick, cls = '') {
 }
 function renderRail() {
   document.body.classList.toggle('no-rail', !S.rail);
+  $('#btn-rail').setAttribute('aria-pressed', String(S.rail));
   const nav = $('#rail-nav'); nav.textContent = '';
   const all = [...S.panes.values()];
   const ul = el('ul', { role: 'list' });
-  ul.append(railItem(`All panes`, `${all.length} panes`, worst(all.map(statusOf)), !S.filter.ws, () => setFilter(null, null), 'all'));
+  // One active row: the zoomed agent when it has a row, else the space / tab filter.
+  const zoomRow = S.zoom && S.panes.has(S.zoom) && isAgent(S.panes.get(S.zoom)) ? S.zoom : null;
+  ul.append(railItem(`All panes`, `${all.length} panes`, worst(all.map(statusOf)), !S.filter.ws && !zoomRow, () => setFilter(null, null), 'all'));
   for (const w of S.workspaces) {
     const wp = all.filter((p) => p.workspace_id === w.workspace_id);
     const wt = w.tokens || {};
     const sub = [wt.branch || w.branch, wt.git_status || w.git_status].filter(Boolean).join(' ');
     ul.append(railItem(w.label || w.workspace_id, sub || `${wp.length} panes`, worst(wp.map(statusOf)),
-      S.filter.ws === w.workspace_id && !S.filter.tab, () => setFilter(w.workspace_id, null), 'ws'));
+      S.filter.ws === w.workspace_id && !S.filter.tab && !zoomRow, () => setFilter(w.workspace_id, null), 'ws'));
     for (const t of S.tabs.filter((t) => (t.workspace_id || t.parent_workspace) === w.workspace_id)) {
       const tp = wp.filter((p) => p.tab_id === t.tab_id);
-      ul.append(railItem(t.label || t.tab_id, '', worst(tp.map(statusOf)), S.filter.tab === t.tab_id, () => setFilter(w.workspace_id, t.tab_id), 'tab'));
+      ul.append(railItem(t.label || t.tab_id, '', worst(tp.map(statusOf)), S.filter.tab === t.tab_id && !zoomRow, () => setFilter(w.workspace_id, t.tab_id), 'tab'));
       for (const p of tp.filter(isAgent)) {   // agent rows: state icon, name, model, ctx (Herdr sidebar rows)
-        ul.append(el('li', {}, el('button', { class: 'rail-agent', onclick: () => { setFilter(w.workspace_id, t.tab_id); zoom(p.key); } },
+        const on = zoomRow === p.key;
+        ul.append(el('li', {}, el('button', { class: 'rail-agent' + (on ? ' active' : ''), 'aria-current': on ? 'true' : null,
+          onclick: () => { setFilter(w.workspace_id, t.tab_id); zoom(p.key); } },
           el('span', { class: 'dot', 'data-s': statusOf(p) }), el('span', { class: 'ra1', text: nameOf(p) }),
           el('span', { class: 'ra2', text: [tok(p).model, tok(p).ctx].filter(Boolean).join(' · ') }))));
       }
@@ -518,8 +523,11 @@ function renderTop() {
   const sig = JSON.stringify(counts);
   if (sig !== lastCounts) {
     lastCounts = sig;
+    // Real buttons: blocked opens the inbox (what needs you), the other states open the agent board.
     $('#counts').replaceChildren(...['blocked', 'working', 'idle', 'done'].filter((s) => counts[s]).map((s) =>
-      el('span', { class: 'count', 'data-s': s, 'aria-label': `${counts[s]} ${s}` }, el('span', { class: 'dot', 'data-s': s }), String(counts[s]), el('span', { class: 'cw', text: ' ' + s }))));
+      el('button', { type: 'button', class: 'count', 'data-s': s, 'aria-label': `${counts[s]} ${s} - open the ${s === 'blocked' ? 'inbox' : 'agent board'}`,
+        'data-tip': s === 'blocked' ? 'Open the inbox' : 'Open the agent board', onclick: () => (s === 'blocked' ? P.inbox() : Q.board()) },
+      el('span', { class: 'dot', 'data-s': s }), String(counts[s]), el('span', { class: 'cw', text: ' ' + s }))));
   }
   const title = (blocked ? `(${blocked}!) ` : '') + 'Herdr Deck';
   if (document.title !== title) document.title = title;
@@ -610,6 +618,8 @@ function bindTop() {
   on('#btn-usage', () => P.usage()); on('#btn-inbox', () => P.inbox()); on('#btn-palette', () => P.palette());
   on('#btn-help', () => Q.help()); on('#btn-search', () => Q.search()); on('#btn-agents', () => Q.agentsHub()); on('#btn-tools', () => Q.tools());
   on('#btn-rail', toggleRail);
+  on('#btn-spaces', () => Q.spaces()); on('#btn-settings', () => Q.settings()); on('#btn-stopall', () => Q.stopAll());
+  bindMenu($('#btn-more'), $('#more-menu'));
   $('#safe').onchange = (ev) => setSafe(ev.target.checked);
   for (const b of document.querySelectorAll('[data-cols]')) b.onclick = () => setCols(+b.dataset.cols);
   for (const b of document.querySelectorAll('[data-view]')) b.onclick = () => setView(b.dataset.view);

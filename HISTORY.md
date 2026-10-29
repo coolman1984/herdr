@@ -1351,8 +1351,40 @@ attached Herdr client terminal (`ClientMessage::Resize`, client protocol) (#95).
 to the card instead.
 **Proof:** `build.ps1` exit 0 (go fmt/vet/test ok); `node --test` web tests 35/35 (5 new in
 `app/tests/web/split.test.mjs`; on HEAD that file fails: `split.js` missing); `verify-ui.ps1` lab +
-mock: 37 PASS / 9 FAIL on HEAD and on this branch, the same 8 pre-existing failures, plus "Divider mouse
-resize" which failed on HEAD and passes now (Herdr layout grid had no height). Screenshots:
+mock: HEAD 37 PASS / 9 FAIL; this branch 38/8, then 39/7 with the scoped selector. Every remaining
+failure also fails on HEAD (spaces join, usage panel, tools drawer, raw typing, broadcast, typed-input
+guard, divider resize; git paths and prompt history fail on some runs). "Divider mouse resize": on HEAD
+no divider existed (the layout grid had no height); now the divider exists and a real mouse drag calls
+`api.resize(key, "right", 9)` (mock probe), but the lab pane geometry does not change - Herdr side, not
+verified further. Its selector `.divider.v` also matched the new rail handle, so it is scoped to
+`#grid .divider.v`. Screenshots:
 `tasks/deck-r5-shots/before-*` and `after-*` (1900x1030 and 1280x720, 2 and 4 cards, rail on/off,
 after drags, drawer drag, Splits view, double-click reset).
 **Lesson:** #94, #95, #96.
+
+## Phase 53 - Deck round 5 phase 2: one organised navigation (2026-10-29)
+
+**Owner's request:** "the navigation system is bad and buggy and not arranged; it needs to be
+professional and organized". Audit with every element, every bug and before/after evidence:
+`tasks/deck-r5-nav-audit.md`.
+**Symptom / cause (measured by a probe in the headless harness, mock page):** at 1280x720 the top bar
+was 98 px too wide, so Commands, Help and Safe were off screen (no breakpoint between 1279 and 1500 px
+removed enough); at <= 1100 px CSS hid + Shell, Folder and Team; the state chips were spans styled as
+buttons; panel buttons had no open state; closing a panel left focus on `<body>`; the ? key opened a
+keys-only panel, the ? button another one; the rail kept the tab row active while an agent was zoomed;
+the Agents hub used a shield icon and the Layout builder the "columns" glyph.
+**Fix (`app/web`):** a 48 px bar in four groups - Create (Agent, Shell, Folder, Team) | View (1 2 3
+Splits, Layout builder) | Status (state chips as buttons -> Inbox / Agent board, Inbox, Usage) ... Tools
+(Search, Commands, More, Safe). Labels fold into icons in steps (1700/1560/1440/1240/960 px) instead of
+disappearing. A static More menu (`#more-menu`, `ui.bindMenu`: arrows, Home/End, Esc returns focus) holds
+Agent board, Agents hub, Tools, Spaces side by side, Settings, Keys and guide, Stop everything (ids kept).
+`[data-drawer]` buttons are `aria-pressed` while their panel is open; `closeDrawer` returns focus to the
+opener (a menu item -> the More button) when focus was in the panel; one help panel for button, ?,
+Ctrl+B ?, Ctrl+B i; the zoomed agent row is the one active rail row; rail toggle has `aria-pressed`.
+**Proof:** probe before -> after at 1900x1030, 1280x720, 1100x720: clipped [Commands, Help, Safe] -> [],
+top-bar overflow 98 px -> 0, hidden actions [Shell, Folder, Team] -> [], chips SPAN -> BUTTON, panel
+pressed null -> true, focus after Esc BODY -> btn-usage, help titles differ -> same, rail agent active
+false -> true, menu item click closes the menu and opens its panel, focus back on More; the Splits
+divider still calls `api.resize` (before and after). `node --test` 38/38 (3 new in `nav.test.mjs`, all 3
+fail on the phase-1 commit). `verify-ui.ps1` 38 PASS / 8 FAIL; all 8 also fail on HEAD 764efb69 (divider resize, spaces join, usage panel, tools drawer, prompt history, raw typing, broadcast, typed-input guard); the 16 layout checks (900-2560 px, both themes) pass. Shots `tasks/deck-r5-shots/nav-before-*`, `nav-after-*`.
+**Lesson:** #97.

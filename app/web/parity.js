@@ -67,7 +67,7 @@ export const CHORDS = [
   ['R', 'Reload Herdr config', () => X.act('Reload config', () => api.reload(), 'Herdr config reloaded')],
   ['q', 'Detach: close this window (Herdr keeps running)', () => detach()],
   ['m', 'Agents hub (herdr-agents commands)', () => agentsHub()], ['.', 'Tools (check, headless, trial, sync)', () => tools()],
-  ['/', 'Search all screens', () => search()], ['?', 'Keys overlay', () => keysOverlay()],
+  ['/', 'Search all screens', () => search()], ['?', 'Keys and guide', () => keysOverlay()],
 ];
 const CHORD_MAP = new Map(CHORDS.filter((c) => c[2]).map((c) => [c[0], c[2]]));
 let chord = false, chordTimer = 0, resizing = null;
@@ -230,7 +230,7 @@ function detach() {
   toast('Closing the Deck window. Herdr and every agent keep running.', 'info');
   setTimeout(() => window.close(), 400);
 }
-async function settings() {
+export async function settings() {
   const L = X.LS;
   const theme = el('select', { 'aria-label': 'Theme' }, ['dark', 'light', 'hc'].map((t) => el('option', { value: t, text: { dark: 'Dark', light: 'Light', hc: 'High contrast' }[t], selected: L.get('theme', 'dark') === t })));
   const density = el('select', { 'aria-label': 'Density' }, ['normal', 'compact'].map((t) => el('option', { value: t, text: t, selected: L.get('density', 'normal') === t })));
@@ -391,15 +391,15 @@ export function nextClaude() {
 }
 
 // ---------- A12 help: chords + Herdr keys + Deck keys + GUIDE.md, one search ----------
-const DECK_KEYS = [['Ctrl+K', 'Command palette'], ['Ctrl+Shift+F', 'Search all screens'], ['?', 'Keys overlay'], ['1 / 2 / 3', 'Grid columns'], ['L', 'Grid / Herdr layout view'],
+const DECK_KEYS = [['Ctrl+K', 'Command palette'], ['Ctrl+Shift+F', 'Search all screens'], ['?', 'Keys and guide'], ['1 / 2 / 3', 'Grid columns'], ['L', 'Grid / Herdr layout view'],
   ['J / K or ] / [', 'Next / previous card'], ['Z or double-click title', 'Zoom (Esc returns)'], ['/ or P', 'Message box of the current card'],
   ['Enter / Shift+Enter', 'Send / new line'], ['↑ / ↓ in an empty box', 'Message history'], ['X', 'Select for broadcast'], ['I', 'Attention inbox'],
   ['Alt+↑ / Alt+↓', 'Previous / next space or tab'], ['Ctrl+Shift+V', 'Paste to pane'], ['Ctrl+Shift+C', 'Copy screen'], ['Ctrl+Shift+X', 'Leave raw typing mode'],
-  ['Drag a card title onto another', 'Swap the two panes'], ['Drag a divider (layout view)', 'Resize the split']];
+  ['Drag a card title onto another', 'Swap the two panes'], ['Drag a divider (layout view)', 'Resize the split'], ['Drag a divider (grid, sidebar, panel)', 'Resize; arrows move it, double-click resets'], ['Status chips (blocked / working ...)', 'Open the inbox / agent board'], ['More ... (top right)', 'Board, agents hub, tools, spaces, settings, keys, stop all']];
 function keyRows() {
   return [...CHORDS.map(([k, d]) => ['Ctrl+B  ' + (k.length === 1 && k !== k.toLowerCase() ? 'Shift+' + k : k), d, 'chord']), ...DECK_KEYS.map(([k, d]) => [k, d, 'deck'])];
 }
-export function keysOverlay() { help(true); }
+export function keysOverlay() { help(); }   // one help panel: keys + guide (the button, ?, Ctrl+B ? and Ctrl+B i open the same)
 export function help(keysOnly) {
   P.drawer('help', keysOnly ? 'Keys' : 'Shortcuts and guide', async (b) => {
     const q = el('input', { type: 'search', placeholder: 'Type to filter keys and the guide', 'aria-label': 'Filter' });

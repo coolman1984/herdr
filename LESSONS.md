@@ -467,3 +467,10 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     `node --test app/tests/web/contracts.test.mjs app/tests/web/split.test.mjs`. Headless Edge
     `--screenshot` with `--virtual-time-budget` can also fire before async page state exists; make test
     hooks wait in the page for the element (Deck `mock.js &drag=` waits for `#grid .card`).
+
+97. **The web test DOM (`app/tests/web/dom.mjs`) is minimal** (2026-10-29): events do not bubble (no
+    parent chain), there is no global `removeEventListener`, `cancelAnimationFrame` or
+    `document.getElementById`, and selectors are only `.class`, `#id`, `[attr]` or `[attr="v"]` and a tag
+    name (no `:scope`, `:not()`, compound `.a.b`). Front-end code that the tests import uses
+    `window.addEventListener`, `document.querySelector('#id')` and simple class selectors; anything that
+    needs real bubbling is checked in the headless browser harness (`app/tests/deck-ui.ps1`).

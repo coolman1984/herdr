@@ -46,15 +46,22 @@ export function renderEmpty(box, down) {
 }
 
 // ---------- drawer (one right-side panel at a time) ----------
-let openPanel = null;
+let openPanel = null, opener = null;
+// The button that opens a panel ([data-drawer]) shows it as pressed while the panel is open.
+function markOpen(name) {
+  for (const b of document.querySelectorAll('[data-drawer]')) if (b.getAttribute('role') !== 'menuitem') b.setAttribute('aria-pressed', String(b.dataset.drawer === name));
+}
 export function drawer(name, title, render, live = false) {
   const d = $('#drawer');
   if (openPanel?.name === name && !d.hidden) { closeDrawer(); return; }
+  const a = document.activeElement;
+  if (a && a !== document.body && !d.contains(a)) opener = a;   // focus goes back here on close
   drawerAbort?.abort();
   $('#drawer-body').replaceChildren();
   openPanel = { name, render, live };
   $('#drawer-title').textContent = title;
   d.hidden = false;
+  markOpen(name);
   paintDrawer();
   $('#drawer-close').focus();
 }
@@ -71,7 +78,15 @@ async function paintDrawer() {
     else { body.replaceChildren(...stage.childNodes); panel.painted = true; }
   } catch (e) { if (!signal.aborted && generation === drawerGeneration) body.append(el('p', { class: 'err', text: why(e) })); }
 }
-export function closeDrawer() { drawerAbort?.abort(); drawerGeneration++; clearTimeout(paintTimer); paintTimer = 0; $('#drawer').hidden = true; openPanel = null; }
+export function closeDrawer() {
+  const d = $('#drawer'), a = document.activeElement, hadFocus = !a || a === document.body || d.contains(a);
+  drawerAbort?.abort(); drawerGeneration++; clearTimeout(paintTimer); paintTimer = 0; d.hidden = true; openPanel = null;
+  markOpen(null);
+  // Focus returns to the opener (a hidden menu item -> its menu button), only if it was in the panel.
+  const back = opener?.closest?.('[role="menu"]') ? $('#btn-more') : opener;
+  opener = null;
+  if (hadFocus && back?.isConnected) back.focus();
+}
 // Live panels repaint at most every 500 ms (streaming panes must not rebuild a panel each frame).
 let lastPaint = 0, paintTimer = 0;
 export function refreshOpen(force) {
