@@ -57,17 +57,40 @@ export const newState = () => ({ fg: null, bg: null, b: false, d: false, i: fals
 const ck = (c) => (c ? (c.hex || c.cls) : '-');
 export const stateKey = (st) => ck(st.fg) + '/' + ck(st.bg) + (st.b ? 'b' : '') + (st.d ? 'd' : '') + (st.i ? 'i' : '') + (st.u ? 'u' : '') + (st.r ? 'r' : '');
 const MAX_COLS = 2000;
+// Characters that take two terminal cells (CJK, Hangul, full-width forms, most emoji).
+const WIDE = /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦\u{1F300}-\u{1F64F}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/u;
+const RULE = /^[\s─-▟]*$/;   // only box-drawing / block characters: a rule, never wrapped
 
-// Parses one raw line starting in colour state st (mutated to the line's end state). Very long
-// lines are clipped with a marker; "Copy screen" still copies the full text.
-export function parseLine(raw, st) {
-  let clipped = false, cols = 0, last = 0, m;
+// Parses one raw line starting in colour state st (mutated to the line's end state) into display rows
+// of at most vc cells (vc <= 0: one row). A rule line is cut at vc instead of wrapped. Text beyond
+// MAX_COLS is clipped with a marker, but its colour codes are still applied so later lines keep the
+// right colours; "Copy screen" still copies the full text.
+export function parseRows(raw, st, vc) {
+  let clipped = false, cols = 0, rc = 0, last = 0, m;
   raw = raw.replace(/ +$/, '');   // terminals pad rows with spaces; they only add a scroll bar
-  if (raw.length > MAX_COLS * 3) { raw = raw.slice(0, MAX_COLS * 3); clipped = true; }
+  const rule = vc > 0 && RULE.test(stripAnsi(raw));
+  const rows = [];
   let html = open(st), span = html !== '';
+  const brk = () => { if (span) html += '</span>'; rows.push(html); html = open(st); span = html !== ''; rc = 0; };
   const text = (t) => {
-    if (cols + t.length > MAX_COLS) { t = t.slice(0, Math.max(0, MAX_COLS - cols)); clipped = true; }
-    cols += t.length; html += esc(t);
+    if (clipped || !t) return;
+    if (!/[^\x00-\x7e]/.test(t)) {   // ASCII: one cell per character, cut in slices
+      while (t.length) {
+        if (cols >= MAX_COLS) { clipped = true; return; }
+        if (vc > 0 && rc >= vc) { if (rule) return; brk(); }
+        const n = Math.min(t.length, MAX_COLS - cols, vc > 0 ? vc - rc : Infinity);
+        html += esc(t.slice(0, n)); t = t.slice(n); rc += n; cols += n;
+      }
+      return;
+    }
+    let out = '';
+    for (const ch of t) {
+      const w = WIDE.test(ch) ? 2 : 1;
+      if (cols + w > MAX_COLS) { clipped = true; break; }
+      if (vc > 0 && rc + w > vc) { if (rule) break; html += esc(out); out = ''; brk(); }
+      out += ch; rc += w; cols += w;
+    }
+    html += esc(out);
   };
   ESC_RE.lastIndex = 0;
   while ((m = ESC_RE.exec(raw))) {
@@ -81,8 +104,11 @@ export function parseLine(raw, st) {
   text(raw.slice(last));
   if (span) html += '</span>';
   if (clipped) html += '<span class="clip-more" title="Line clipped here; Copy screen has the full line">…</span>';
-  return html;
+  rows.push(html);
+  return rows;
 }
+
+export const parseLine = (raw, st) => parseRows(raw, st, 0)[0];
 
 // One HTML string per line; colour state carries across lines.
 export function ansiLines(text) {

@@ -27,7 +27,7 @@ func TestSSEDisconnectReleasesClientsAndGoroutines(t *testing.T) {
 		reader := bufio.NewReader(response.Body)
 		line, err := reader.ReadString('\n')
 		response.Body.Close()
-		if err != nil || !strings.HasPrefix(line, "event: state") {
+		if err != nil || !strings.HasPrefix(line, "event: hello") {
 			server.Close()
 			t.Fatalf("bad SSE: %q %v", line, err)
 		}

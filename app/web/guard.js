@@ -3,7 +3,7 @@
 // alarm, uncertain delivery guard, failure recovery cards, research citation audit.
 // Rules: warn, never invent; never answer a blocked agent; never resend or revert by itself.
 import { api, missing } from './api.js';
-import { el, $, toast, fail, dialog, confirm } from './ui.js';
+import { el, $, toast, fail, dialog, confirm, deliveryUnknown } from './ui.js';
 import { icon } from './icons.js';
 import * as P from './panels.js';
 
@@ -46,40 +46,50 @@ const limits = () => X.LS.get('limits', { maxAgents: 4, ramMaxPct: 90, diskMinGb
 let health = null;
 export function setHealth(h) { health = h; drainQueue(); }
 const activeAgents = () => [...X.S.panes.values()].filter((p) => (p.name || p.agent) && ['working', 'blocked', 'idle'].includes(X.statusOf(p))).length;
-function capacity() {
+function capacity(cwd = X.S.panes.get(X.currentKey())?.cwd || X.S.root) {
   const L = limits(), why = [];
   const n = activeAgents();
   if (n >= L.maxAgents) why.push(`${n} active agents (limit ${L.maxAgents})`);
   if (!health) why.push('RAM/disk unknown (health not read yet)');
   else {
+    if (health.ram_used_pct == null) why.push('RAM unknown');
     if (health.ram_used_pct > L.ramMaxPct) why.push(`RAM ${health.ram_used_pct}% used (floor: at most ${L.ramMaxPct}%)`);
-    const c = (health.disks || []).find((d) => /^c/i.test(d.drive));
-    if (c && +c.free_gb < L.diskMinGb) why.push(`C: ${(+c.free_gb).toFixed(1)} GB free (floor ${L.diskMinGb} GB)`);
+    const drive = /^[a-z]:/i.exec(cwd || '')?.[0];
+    const c = (health.disks || []).find((d) => d.drive?.toLowerCase() === drive?.toLowerCase());
+    if ((!c || c.free_gb == null) && L.diskMinGb > 0) why.push('Disk capacity unknown');
+    if (c && c.free_gb != null && +c.free_gb < L.diskMinGb) why.push(`${c.drive} ${(+c.free_gb).toFixed(1)} GB free (floor ${L.diskMinGb} GB)`);
   }
   return { ok: !why.length, why, n };
 }
 const queue = [];
-function drainQueue() {
-  while (queue.length && capacity().ok && !X.S.safe) {
+export const unattachedLaunches = [];
+let draining = false;
+export async function drainQueue() {
+  if (draining) return;
+  draining = true;
+  try { while (queue.length && capacity(queue[0].cwd).ok && !X.S.safe && !X.S.writeBlocked) {
     const job = queue.shift();
     toast(`Launch wave: starting held launch "${job.label}"`, 'info');
-    job.run();
+    await job.run();
   }
+  } finally { draining = false; }
   if (queue.length) X.schedule();
 }
 export const queued = () => queue.slice();
+export function enqueueStart(label, run, cwd) { if (queue.length >= 32) throw new Error('Launch queue is full'); queue.push({ label, run, cwd }); return drainQueue(); }
 export function queuePanel() {
   P.drawer('queue', 'Launch queue', (b) => {
     const cap = capacity(), L = limits();
     const max = el('input', { type: 'number', min: 1, max: 12, value: L.maxAgents, 'aria-label': 'Max active agents' });
     const ram = el('input', { type: 'number', min: 50, max: 99, value: L.ramMaxPct, 'aria-label': 'Max RAM used %' });
-    const disk = el('input', { type: 'number', min: 0, max: 500, value: L.diskMinGb, 'aria-label': 'Min free C: GB' });
+    const disk = el('input', { type: 'number', min: 0, max: 500, value: L.diskMinGb, 'aria-label': 'Min free project drive GB' });
     b.append(el('p', { class: 'muted small', text: 'New launches wait here when the limit or a RAM/disk floor is reached. Running work is never stopped to make room.' }),
-      el('div', { class: 'form2' }, field('Max active agents', max), field('Max RAM used %', ram), field('Min free C: (GB)', disk)),
+      el('div', { class: 'form2' }, field('Max active agents', max), field('Max RAM used %', ram), field('Min free project drive (GB)', disk)),
       el('button', { text: 'Save limits', onclick: () => { X.LS.set('limits', { maxAgents: +max.value || 4, ramMaxPct: +ram.value || 90, diskMinGb: +disk.value || 0 }); drainQueue(); P.refreshOpen(true); } }),
       el('p', {}, mark(cap.ok), ' ', cap.ok ? `Capacity free (${cap.n} active)` : 'Holding: ' + cap.why.join('; ')),
       el('ul', { class: 'list' }, queue.map((j, i) => el('li', { class: 'li' }, el('span', { class: 'grow', text: j.label }),
         el('button', { text: 'Cancel', onclick: () => { queue.splice(i, 1); P.refreshOpen(true); } })))),
+      ...unattachedLaunches.map((r) => el('p', { class: 'warn', text: `Task ${r.task}: attach manually (start returned no pane_id)` })),
       queue.length ? '' : el('p', { class: 'muted', text: 'Nothing held.' }));
   }, true);
 }
@@ -101,7 +111,8 @@ function accountGuard(profile, account, override) {
 export async function launch(file) {
   let tasks = [];
   try { tasks = (await api.tasks()).tasks || []; } catch (e) { return fail('Tasks')(e); }
-  const S = X.S;
+  const S = X.S, launchOwner = 'launch-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  let existingReservations = [];
   const taskSel = el('select', { 'aria-label': 'Task file' }, tasks.map((t) => el('option', { value: t.file, text: t.file, selected: t.file === file })));
   const agents = [...S.panes.values()].filter((p) => p.name || p.agent);
   const target = el('select', { 'aria-label': 'Target' }, el('option', { value: 'new', text: 'New agent…' }),
@@ -119,7 +130,7 @@ export async function launch(file) {
     const items = [];
     for (const r of readiness(text)) items.push([r.ok, true, `${r.name}: ${r.ok ? 'found' : 'missing - the agent may guess; fix the task first'}`, r.line]);
     items.push([paths.length > 0, true, `Declared files: ${paths.length ? paths.slice(0, 8).join(', ') + (paths.length > 8 ? ` +${paths.length - 8}` : '') : 'none found'}`]);
-    items.push([!conflicts.length, false, conflicts.length ? `Overlap with active reservations: ${conflicts.map((c) => `${c.path} (${c.task}, ${c.owner})`).join('; ')}` : (conflicts.unavailable ? 'Reservations: not available (backend R19); overlap not checked' : 'No overlap with active reservations')]);
+    items.push([!conflicts.length && !conflicts.unavailable, false, conflicts.length ? `Overlap with active reservations: ${conflicts.map((c) => `${c.path} (${c.task}, ${c.owner})`).join('; ')}` : (conflicts.unavailable ? 'reservations unavailable' : 'No overlap with active reservations')]);
     const cap = capacity();
     items.push([cap.ok, true, cap.ok ? `Capacity: ${cap.n} active agents, within limits` : 'Launch wave: will be HELD - ' + cap.why.join('; ')]);
     let block = '';
@@ -136,6 +147,7 @@ export async function launch(file) {
       if (!g.ok) block = block || g.why;
       override.parentElement.hidden = !g.unknown && !override.checked;
     } else override.parentElement.hidden = true;
+    if (conflicts.unavailable) block = 'reservations unavailable';
     if (conflicts.length && !accept.checked) block = block || 'File overlap: tick "I accept the overlap" or pick another task.';
     accept.parentElement.hidden = !conflicts.length;
     verdict = { ok: !block, block, hold: !cap.ok, research };
@@ -147,10 +159,12 @@ export async function launch(file) {
     paths = declaredPaths(text);
     conflicts = [];
     try {
-      const r = (await api.reservations()).reservations || [];
-      const norm = (x) => x.toLowerCase().replace(/\\/g, '/').replace(/\/\*\*$|\/+$/g, '');
+      const ledger = await api.reservations();
+      if (ledger.load_error) throw new Error('reservations unavailable: ' + ledger.load_error);
+      const r = ledger.reservations || []; existingReservations = r;
+      const norm = (x) => { const p = x.toLowerCase().replace(/\\/g, '/').replace(/\/\*\*$|\/+$/g, ''); const root = (S.root || '').toLowerCase().replace(/\\/g, '/').replace(/\/+$/, ''); return root && p.startsWith(root + '/') ? p.slice(root.length + 1) : p; };
       const overlap = (a, b) => a === b || a.startsWith(b + '/') || b.startsWith(a + '/');   // same rule as the backend (R19)
-      for (const res of r) if (res.task !== taskSel.value) for (const p of res.paths) { const hit = paths.find((x) => overlap(norm(x), norm(p))); if (hit) conflicts.push({ path: hit, task: res.task, owner: res.owner }); }
+      for (const res of r) for (const p of res.paths) { const hit = paths.find((x) => overlap(norm(x), norm(p))); if (hit) conflicts.push({ path: hit, task: res.task, owner: res.owner }); }
     } catch (e) { conflicts.unavailable = true; if (!missing(e)) toast('Reservations: ' + e.message, 'error'); }
     if (routes === null) { try { routes = (await api.headlessRoutes()).routes || []; } catch { routes = undefined; } }
     paint();
@@ -167,51 +181,75 @@ export async function launch(file) {
     check: () => (verdict.ok ? '' : verdict.block || 'Still checking…') });
   if (v !== 'ok') return;
   const chosen = taskSel.value, prompt = `Read CLAUDE.md and AGENTS.md, then do the task in ${chosen}`;
-  const record = (key) => recordLaunch(key, { task: chosen, paths, at: Date.now() });
-  const reserve = () => api.reservations && api.reserve(chosen, target.value === 'new' ? prof.value : X.nameOf(S.panes.get(target.value) || {}), paths)
-    .catch((e) => {
-      const list = (e.body?.conflicts || []).map((c) => `${c.path} (${c.task}, ${c.owner})`).join('; ');
-      if (!missing(e)) toast('Reservation: ' + e.message + (list ? ' - ' + list : ''), 'error');
-    });
-  let run;
-  if (target.value === 'headless') run = () => X.act('Headless research', () => api.headless(prof.value, prompt), 'Research started headless');
-  else if (target.value === 'new') {
-    const cur = S.panes.get(X.currentKey());
-    run = async () => { const r = await X.act('Start agent', () => api.start({ profile: prof.value, model: '', effort: '', account: account.value.trim(), cwd: cur?.cwd || X.S.root, key: cur?.key || '' }), `Starting ${prof.value} for ${chosen}`);
-      if (r) { pendingLaunch = { profile: prof.value, task: chosen, paths, prompt, at: Date.now() }; reserve(); toast(`When ${prof.value} is ready, its card offers "Send task"`, 'info', 9000); } };
-  } else {
-    const key = target.value;
-    run = async () => { const r = await sendGuarded(key, prompt); if (r) { record(key); reserve(); } };
-  }
-  if (verdict.hold) { queue.push({ label: `${chosen} -> ${target.selectedOptions[0].text}`, run }); toast('Held in the launch queue (limits/floors)', 'warn'); queuePanel(); }
-  else run();
+  const destination = target.value, profile = prof.value, acct = account.value.trim(), overlap = accept.checked;
+  const cur = S.panes.get(X.currentKey()), pathsCopy = paths.slice();
+  const owner = destination === 'new' || destination === 'headless' ? profile + ' ' + launchOwner : X.nameOf(S.panes.get(destination));
+  const run = () => dispatchTask({ destination, profile, acct, overlap, cur, chosen, pathsCopy, owner, prompt, existingIds: existingReservations.map((r) => r.id) });
+  if (verdict.hold && destination === 'new') {
+    if (queue.length >= 32) return toast('Launch queue is full', 'warn');
+    queue.push({ label: `${chosen} -> ${owner}`, run, cwd: cur?.cwd || S.root }); toast('Held in the launch queue (limits/floors)', 'warn'); queuePanel();
+  } else if (destination === 'new') await enqueueStart(chosen, run, cur?.cwd || S.root);
+  else await run();
 }
-let pendingLaunch = null;
-const launches = new Map();
-async function recordLaunch(key, rec) {
-  try { const g = await api.git(key); rec.baseline = gitPaths(g); } catch { rec.baseline = null; }
-  launches.set(key, rec);
+export async function dispatchTask({ destination, profile, acct, overlap, cur, chosen, pathsCopy, owner, prompt, existingIds = [] }) {
+  const S = X.S;
+    if (S.safe || S.writeBlocked) return;
+    let reservation;
+    const releaseNew = async () => { if (reservation?.id && !existingIds.includes(reservation.id)) await api.release(reservation.id); };
+    try {
+      reservation = await api.reserve(chosen, owner, pathsCopy, overlap);
+    } catch (e) {
+      const conflicts = (e.body?.conflicts || []).map((c) => `${c.path} (${c.owner})`).join('; ');
+      toast((e.status === 503 ? 'reservations unavailable' : 'Reservation refused: ' + e.message) + (conflicts ? ' - ' + conflicts + '. Reopen Launch and accept overlap to proceed.' : ''), 'error'); return;
+    }
+    const rec = await prepareLaunch({ task: chosen, paths: pathsCopy, at: Date.now(), prompt }, destination === 'new' ? cur?.cwd || S.root : S.panes.get(destination)?.cwd || S.root);
+    try {
+      if (S.safe || S.writeBlocked || (destination !== 'new' && destination !== 'headless' && S.panes.get(destination)?.stale)) { await releaseNew(); return; }
+      if (destination === 'headless') { await api.headless(profile, prompt); toast('Research started headless', 'ok'); }
+      else if (destination === 'new') {
+        const r = await api.start({ profile, model: '', effort: '', account: acct, cwd: cur?.cwd || S.root, key: cur?.key || '' });
+        if (r.pane_id) {
+          const key = [...S.panes.values()].find((p) => p.pane_id === r.pane_id)?.key || S.session + '|' + r.pane_id;
+          launches.set(key, rec); X.schedule(key);
+          toast(`Task ${chosen} attached to ${r.pane_id}. Send it from Proof when ready.`, 'info', 9000);
+        } else { unattachedLaunches.push(rec); if (unattachedLaunches.length > 100) unattachedLaunches.shift(); toast(`Task ${chosen}: attach manually (start returned no pane_id); see Launch queue`, 'warn', 12000); }
+      } else {
+        launches.set(destination, rec);
+        const r = await sendGuarded(destination, prompt);
+        if (!r) { if (!isUncertain(destination)) { launches.delete(destination); await releaseNew(); } return; }
+        rec.sent = true;
+      }
+    } catch (e) {
+      if (!deliveryUnknown(e) && reservation?.id) {
+        try { await releaseNew(); } catch (releaseError) { fail('Release reservation')(releaseError); }
+      }
+      fail('Launch')(e);
+    }
 }
-export function onNewPane(p) {
-  if (!pendingLaunch || !(p.name || p.agent) || Date.now() - pendingLaunch.at > 120000) return;
-  if (!(p.name || '').startsWith(pendingLaunch.profile)) return;
-  const pl = pendingLaunch; pendingLaunch = null;
-  recordLaunch(p.key, { task: pl.task, paths: pl.paths, at: Date.now(), prompt: pl.prompt });
-  toast(`${X.nameOf(p)} started for ${pl.task}. Send the task from its Proof panel when it is ready.`, 'info', 9000);
+export const launches = new Map();
+export async function prepareLaunch(rec, repo) {
+  rec.scopeId = 'deck-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  try { await api.scopeBaseline(rec.scopeId, repo, rec.paths); rec.baseline = true; }
+  catch (e) { rec.baseline = false; toast('Scope baseline unknown: ' + e.message, 'warn'); }
+  return rec;
 }
+export function onNewPane(p) { if (launches.has(p.key)) X.schedule(p.key); }
+export function forgetPane(key) { launches.delete(key); uncertain.delete(key); }
 
 // ---------- row 8: uncertain delivery guard ----------
 const uncertain = new Map();
-export async function sendGuarded(key, text) {
+export async function sendGuarded(key, text, expect) {
+  if (X.S.safe || X.S.writeBlocked || X.S.panes.get(key)?.stale) { toast('Writes disabled: pane or connection is stale', 'warn'); return null; }
   try {
-    const r = await api.prompt(key, text);
+    const r = await api.prompt(key, text, expect);
     uncertain.delete(key);
     toast(`Sent to ${X.nameOf(X.S.panes.get(key) || {})}`, 'ok');
     return r || {};
   } catch (e) {
     // The owner is typing in that agent's box: nothing was sent, and nothing is retried.
-    if (e.code === 'input_not_empty') toast(e.message, 'warn', 9000);
-    else if (e.status === 504 || e.status === 0 || /time(d)? ?out|delivery unknown|Failed to fetch|NetworkError|network/i.test(e.message)) {
+    // ... or its agent has exited: nothing was sent to the shell left behind.
+    if (e.code === 'input_unknown' || e.code === 'input_not_empty' || e.code === 'agent_exited') toast(e.message, 'warn', 9000);
+    else if (deliveryUnknown(e)) {
       uncertain.set(key, { text, at: Date.now(), err: e.body?.detail || e.message, dispatch: e.dispatch_id });
       X.schedule(key);
       toast(`Delivery UNKNOWN${e.dispatch_id ? ' (' + e.dispatch_id + ')' : ''}: the prompt may or may not have arrived. Check the screen before resending.`, 'warn', 12000);
@@ -297,20 +335,20 @@ export function proof(p) {
       const sel = el('select', { 'aria-label': label + ' state', onchange: () => save(slot, sel.value, note.value) },
         ['not verified', 'verified', 'failed'].map((s) => el('option', { value: s, text: s, selected: r.state === s })));
       const note = el('input', { 'aria-label': label + ' evidence', value: r.note, placeholder: 'evidence: command + result', onchange: () => save(slot, sel.value, note.value) });
-      b.append(el('section', { class: 'pslot', 'data-state': r.state }, el('div', { class: 'prow' }, mark(r.state === 'verified', r.state === 'not verified'), el('strong', { text: label }), el('span', { class: 'grow' }), sel), note,
+      b.append(el('section', { class: 'pslot', 'data-drawer-key': slot, 'data-state': r.state }, el('div', { class: 'prow' }, mark(r.state === 'verified', r.state === 'not verified'), el('strong', { text: label }), el('span', { class: 'grow' }), sel), note,
         claim ? el('div', { class: 'small muted' }, 'Agent claims: ', el('span', { class: 'mono', text: claim.trim().slice(0, 140) })) : ''));
     }
     // row 7: scope drift
     const drift = el('div', { class: 'proof-list', text: 'Reading git status…' });
     b.append(el('h3', { text: 'Scope drift' }), drift);
     try {
-      const g = await api.git(key), now = gitPaths(g), declared = new Set((L?.paths || []).map((x) => x.toLowerCase()));
-      const base = L?.baseline || new Set();
-      const extra = [...now].filter((x) => !base.has(x) && !declared.has(x) && ![...declared].some((d) => d.endsWith('/**') ? x.startsWith(d.slice(0, -2)) : d.includes('*') ? new RegExp('^' + d.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$').test(x) : x.endsWith('/' + d) || x === d));
-      drift.replaceChildren(
-        el('div', { class: 'prow' }, mark(L != null, true), el('div', { text: L ? `Task ${L.task}: ${declared.size} declared file(s), baseline ${L.baseline ? L.baseline.size + ' path(s)' : 'unknown'}` : 'No launch record for this pane (launch it via "Launch a task" to compare scope)' })),
-        el('div', { class: 'prow' }, mark(!extra.length, !L), el('div', { text: extra.length ? `${extra.length} change(s) outside the declared files (not reverted, not blamed - check who made them):` : 'No changes outside the declared files' })),
-        ...extra.slice(0, 30).map((x) => el('div', { class: 'mono small', text: '  ' + x })));
+      if (!L?.baseline) { drift.textContent = 'Scope drift unknown: no successful pre-dispatch baseline'; }
+      else {
+        const result = await api.scopeCheck(L.scopeId), extra = result.unexpected || [];
+        drift.replaceChildren(el('p', { text: `Task ${L.task}: ${extra.length ? extra.length + ' change(s) outside declared files' : 'No changes outside declared files'}` }),
+          el('p', { class: 'muted', text: result.warning || 'Concurrent changes are not blamed or reverted.' }),
+          ...extra.slice(0, 30).map((path) => el('div', { class: 'mono small', text: path })));
+      }
     } catch (e) { drift.textContent = 'Scope drift: ' + (missing(e) ? 'git view unavailable' : e.message); }
     b.append(el('h3', { text: 'Citation audit (this screen)' }), auditBlock(plain));
   });

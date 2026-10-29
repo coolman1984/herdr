@@ -1,6 +1,6 @@
 // Dialogs, drawer panels and the command palette (P0 + P1 + P2 features around the grid).
 import { api, missing, why } from './api.js';
-import { el, $, toast, fail, dialog, confirm, ask, copyText, ago } from './ui.js';
+import { el, $, toast, fail, dialog, confirm, ask, copyText, ago, OrderedQueue, knownNumber, patchContent } from './ui.js';
 import { fitState } from './screen.js';
 import * as Q from './parity.js';
 import * as G from './guard.js';
@@ -50,21 +50,28 @@ let openPanel = null;
 export function drawer(name, title, render, live = false) {
   const d = $('#drawer');
   if (openPanel?.name === name && !d.hidden) { closeDrawer(); return; }
+  drawerAbort?.abort();
+  $('#drawer-body').replaceChildren();
   openPanel = { name, render, live };
   $('#drawer-title').textContent = title;
   d.hidden = false;
   paintDrawer();
   $('#drawer-close').focus();
 }
-function paintDrawer() {
-  const body = $('#drawer-body');
-  const y = body.scrollTop;
-  body.textContent = '';
-  const r = openPanel.render(body);
-  if (r instanceof Promise) r.catch((e) => body.append(el('p', { class: 'err', text: why(e) })));
-  body.scrollTop = y;
+let drawerGeneration = 0, drawerAbort = null;
+async function paintDrawer() {
+  drawerAbort?.abort(); drawerAbort = new AbortController();
+  const generation = ++drawerGeneration, panel = openPanel, signal = drawerAbort.signal;
+  const body = $('#drawer-body'), stage = el('div');
+  try {
+    await panel.render(stage, signal);
+    if (signal.aborted || generation !== drawerGeneration || openPanel !== panel) return;
+    body.className = stage.className || '';
+    if (panel.painted) patchContent(body, stage);
+    else { body.replaceChildren(...stage.childNodes); panel.painted = true; }
+  } catch (e) { if (!signal.aborted && generation === drawerGeneration) body.append(el('p', { class: 'err', text: why(e) })); }
 }
-export function closeDrawer() { $('#drawer').hidden = true; openPanel = null; }
+export function closeDrawer() { drawerAbort?.abort(); drawerGeneration++; clearTimeout(paintTimer); paintTimer = 0; $('#drawer').hidden = true; openPanel = null; }
 // Live panels repaint at most every 500 ms (streaming panes must not rebuild a panel each frame).
 let lastPaint = 0, paintTimer = 0;
 export function refreshOpen(force) {
@@ -175,8 +182,8 @@ function beep() {
 
 // ---------- P1.3 Task launcher ----------
 export function tasks() {
-  drawer('tasks', 'Tasks', async (b) => {
-    const { tasks: list = [] } = await api.tasks();
+  drawer('tasks', 'Tasks', async (b, signal) => {
+    const { tasks: list = [] } = await api.tasks({ signal });
     const prev = el('pre', { class: 'preview mono small', text: 'Pick a task to preview it.' });
     let file = '';
     const send = el('button', { class: 'primary', text: 'Launch… (readiness check)', disabled: true, 'data-w': '1', onclick: () => G.launch(file) });
@@ -196,7 +203,7 @@ export async function broadcast(ta) {
   if (!keys.length || !text.trim()) return toast('Select panes (checkbox or X) and write a prompt', 'warn');
   const names = keys.map((k) => X.nameOf(X.S.panes.get(k))).join(', ');
   if (!(await confirm('Broadcast prompt?', `To ${keys.length} panes: ${names}\n\n${text}`, 'Send to all', false))) return;
-  const res = await Promise.all(keys.map((k) => X.act('Broadcast to ' + X.nameOf(X.S.panes.get(k)), () => api.prompt(k, text), 'Sent to ' + X.nameOf(X.S.panes.get(k)))));
+  const res = await Promise.all(keys.map((k) => G.sendGuarded(k, text)));
   if (res.every(Boolean)) ta.value = '';
 }
 export function compare() {
@@ -217,9 +224,9 @@ const bar = (label, pct) => el('div', { class: 'bar-row' }, el('span', { class: 
   el('span', { class: 'bar', role: 'meter', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': label },
     el('span', { style: `width:${Math.max(0, Math.min(100, pct))}%`, 'data-hot': pct >= 80 ? '1' : null })), el('span', { class: 'bv', text: pct + '%' }));
 export function usage() {
-  drawer('usage', 'Usage and limits', async (b) => {
+  drawer('usage', 'Usage and limits', async (b, signal) => {
     b.append(el('p', { class: 'muted', text: 'Loading (herdr-agents usage can take a few seconds)...' }));
-    const u = await api.usage();
+    const u = await api.usage({ signal });
     b.textContent = '';
     if (!u.accounts && (u.output || u.text)) u.accounts = parseUsage(u.output || u.text);
     u.text = u.text || u.output;
@@ -260,8 +267,8 @@ async function health() {
     G.setHealth(h);
     box.textContent = '';
     const idle = [...X.S.panes.values()].filter((p) => ['idle', 'done'].includes(X.statusOf(p)) && (p.name || p.agent));
-    box.append(el('h3', { text: 'Health' }), bar('RAM', h.ram_used_pct ?? 0),
-      ...(h.disks || []).map((d) => el('div', { class: 'small', text: `${d.drive} ${(+d.free_gb).toFixed(1)} GB free` })),
+    box.append(el('h3', { text: 'Health' }), h.ram_used_pct == null ? el('div', { text: 'RAM unknown' }) : bar('RAM', h.ram_used_pct),
+      ...(h.disks || []).map((d) => el('div', { class: 'small', text: d.free_gb == null ? `${d.drive} unknown` : `${d.drive} ${knownNumber(d.free_gb)} GB free` })),
       el('div', { class: 'small hp' }),
       idle.length ? el('button', { class: 'small-btn', text: 'Close finished panes', 'data-w': '1', onclick: () => closeFinished(idle) }) : '');
     X.schedule();
@@ -309,26 +316,26 @@ export async function team() {
 
 // ---------- P1.8 Sign-in helper ----------
 export function signin() {
-  drawer('signin', 'Sign-in helper', async (b) => {
-    const { tools = [] } = await api.signin();
+  drawer('signin', 'Sign-in helper', async (b, signal) => {
+    const { tools = [] } = await api.signin({ signal });
     b.append(el('p', { class: 'muted small', text: 'The Deck never types or stores secrets. "Open login pane" starts the tool\'s own login in a pane; you finish it there (use Paste to pane for codes).' }));
     b.append(el('ul', { class: 'list' }, tools.map((t) => el('li', { class: 'li' },
-      el('span', { class: 'dot', 'data-s': t.signed_in ? 'done' : 'blocked' }),
+      el('span', { class: 'dot', 'data-s': t.signed_in === true ? 'done' : t.signed_in === false ? 'blocked' : 'unknown' }),
       el('div', { class: 'grow' }, el('strong', { text: t.tool + (t.account ? ' ' + t.account : '') }), ' ',
-        el('span', { class: 'muted small', text: (t.signed_in ? 'signed in' : 'NOT signed in') + (t.detail ? ' - ' + t.detail : '') })),
+        el('span', { class: 'muted small', text: (t.signed_in === true ? 'signed in' : t.signed_in === false ? 'NOT signed in' : 'sign-in state unknown') + (t.detail ? ' - ' + t.detail : '') })),
       el('button', { text: 'Open login pane', 'data-w': '1', onclick: () => X.act('Open login pane', () => api.signinOpen(t.tool, t.account || '')) })))));
   });
 }
 
 // ---------- P2 panels ----------
 export function changes(p) {
-  drawer('changes', 'Changes - ' + X.nameOf(p), async (b) => {
-    const r = await api.git(p.key);
+  drawer('changes', 'Changes - ' + X.nameOf(p), async (b, signal) => {
+    const r = await api.git(p.key, { signal });
     b.append(el('p', { class: 'muted small', text: p.cwd }), el('pre', { class: 'mono small preview', text: r.text || '(no changes)' }));
   });
 }
 function textViewer(name, title, listFn, readFn) {
-  drawer(name, title, async (b) => {
+  drawer(name, title, async (b, signal) => {
     const search = el('input', { type: 'search', placeholder: 'Search', 'aria-label': 'Search' });
     const out = el('pre', { class: 'mono small preview' });
     let text = '';
@@ -431,48 +438,58 @@ async function useSnippet(name) {
 }
 
 // ---------- P2.16 raw terminal mode ----------
-let rawBuf = '', rawTimer = 0;
+const rawQueues = new OrderedQueue((key, text, keys) => api.raw(key, text, keys),
+  (key) => !X.S.safe && !X.S.writeBlocked && X.S.panes.has(key) && !X.S.panes.get(key)?.stale);
+let rawBuf = '', rawTimer = 0, rawTarget = null, rawSwitch = Promise.resolve();
+export function clearRaw() { clearTimeout(rawTimer); rawBuf = ''; rawQueues.clear(); if (X?.S.raw) { X.card(X.S.raw)?.root.classList.remove('raw'); X.S.raw = null; $('#rawbar').hidden = true; } }
+export function forgetPane(key) { inboxItems.delete(key); rawQueues.forget(key); if (X.S.raw === key) clearRaw(); }
 export function rawMode(c) {
-  const S = X.S;
-  if (S.raw === c.key) return endRaw();
-  if (S.safe) return toast('Safe mode is on: writes are disabled', 'warn');
-  S.raw = c.key;
-  const bar = $('#rawbar');
-  bar.hidden = false;
-  $('#rawbar-text').textContent = `You are typing into ${X.nameOf(S.panes.get(c.key))} - every key goes to the pane. Leave: Ctrl+Shift+X or the button.`;
-  $('#rawbar-stop').onclick = endRaw;
-  c.root.classList.add('raw');
-  c.screenBox.focus();
+  rawSwitch = rawSwitch.then(async () => {
+    const old = X.S.raw;
+    await endRaw();
+    if (old === c.key || X.S.safe || X.S.writeBlocked || X.S.panes.get(c.key)?.stale) return;
+    X.S.raw = c.key; rawTarget = c.key;
+    $('#rawbar').hidden = false;
+    $('#rawbar-text').textContent = `You are typing into ${X.nameOf(X.S.panes.get(c.key))} - every key goes to the pane. Leave: Ctrl+Shift+X or the button.`;
+    $('#rawbar-stop').onclick = () => endRaw().catch(fail('Typing'));
+    c.root.classList.add('raw'); c.screenBox.focus();
+  }).catch(fail('Typing'));
+  return rawSwitch;
 }
-function endRaw() {
-  const c = X.card(X.S.raw);
-  if (c) c.root.classList.remove('raw');
-  flushRaw(); X.S.raw = null; $('#rawbar').hidden = true;
+async function endRaw() {
+  const key = X.S.raw;
+  X.card(key)?.root.classList.remove('raw');
+  X.S.raw = null; $('#rawbar').hidden = true;
+  await flushRaw(); if (key) await rawQueues.drain(key);
+  rawTarget = null;
 }
-function flushRaw() {
+function flushRaw(keys = []) {
   clearTimeout(rawTimer);
-  if (!rawBuf || !X.S.raw) { rawBuf = ''; return; }
-  const text = rawBuf, key = X.S.raw; rawBuf = '';
-  api.text(key, text).catch(fail('Typing'));
+  const text = rawBuf, key = rawTarget; rawBuf = '';
+  if (!key || (!text && !keys.length)) return Promise.resolve();
+  return rawQueues.push(key, text, keys);
 }
 const RAW = { Enter: 'enter', Escape: 'esc', Tab: 'tab', Backspace: 'backspace', ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', ' ': 'space' };
 export function rawKey(ev, c) {
-  if (X.S.raw !== c.key) return;
-  if (ev.ctrlKey && ev.shiftKey && (ev.key === 'X' || ev.key === 'x')) { ev.preventDefault(); endRaw(); return; }
-  if (ev.ctrlKey && ev.key === 'v') return; // paste event handles it
+  if (X.S.raw !== c.key || ev.isComposing || ev.keyCode === 229) return;
+  if (ev.ctrlKey && ev.shiftKey && /x/i.test(ev.key)) { ev.preventDefault(); endRaw().catch(fail('Typing')); return; }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') return;
   let k = null;
   if (ev.ctrlKey && !ev.altKey && /^[a-z]$/i.test(ev.key)) k = 'ctrl+' + ev.key.toLowerCase();
   else if (ev.shiftKey && ev.key === 'Tab') k = 'shift+tab';
   else if (/^F([1-9]|1[0-2])$/.test(ev.key)) k = ev.key.toLowerCase();
   else if (RAW[ev.key] && !(ev.key === ' ' && rawBuf)) k = RAW[ev.key];
   ev.preventDefault();
-  if (k) { flushRaw(); api.keys(c.key, [k]).catch(fail('Key')); return; }
-  if (ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey) { rawBuf += ev.key; clearTimeout(rawTimer); rawTimer = setTimeout(flushRaw, 60); }
+  if (k) { flushRaw([k]).catch(fail('Typing')); return; }
+  if ([...ev.key].length === 1 && !ev.ctrlKey && !ev.metaKey) { rawBuf += ev.key; clearTimeout(rawTimer); rawTimer = setTimeout(() => flushRaw().catch(fail('Typing')), 60); }
 }
+addEventListener('compositionend', (ev) => {
+  if (!X?.S.raw || !X.card(X.S.raw)?.screenBox.contains(ev.target)) return;
+  rawBuf += ev.data || ''; flushRaw().catch(fail('Typing'));
+});
 addEventListener('paste', (ev) => {
   if (!X?.S.raw || !X.card(X.S.raw)?.screenBox.contains(document.activeElement)) return;
-  ev.preventDefault();
-  rawBuf += ev.clipboardData.getData('text'); flushRaw();
+  ev.preventDefault(); rawBuf += ev.clipboardData.getData('text'); flushRaw().catch(fail('Typing'));
 });
 
 // ---------- P0.11 command palette ----------

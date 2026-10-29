@@ -1255,3 +1255,72 @@ exit 0; `herdr-agents start codex -Model gpt-6.1-sol -Effort medium` -> STARTED 
 Same day, owner's request: every scheduled task of `Computer Use\opening-nerp-tcode` (22 GMES_* /
 MF_Ops_* tasks; 5 were active, MF_Ops_RemoteControl was running) was stopped and disabled "for now".
 **Lesson:** #85, #86.
+
+## Phase 50 - Deck round 4: Astra review, first fix batch (2026-10-29)
+
+**Owner's request:** the Deck needs big improvements; Codex `gpt-6-astra` high reviews everything (code,
+web best practice, GitHub projects) and writes only what must be done; then fix. Spec
+`tasks/deck-r4-astra-review.md`, report `tasks/deck-r4-astra-report.md` (D1-D25, P1-P5, I1-I4, order of
+work; five backend gaps reproduced with temporary overlay tests, JS logic with Node probes).
+**Fixed by the lead (owner-visible problems first):**
+- D1 **Symptom:** an exited agent's card sent the owner's message into the bare PowerShell left behind
+  (`ParserError`, screenshot 2026-10-28 17:40). **Cause:** `server.go` prompt action switched to
+  `pane run` whenever the fresh snapshot showed no agent. **Fix:** `/api/pane/prompt` takes `expect`;
+  agent text to a shell -> 409 `agent_exited`, nothing written; the page sends `shell` only from a card
+  that never had an agent and shows "Agent exited · messages are not sent to the shell" (API.md R25).
+  **Proof:** `TestPromptToExitedAgentNeverRunsInTheShell` passes; on HEAD it fails with
+  `writes=[pane|run|w1:p1|make text reflow [see screenshot]]`.
+- D7 **Symptom:** card screens scrolled sideways (wide pane) or left half the card empty (narrow pane).
+  **Cause:** `screen.js` only scaled the font (9 px .. 1.25x) to the pane's fixed column count; rows were
+  `white-space: pre` with `overflow: auto`. **Fix:** text reflows: each line is cut into display rows of
+  the card's width (`ansi.js parseRows`, wide CJK/emoji = 2 cells, rule lines of box characters cut, not
+  wrapped); virtual scrolling counts display rows; the font never shrinks (grows at most 1.25x for a
+  narrow pane); `.screen` has no sideways scroll; font metrics are re-measured after the web font loads.
+  A narrow Herdr pane still gives narrow text: the agent breaks its own lines at its PTY width and Herdr
+  cannot set a pane's columns (Astra, `pane resize --help`).
+  **Proof:** headless harness, mock page at 900 px: a 400-char line became 13 rows, widest row 382 px in a
+  387 px screen; every screen `scrollWidth <= clientWidth` at 900 and 1440 px.
+- D9 a full snapshot now always sets the screen version (a resync with unchanged text repairs it).
+- D11 reading older output: dropped top lines move the scroll position up by their display rows.
+- D14 names cut to `clau...`: an empty `.grow` spacer in the card header took half the free width.
+  Removed; below 560 px card width the status shows as its dot and the context ring hides.
+  **Proof:** 4/4 mock card names uncut at 900 and 1440 px (before: `claude-2040` 76 of 92 px).
+- D21 a clipped long line no longer leaks its colour into later lines; D22 Save-snippet textarea gets the
+  draft (`ui.js` sets `.value`); D23 `/foo/g` search finds every line; D25 unknown sign-in shows "unknown".
+  **Proof (JS):** Node probe importing the real `screen.js`/`ansi.js`/`search.worker.js`: 5/5 pass; on HEAD
+  4/5 fail (wrap rows 2, top 400 not 200, next row red, 2 of 4 hits).
+**Checks:** `go vet` 0; `go test ./...` ok; `build.ps1` exit 0, 8,673,280 bytes.
+**Not verified:** the exited-agent placeholder in a browser (mock cannot exit an agent); live lab run.
+**Open (report order of work):** D2-D6, D8, D10, D12, D13, D15-D20, D24, P1-P5, I1-I4.
+**Lesson:** #88.
+
+## Phase 51 - Deck round 4 phase 2: Astra (backend) and Sol (frontend) fix the whole report (2026-10-29)
+
+**Owner's request:** "give batches to Astra and Sol and fix all". The lead split by file (Astra
+`gpt-6-astra` high: `app/internal/deck/*.go` + API.md; Sol `gpt-6.1-sol` medium: `app/web/*` + Node
+tests) and wrote the shared contracts first (`tasks/deck-r4-contracts.md` C1-C10); specs
+`tasks/deck-r4-astra-backend.md`, `tasks/deck-r4-sol-frontend.md`; answers `tasks/deck-r4-*-answer.md`.
+**Fixed:** C1 per-page visibility (SSE `hello` client id, union reads, metadata heartbeat, stale panes when
+Herdr is offline), C2 `settings` event, C3 `/api/pane/raw` ordered per-pane typing, C4 reserve before
+dispatch, C5 one launch admission for every route + `pane_id` in start replies, C6 typed timeouts, C7
+`input_unknown`, C8 `/api/prefs`, C9 drive of every launch folder + null unknowns, C10
+`/api/debug/counters`; D6, D8, D10, D12, D13, D15 (menus in a body popover), D16, D17, P1-P5. API.md R26-R35.
+**Lead's own changes:** the Go lock (`app/tests/go-lock.ps1`, `go-locked.ps1`, `build.ps1 -Output`; two
+agents never build at once), `agent_exited` checked before the screen (an old dialog on screen hid the
+real reason), "G: unknown" wording, `verify-lab.ps1` updated for R25/C7 and extended with the R4 checks,
+agent stub prints Codex's `›` input box.
+**Proof:**
+- `go vet` 0; `go test ./...` ok; Astra's 35 new tests fail on HEAD (35/35); `node --test app/tests/web/`
+  30/30, Sol's tests fail on HEAD 30/30 (mostly missing functions, Sol says so).
+- `build.ps1` exit 0, 8,771,072 bytes.
+- Isolated lab (`verify-lab.ps1`): 17/17 PASS incl. hello first, raw ordered, prefs, counters, exited
+  agent -> 409 `agent_exited` with nothing run, settings broadcast to a second page, offline keeps 17
+  stale panes, recovery after restart.
+- Real page on the lab backend (headless harness): 16 cards; Herdr stopped -> 16/16 composers disabled
+  + banner "Herdr offline - panes are stale; writes disabled"; restarted -> recovered; no JS errors.
+- Mock page: no JS errors, no sideways scroll, no cut names, the More menu portals to body, fits the
+  viewport and closes on Esc.
+**Not verified:** IME composition and two real pages typing raw at once in a visible browser; one-hour
+soak / handle slope (counters now exist for it); race detector. I2 (Herdr lifecycle events) and I4
+(xterm.js comparison) not attempted.
+**Lesson:** #89, #90, #91.

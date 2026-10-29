@@ -14,12 +14,16 @@ import (
 type fakeHerdr struct {
 	status, screen string
 	offline        bool
+	shell          bool // the agent has exited: the pane is a bare shell
 	writes         []string
 }
 
 func (f *fakeHerdr) Call(ctx context.Context, args ...string) ([]byte, error) {
 	if f.offline {
 		return nil, fmt.Errorf("server_not_running")
+	}
+	if strings.Join(args, " ") == "api snapshot" && f.shell {
+		return []byte(`{"result":{"snapshot":{"workspaces":[],"tabs":[],"panes":[{"pane_id":"w1:p1","tab_id":"w1:t1","workspace_id":"w1"}],"agents":[]}}}`), nil
 	}
 	if strings.Join(args, " ") == "api snapshot" {
 		raw := fmt.Sprintf(`{"result":{"snapshot":{"workspaces":[],"tabs":[],"panes":[{"pane_id":"w1:p1","tab_id":"w1:t1","workspace_id":"w1","agent":"codex","agent_status":%q}],"agents":[{"pane_id":"w1:p1","name":"coder","agent":"codex","agent_status":%q}]}}}`, f.status, f.status)
@@ -38,7 +42,10 @@ func (f *fakeHerdr) Helper(context.Context, map[string]string) (string, error) {
 	return "helper result", nil
 }
 func testApp(f *fakeHerdr) *App {
-	return newApp(f, "lab", "test-token", "http://127.0.0.1:9876", "I:\\herdr", map[string]Profile{})
+	a := newApp(f, "lab", "test-token", "http://127.0.0.1:9876", "I:\\herdr", map[string]Profile{})
+	// The fake page shows its one pane; production visibility comes from /api/visible.
+	a.visible["w1:p1"] = true
+	return a
 }
 func request(a *App, method, path, body, token, origin string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, "http://127.0.0.1:9876"+path, strings.NewReader(body))
@@ -98,7 +105,7 @@ func TestRefreshDisplaysBlockedAndRecoversFromOffline(t *testing.T) {
 	}
 	f.offline = true
 	a.refresh(context.Background(), true)
-	if a.state.Herdr.Running || len(a.state.Panes) != 0 || a.state.Error == "" {
+	if a.state.Herdr.Running || len(a.state.Panes) != 1 || a.state.Error == "" {
 		t.Fatal("offline was hidden")
 	}
 	f.offline = false
@@ -122,8 +129,26 @@ func TestPromptGuardRejectsBlockedBeforeAnyWrite(t *testing.T) {
 		t.Fatal("signin answered")
 	}
 }
+func TestPromptToExitedAgentNeverRunsInTheShell(t *testing.T) {
+	f := &fakeHerdr{shell: true, screen: "PS D:\\WORK> "}
+	a := testApp(f)
+	w := request(a, "POST", "/api/pane/prompt", `{"key":"lab|w1:p1","text":"make text reflow [see screenshot]"}`, "test-token", "")
+	if w.Code != 409 || !strings.Contains(w.Body.String(), "agent_exited") || len(f.writes) != 0 {
+		t.Fatalf("agent text reached the shell: %d %s %+v", w.Code, w.Body.String(), f.writes)
+	}
+	w = request(a, "POST", "/api/pane/prompt", `{"key":"lab|w1:p1","text":"git status","expect":"shell"}`, "test-token", "")
+	if w.Code != 200 || len(f.writes) != 1 || f.writes[0] != "pane|run|w1:p1|git status" {
+		t.Fatalf("shell card command not run: %d %s %+v", w.Code, w.Body.String(), f.writes)
+	}
+	// The agent's last dialog is still on screen: the reason is still "agent exited", not "blocked".
+	f.screen = "Do you trust this folder?\nenter to confirm  esc to cancel\nPS D:\\WORK> "
+	w = request(a, "POST", "/api/pane/prompt", `{"key":"lab|w1:p1","text":"hello"}`, "test-token", "")
+	if w.Code != 409 || !strings.Contains(w.Body.String(), "agent_exited") || len(f.writes) != 1 {
+		t.Fatalf("old dialog hid the exited agent: %d %s %+v", w.Code, w.Body.String(), f.writes)
+	}
+}
 func TestPromptPreservesQuotesNewlinesAndMetacharacters(t *testing.T) {
-	f := &fakeHerdr{status: "idle", screen: "ready"}
+	f := &fakeHerdr{status: "idle", screen: "› "}
 	a := testApp(f)
 	text := "hello \"world\"\n$(never execute); C:\\folder\\"
 	_, err := a.action(context.Background(), Action{Action: "prompt", Pane: "w1:p1", Text: text})

@@ -33,7 +33,7 @@ func TestScreenReadAndCap(t *testing.T) {
 	text := strings.Repeat("row\n", 4000)
 	data, _ := json.Marshal(map[string]any{"result": map[string]any{"output": text}})
 	got, err = parseScreen(data, 40)
-	if err != nil || len(strings.Split(got, "\n")) != 2040 {
+	if err != nil || len(strings.Split(got, "\n")) != 2000 {
 		t.Fatalf("cap: %d %v", len(strings.Split(got, "\n")), err)
 	}
 	if _, err = parseScreen([]byte(`{"result":{}}`), 40); err == nil {

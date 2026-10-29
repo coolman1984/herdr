@@ -24,7 +24,17 @@ func (a *App) script(ctx context.Context, name string, params map[string]any, ti
 	if !ok {
 		return "", fmt.Errorf("toolkit script runner unavailable")
 	}
-	return runner.RunScript(ctx, name, params, timeout)
+	plan, err := a.scriptLaunchPlan(name, params)
+	if err != nil {
+		return "", err
+	}
+	ticket, err := a.admit(ctx, plan)
+	if err != nil {
+		return "", err
+	}
+	out, err := runner.RunScript(ctx, name, params, timeout)
+	ticket.finish(out, err)
+	return out, err
 }
 func (a *App) parity(w http.ResponseWriter, r *http.Request) bool {
 	if strings.HasPrefix(r.URL.Path, "/api/jobs") {

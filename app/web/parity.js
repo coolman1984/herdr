@@ -1,3 +1,4 @@
+import { upsertJob } from './ui.js';
 // Parity with today's Herdr setup (tasks/herdr-deck-parity.md A) + the "better" features (B):
 // Ctrl+B chords, folder picker, columns, layout builder, board, spaces, stop-all, agents hub,
 // tools, Herdr split layout + drag resize/swap, global search, composer chips, done strip.
@@ -425,11 +426,16 @@ export function help(keysOnly) {
 }
 
 // ---------- A16 agents hub (herdr-agents commands) ----------
-const jobs = new Map();
+export const jobs = new Map();
+export async function syncJobs() {
+  try { const r = await api.jobs(); for (const j of r.jobs || []) upsertJob(jobs, j); P.refreshOpen(true); }
+  catch (e) { toast('Jobs reconciliation failed: ' + e.message, 'warn'); }
+}
+export function forgetPane(key) { sent.delete(key); worker?.postMessage({ drop: key }); }
 export function onResult(d) {
-  const j = d.id && jobs.get(d.id);
+  const j = upsertJob(jobs, { ...d, done: true });
   toast((j ? j.label + ': ' : '') + (d.message || (d.ok ? 'done' : 'failed')), d.ok ? 'ok' : 'error');
-  if (j) { j.done = true; j.ok = d.ok; j.output = d.output || d.message || ''; P.refreshOpen(true); }
+  if (j) { j.done = true; j.ok = d.ok; j.output = (d.output || d.message || '').slice(-32768); P.refreshOpen(true); }
 }
 const HUB = [
   ['status', 'Status', 'get'], ['tools', 'Tools', 'get'], ['ask', 'Ask', 'form'], ['read', 'Read', 'name'], ['diff', 'Diff', 'name'],
@@ -438,20 +444,21 @@ const HUB = [
 ];
 let hubTab = 'status';
 export function agentsHub(tab) {
+  syncJobs();
   if (tab) hubTab = tab;
-  P.drawer('agents', 'Agents hub', (b) => {
+  P.drawer('agents', 'Agents hub', async (b, signal) => {
     const tabs = el('div', { class: 'tabs', role: 'tablist' }, HUB.map(([id, label]) => el('button', { role: 'tab', 'aria-selected': String(id === hubTab), text: label,
       onclick: () => { hubTab = id; P.refreshOpen(true); } })));
-    const out = el('div', { class: 'hub-body' });
+    const out = el('div', { class: 'hub-body', 'data-drawer-key': 'hub-' + hubTab });
     b.append(tabs, out);
-    hubBody(out);
+    await hubBody(out, signal);
     if (jobs.size) b.append(el('h3', { text: 'Jobs' }), el('ul', { class: 'list' }, [...jobs.values()].reverse().slice(0, 10).map((j) => el('li', {},
       el('span', { class: 'dot', 'data-s': j.done ? (j.ok ? 'done' : 'error') : 'working' }), ' ' + j.label + ' ', el('span', { class: 'muted small', text: ago(j.t) + ' ago' }),
       j.output ? el('pre', { class: 'mono small preview', text: j.output }) : ''))));
   }, false);
 }
 const agentNames = () => [...X.S.panes.values()].filter((p) => p.name).map((p) => p.name);
-async function hubBody(out) {
+async function hubBody(out, signal) {
   const [id, , kind] = HUB.find((h) => h[0] === hubTab);
   const pre = el('pre', { class: 'mono small preview', text: 'Loading…' });
   const show = async (fn) => { out.append(pre); try { const r = await fn(); pre.textContent = r.output || r.text || JSON.stringify(r, null, 2); } catch (e) { pre.textContent = why(e); } };
@@ -473,7 +480,7 @@ async function hubBody(out) {
         const names = [...s.selectedOptions].map((o) => o.value);
         if (!names.length || !ta.value.trim()) return toast('Pick agent(s) and write the task', 'warn');
         const r = await X.act(id, () => (id === 'ask' ? api.agentsPost('ask', { name: names[0], text: ta.value, fresh: fresh.checked }) : api.agentsPost('fanout', { names, text: ta.value })), 'Sent; the answer arrives here');
-        if (r?.id) { jobs.set(r.id, { label: `${id} ${names.join(', ')}`, t: Date.now() }); P.refreshOpen(true); }
+        if (r?.id) { upsertJob(jobs, { id: r.id, label: `${id} ${names.join(', ')}`, t: Date.now() }); P.refreshOpen(true); }
       } })));
     return;
   }
@@ -495,7 +502,7 @@ export function tools() {
       el('button', { 'data-w': '1', onclick: async () => {
         if (!ta.value.trim()) return toast('Write the task', 'warn');
         const r = await X.act('Headless', () => api.headless(prof.value, ta.value), 'Running headless; result arrives as a toast and in the Agents hub');
-        if (r?.id) jobs.set(r.id, { label: 'headless ' + prof.value, t: Date.now() });
+        if (r?.id) upsertJob(jobs, { id: r.id, label: 'headless ' + prof.value, t: Date.now() });
       } }, icon('play'), ' Run headless'),
       el('h3', { text: 'Skills' }), el('button', { 'data-w': '1', onclick: () => X.act('Sync skills', () => api.syncSkills()) }, icon('tools'), ' sync-skills.ps1'),
       el('h3', { text: 'Specs and docs' }),
@@ -605,7 +612,7 @@ export async function toReviewer(p, reviewerKey) {
     value: `Review the work ${X.nameOf(p)} just finished in ${p.cwd}. Its final screen:\n\`\`\`text\n${answer}\n\`\`\`\nCheck it against its task, run the checks, and list findings ordered by severity.` });
   const v = await dialog({ title: 'Send to reviewer', wide: true, body: el('div', {}, field('Reviewer', sel), ta),
     actions: [{ label: 'Cancel', value: null }, { label: 'Send', value: 'ok', kind: 'primary' }] });
-  if (v === 'ok') X.act('Send to reviewer', () => api.prompt(sel.value, ta.value), 'Sent to ' + X.nameOf(X.S.panes.get(sel.value)));
+  if (v === 'ok') G.sendGuarded(sel.value, ta.value);
 }
 const pipe = { writer: '', reviewer: '', task: '', step: 0 };
 export function pipeline() {
@@ -618,7 +625,7 @@ export function pipeline() {
     b.append(el('ol', { class: 'pipe' },
       el('li', {}, el('b', { text: 'Writer ' }), pick('writer'), ' ', task, ' ', el('span', { class: 'muted small', text: st('writer') }),
         el('button', { 'data-w': '1', onclick: () => { const w = X.S.panes.get(pipe.writer); if (!w || !pipe.task) return toast('Pick the writer and the task file', 'warn');
-          X.act('Send task', () => api.prompt(w.key, `Read CLAUDE.md and AGENTS.md, then do the task in ${pipe.task}`), 'Task sent to ' + X.nameOf(w)); } }, 'Send task')),
+          G.sendGuarded(w.key, `Read CLAUDE.md and AGENTS.md, then do the task in ${pipe.task}`); } }, 'Send task')),
       el('li', {}, el('b', { text: 'Reviewer ' }), pick('reviewer'), ' ', el('span', { class: 'muted small', text: st('reviewer') }),
         el('button', { 'data-w': '1', onclick: () => { const w = X.S.panes.get(pipe.writer); if (!w) return toast('Pick the writer', 'warn'); toReviewer(w, pipe.reviewer); } }, 'Send writer\'s answer')),
       el('li', {}, el('b', { text: 'Final gate ' }), el('button', { onclick: () => P.check() }, 'Run check.ps1'), ' ',

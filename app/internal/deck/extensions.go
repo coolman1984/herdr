@@ -31,6 +31,7 @@ type paneRequest struct {
 	Account     string   `json:"account"`
 	Direction   string   `json:"direction"`
 	Worktree    any      `json:"worktree"`
+	Expect      string   `json:"expect"`
 	Helper      bool     `json:"helper"`
 	LeadAccount string   `json:"lead_account"`
 	Purpose     string   `json:"purpose"`
@@ -86,6 +87,9 @@ func (a *App) currentSnapshot(ctx context.Context) (State, error) {
 	return parseSnapshot(raw, session)
 }
 func (a *App) extensions(w http.ResponseWriter, r *http.Request) bool {
+	if a.r4Endpoint(w, r) {
+		return true
+	}
 	if a.guardEndpoint(w, r) {
 		return true
 	}
@@ -99,12 +103,8 @@ func (a *App) extensions(w http.ResponseWriter, r *http.Request) bool {
 			return true
 		}
 		a.lockedWrite(w, func() (any, error) {
-			if action == "start" {
-				if err := a.launchGuard(p); err != nil {
-					return nil, err
-				}
-			}
-			v := Action{Action: action, Text: p.Text, Cwd: p.Cwd, Profile: p.Profile, Model: p.Model, Effort: p.Effort, Account: p.Account, Confirm: true, Direction: p.Direction}
+
+			v := Action{Action: action, Text: p.Text, Cwd: p.Cwd, Profile: p.Profile, Model: p.Model, Effort: p.Effort, Account: p.Account, Confirm: true, Direction: p.Direction, Expect: p.Expect, StartRequest: &p}
 			if p.Worktree != nil {
 				switch value := p.Worktree.(type) {
 				case bool:
@@ -193,6 +193,12 @@ func (a *App) extensions(w http.ResponseWriter, r *http.Request) bool {
 			a.mu.Unlock()
 			go a.refresh(context.Background(), true)
 			response := map[string]any{"ok": true, "message": result, "output": result}
+			if action == "start" {
+				if ids := startedIdentities(result); len(ids) > 0 {
+					response["name"] = ids[0]["name"]
+					response["pane_id"] = ids[0]["pane_id"]
+				}
+			}
 			if dispatch != "" {
 				response["dispatch_id"] = dispatch
 			}
@@ -203,7 +209,8 @@ func (a *App) extensions(w http.ResponseWriter, r *http.Request) bool {
 	switch r.URL.Path {
 	case "/api/visible":
 		var p struct {
-			Keys []string `json:"keys"`
+			ClientID string   `json:"client_id"`
+			Keys     []string `json:"keys"`
 		}
 		if !readBody(w, r, &p) {
 			return true
@@ -222,11 +229,13 @@ func (a *App) extensions(w http.ResponseWriter, r *http.Request) bool {
 			ids = append(ids, id)
 		}
 		a.mu.Lock()
-		a.active = len(ids) > 0
-		a.visible = map[string]bool{}
-		for _, id := range ids {
-			a.visible[id] = true
+		a.setVisibleLocked(p.ClientID, ids)
+		for ch, id := range a.clientIDs {
+			if id == p.ClientID || p.ClientID == "" {
+				a.queueLocked(ch, event("state", a.clientStateLocked(ch, a.state)))
+			}
 		}
+
 		a.mu.Unlock()
 		respond(w, 200, map[string]bool{"ok": true})
 		return true
@@ -247,65 +256,10 @@ func (a *App) extensions(w http.ResponseWriter, r *http.Request) bool {
 			failHTTP(w, 405, fmt.Errorf("GET required"))
 			return true
 		}
-		result, err := systemHealth()
+		result, err := a.cachedHealth(r.Context())
 		if err != nil {
 			failHTTP(w, 502, err)
 			return true
-		}
-		a.mu.Lock()
-		result["panes"] = len(a.state.Panes)
-		panes := append([]Pane{}, a.state.Panes...)
-		a.mu.Unlock()
-		memory := []map[string]any{}
-		for _, p := range panes {
-			raw, e := a.herdr.Call(r.Context(), "pane", "process-info", p.ID)
-			row := map[string]any{"key": p.Key}
-			if e != nil {
-				row["error"] = e.Error()
-			} else {
-				var v struct {
-					Result struct {
-						Info struct {
-							Shell      uint32 `json:"shell_pid"`
-							Foreground []struct {
-								PID uint32 `json:"pid"`
-							} `json:"foreground_processes"`
-						} `json:"process_info"`
-					} `json:"result"`
-				}
-				if e = json.Unmarshal(raw, &v); e != nil {
-					row["error"] = e.Error()
-				} else {
-					seen := map[uint32]bool{}
-					var total uint64
-					pids := []uint32{v.Result.Info.Shell}
-					for _, proc := range v.Result.Info.Foreground {
-						pids = append(pids, proc.PID)
-					}
-					for _, pid := range pids {
-						if pid == 0 || seen[pid] {
-							continue
-						}
-						seen[pid] = true
-						bytes, err := processMemory(pid)
-						if err != nil {
-							row["error"] = err.Error()
-							continue
-						}
-						total += bytes
-					}
-					row["mb"] = float64(total) / (1 << 20)
-				}
-			}
-			memory = append(memory, row)
-		}
-		result["panes_mem"] = memory
-		result["goroutines"] = runtime.NumGoroutine()
-		result["handles"] = processHandles()
-		if bytes, e := processMemory(uint32(os.Getpid())); e == nil {
-			result["backend_rss_mb"] = float64(bytes) / (1 << 20)
-		} else {
-			result["backend_memory_error"] = e.Error()
 		}
 		respond(w, 200, result)
 		return true
@@ -682,4 +636,93 @@ func (a *App) signin(ctx context.Context) map[string]any {
 		rows = append(rows, map[string]any{"tool": tool, "account": "", "signed_in": signed, "detail": detail})
 	}
 	return map[string]any{"tools": rows}
+}
+
+func (a *App) cachedHealth(parent context.Context) (map[string]any, error) {
+	a.healthMu.Lock()
+	defer a.healthMu.Unlock()
+	if a.healthCache != nil && time.Since(a.healthAt) < 10*time.Second {
+		return a.healthCache, nil
+	}
+	ctx, cancel := context.WithTimeout(parent, 1500*time.Millisecond)
+	defer cancel()
+	a.mu.Lock()
+	folders := []string{a.root}
+	for folder := range a.launchFolders {
+		folders = append(folders, folder)
+	}
+	for _, p := range a.state.Panes {
+		folders = append(folders, p.Cwd)
+	}
+	a.mu.Unlock()
+	result, err := systemHealthVolumes(folders)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	result["panes"] = len(a.state.Panes)
+	panes := append([]Pane{}, a.state.Panes...)
+	a.mu.Unlock()
+	memory := []map[string]any{}
+	for _, p := range panes {
+		if ctx.Err() != nil {
+			memory = append(memory, map[string]any{"key": p.Key, "mb": nil, "error": ctx.Err().Error()})
+			continue
+		}
+		probe, stop := context.WithTimeout(context.WithValue(ctx, backgroundRPC{}, true), 350*time.Millisecond)
+		raw, e := a.herdr.Call(probe, "pane", "process-info", p.ID)
+		stop()
+		row := map[string]any{"key": p.Key, "mb": nil}
+		if e != nil {
+			row["error"] = e.Error()
+		} else {
+			var v struct {
+				Result struct {
+					Info struct {
+						Shell      uint32 `json:"shell_pid"`
+						Foreground []struct {
+							PID uint32 `json:"pid"`
+						} `json:"foreground_processes"`
+					} `json:"process_info"`
+				} `json:"result"`
+			}
+			if e = json.Unmarshal(raw, &v); e != nil {
+				row["error"] = e.Error()
+			} else {
+				seen := map[uint32]bool{}
+				var total uint64
+				pids := []uint32{v.Result.Info.Shell}
+				for _, proc := range v.Result.Info.Foreground {
+					pids = append(pids, proc.PID)
+				}
+				for _, pid := range pids {
+					if pid == 0 || seen[pid] {
+						continue
+					}
+					seen[pid] = true
+					bytes, err := processMemory(pid)
+					if err != nil {
+						row["error"] = err.Error()
+						continue
+					}
+					total += bytes
+				}
+				if row["error"] == nil {
+					row["mb"] = float64(total) / (1 << 20)
+				}
+			}
+		}
+		memory = append(memory, row)
+	}
+	result["panes_mem"] = memory
+	result["goroutines"] = runtime.NumGoroutine()
+	result["handles"] = processHandles()
+	if bytes, e := processMemory(uint32(os.Getpid())); e == nil {
+		result["backend_rss_mb"] = float64(bytes) / (1 << 20)
+	} else {
+		result["backend_memory_error"] = e.Error()
+	}
+	a.healthCache = result
+	a.healthAt = time.Now()
+	return result, nil
 }

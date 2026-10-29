@@ -32,6 +32,20 @@ func (a *App) startJob(script string, params map[string]any, timeout time.Durati
 	if !ok {
 		return nil, fmt.Errorf("script runner unavailable")
 	}
+	plan, err := a.scriptLaunchPlan(script, params)
+	if err != nil {
+		return nil, err
+	}
+	ticket, err := a.admit(context.Background(), plan)
+	if err != nil {
+		return nil, err
+	}
+	admitted := false
+	defer func() {
+		if !admitted {
+			ticket.finish("", fmt.Errorf("job not started"))
+		}
+	}()
 	idBytes := make([]byte, 10)
 	if _, err := rand.Read(idBytes); err != nil {
 		return nil, err
@@ -54,12 +68,14 @@ func (a *App) startJob(script string, params map[string]any, timeout time.Durati
 	job := &Job{ID: id, Status: "running", Message: "Started " + script, Started: time.Now(), cancel: cancel}
 	a.jobs[id] = job
 	a.mu.Unlock()
+	admitted = true
 	go func() {
 		defer cancel()
 		if cleanup != nil {
 			defer cleanup()
 		}
 		out, err := runner.RunScript(ctx, script, params, timeout)
+		ticket.finish(out, err)
 		message := out
 		if err != nil {
 			message = err.Error()
@@ -81,12 +97,7 @@ func (a *App) startJob(script string, params map[string]any, timeout time.Durati
 		job.cancel = nil
 		msg := event("result", job)
 		for ch := range a.clients {
-			select {
-			case ch <- msg:
-			default:
-				delete(a.clients, ch)
-				close(ch)
-			}
+			a.queueLocked(ch, msg)
 		}
 		a.mu.Unlock()
 	}()

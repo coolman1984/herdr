@@ -7,7 +7,10 @@ const C = (n, s) => `\x1b[${n}m${s}\x1b[0m`;
 
 export function createMock(R) {
   let running = q.get('down') !== '1';
-  let rev = 0, n = 5;
+  let rev = 0, n = 5, readOnly = false, prefs = {};
+  try { prefs = JSON.parse(localStorage.getItem('deck.mock-prefs') || '{}'); } catch { /* fresh mock backend */ }
+  const reservations = new Map(), scopes = new Map();
+  let visible = new Set(), clientId = 'c-mock-1';
   const lines = (arr) => arr.join('\n');
   const panes = new Map();
   const add = (p) => panes.set(p.key, { label: '', title: '', error: '', tokens: {}, blocked: false, revision: 0, screen_version: 1, ...p });
@@ -46,10 +49,17 @@ export function createMock(R) {
   });
   const state = () => running
     ? { session: 'lab', root: 'I:\\herdr', lead: { tool: 'claude', account: '2040', known: true }, herdr: { running: true, error: '' }, panes: [...panes.values()].map(({ n: _n, ...p }) => p), workspaces, tabs, layouts: layouts(), profiles, error: '' }
-    : { session: 'lab', herdr: { running: false, error: 'herdr.sock not found (mock)' }, panes: [], workspaces: [], tabs: [], profiles, error: '' };
+    : { session: 'lab', herdr: { running: false, error: 'herdr.sock not found (mock)' }, panes: [...panes.values()].map((p) => ({ ...p, stale: true })), workspaces, tabs, layouts: layouts(), profiles, error: 'Herdr offline (mock)' };
 
   let sink = null;
-  const emit = (name, data) => sink && setTimeout(() => sink(name, JSON.parse(JSON.stringify(data))), 0);
+  const emit = (name, data) => {
+    if (!sink) return;
+    if (data.panes) data = { ...data, panes: data.panes.map((p) => {
+      if (visible.has(p.key)) return p;
+      const { screen, screen_patch, ...metadata } = p; return metadata;
+    }) };
+    setTimeout(() => sink?.(name, JSON.parse(JSON.stringify(data))), 0);
+  };
   const touch = (p, patch) => { Object.assign(p, patch, { revision: ++rev }); emit('panes', { panes: [p], removed: [] }); };
   const need = (key) => { const p = panes.get(key); if (!p) throw new Error('404: unknown pane ' + key); return p; };
   // Like the real backend (API.md): new rows travel as screen_patch {from_version, version, start, delete, lines}.
@@ -62,16 +72,34 @@ export function createMock(R) {
       p.screen = p.screen.split('\n').slice(cut).join('\n'); p.n = 2000;
       out.push({ key: p.key, revision: ++rev, screen_patch: { from_version: p.screen_version, version: ++p.screen_version, start: 0, delete: cut, lines: [] } });
     }
-    emit('panes', { panes: out, removed: [] });
+    if (visible.has(p.key)) emit('panes', { panes: out, removed: [] });
   };
   const ok = (message) => ({ ok: true, message });
 
   const handlers = {
     [R.state]: state,
-    [R.visible]: () => ok(''),
-    [R.reservations]: () => ({ reservations: [{ id: 'r1', task: 'tasks/other.md', owner: 'codex-1', paths: ['app/web/app.js'] }] }),
+    [R.visible]: ({ client_id, keys }) => { if (client_id !== clientId) throw new Error('unknown client'); visible = new Set(keys); emit('state', state()); return ok(''); },
+    [R.prefs]: (d) => { if (d.prefs) { prefs = d.prefs; localStorage.setItem('deck.mock-prefs', JSON.stringify(prefs)); } return { prefs }; },
+    [R.readOnly]: ({ enabled }) => { readOnly = !!enabled; emit('settings', { read_only: readOnly }); return ok(''); },
+    [R.raw]: ({ key, text, keys }) => { if (text) append(need(key), text); if (keys?.length) append(need(key), '[keys ' + keys.join(' ') + ']'); return ok(''); },
+    [R.jobs]: () => ({ jobs: [] }),
+    [R.scopeBaseline]: ({ id, repo, allowed }) => { scopes.set(id, { repo, allowed }); return { ok: true, id, baseline_changed_paths: 0 }; },
+    [R.scopeCheck]: ({ id }) => { if (!scopes.has(id)) throw new Error('scope baseline missing'); return { changed: [], unexpected: [], warning: 'Mock scope only' }; },
+    [R.reservations]: (d) => {
+      if (!d.task) return { reservations: [...reservations.values()], load_error: '' };
+      const existing = [...reservations.values()].find((r) => r.task === d.task && r.owner === d.owner);
+      if (existing) return existing;
+      const conflicts = [...reservations.values()].filter((r) => r.owner !== d.owner && r.paths.some((a) => d.paths.some((b) => a === b || a.startsWith(b + '/') || b.startsWith(a + '/'))));
+      if (conflicts.length && !d.overlap) { const e = new Error('reservation conflict'); e.status = 409; e.body = { conflicts }; throw e; }
+      const r = { ...d, id: 'r-' + (reservations.size + 1) }; reservations.set(r.id, r); return r;
+    },
+    [R.release]: ({ id }) => { reservations.delete(id); return ok(''); },
     [R.headlessRoutes]: () => ({ routes: [{ profile: 'cline-ds', verified: true, search: 'server' }] }),
-    [R.prompt]: ({ key, text }) => {
+    [R.prompt]: ({ key, text, expect = 'agent' }) => {
+      const pane = need(key);
+      if (expect === 'agent' && !pane.agent && !pane.name) { const e = new Error('Agent exited / shell remains'); Object.assign(e, { status:409,code:'agent_exited' }); throw e; }
+      if (/input-unknown-test/.test(text)) { const e = new Error('Cannot see its input box - not sent'); Object.assign(e, { status:409,code:'input_unknown' }); throw e; }
+      if (/read-timeout-test/.test(text)) { const e = new Error('read timeout'); Object.assign(e, { status:504,code:'read_timeout' }); throw e; }
       if (/timeout-test/.test(text)) { const e = new Error('504: delivery unknown'); e.status = 504; e.dispatch_id = 'd-1'; throw e; } const p = need(key); append(p, C(36, '> ') + text); if (p.agent) touch(p, { agent_status: 'working' }); return ok('prompt sent'); },
     [R.keys]: ({ key, keys }) => { const p = need(key); append(p, C(2, `[keys ${keys.join(' ')}]`));
       if (p.blocked && keys.includes('Enter')) touch(p, { blocked: false, agent_status: 'idle' }); return ok('keys sent'); },
@@ -112,7 +140,7 @@ export function createMock(R) {
     add({ key, pane_id: id, workspace_id: ws, tab_id: tab, cwd, name, agent, agent_status: agent ? 'working' : 'unknown',
       tokens: model ? { model } : {}, screen: agent ? `Starting ${agent}...` : 'PS ' + cwd + '> ' });
     emit('panes', { panes: [panes.get(key)], removed: [] });
-    return ok('started ' + (name || id));
+    return { ...ok('started ' + (name || id)), pane_id: id, name };
   }
 
   const stress = Math.min(32, +q.get('stress') || 0);
@@ -142,17 +170,18 @@ export function createMock(R) {
   const call = (path, data) => {
     const [base, query] = path.split('?');
     const h = handlers[base];
+    if (data && readOnly && ![R.visible, R.readOnly, R.prefs, R.scopeBaseline].includes(base)) { const e = new Error('read only'); e.status = 403; return delay(e); }
     if (!h && (q.get('strict') === '1' || !data)) return delay(new Error('404: mock has no ' + base));
     if (!h) return delay(ok('(mock) ' + base));
     try { return delay(h({ ...Object.fromEntries(new URLSearchParams(query || '')), ...data })); } catch (e) { return delay(e); }
   };
-  window.__mock = { setRunning(v) { running = v; emit('herdr', { running: v, error: v ? '' : 'stopped (mock)' }); if (v) emit('state', state()); }, panes };
+  window.__mock = { setRunning(v) { running = v; emit('herdr', { running: v, error: v ? '' : 'stopped (mock)' }); emit('state', state()); }, panes };
   return {
     get: (p) => call(p),
     post: (p, d) => call(p, d),
     events(_names, h) {
       sink = h.onEvent;
-      setTimeout(() => { h.onOpen(); emit('state', state()); }, 50);
+      setTimeout(() => { h.onOpen(); emit('hello', { client_id: clientId }); emit('settings', { read_only: readOnly }); emit('state', state()); }, 50);
       return () => { sink = null; };
     },
   };

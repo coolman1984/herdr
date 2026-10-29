@@ -49,7 +49,16 @@ func hiddenCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
 	cmd.WaitDelay = time.Second
 	return cmd
 }
-func runCommand(ctx context.Context, name string, stdin string, args ...string) ([]byte, error) {
+func runCommand(ctx context.Context, name string, stdin string, args ...string) (result []byte, resultErr error) {
+	started := false
+	defer func() {
+		if resultErr != nil {
+			resultErr = &commandError{Started: started, Err: resultErr}
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	cmd := hiddenCommand(ctx, name, args...)
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
@@ -60,6 +69,7 @@ func runCommand(ctx context.Context, name string, stdin string, args ...string) 
 	cmd.Stderr = fail
 	err := cmd.Start()
 	if err == nil {
+		started = true
 		job, e := containProcess(cmd)
 		if e != nil {
 			cmd.Process.Kill()
