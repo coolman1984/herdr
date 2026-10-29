@@ -13,35 +13,45 @@
 <body>
 <a class="skip" href="#grid">Skip to panes</a>
 <header class="top" role="banner">
-  <button id="btn-rail" class="icon" aria-label="Hide or show the sidebar (Ctrl+B B)" data-tip="Sidebar · Ctrl+B b"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM9 5v14"/></svg></button>
-  <div class="brand"><span class="mark" aria-hidden="true"></span><span>Herdr Deck</span><span id="session" class="sess"></span></div>
+  <button id="btn-rail" class="icon" aria-label="Sidebar (Ctrl+B B)" aria-pressed="true" data-tip="Sidebar · Ctrl+B b"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM9 5v14"/></svg></button>
+  <div class="brand"><span class="mark" aria-hidden="true"></span><span class="lbl">Herdr Deck</span><span id="session" class="sess"></span></div>
   <div class="tgroup" role="group" aria-label="Create">
-    <button id="btn-agent" class="primary" data-tip="Start an agent">+ Agent</button>
-    <button id="btn-shell" data-tip="New shell next to the current pane">+ Shell</button>
-    <button id="btn-folder" data-tip="Open folder · Ctrl+B f">Folder</button>
-    <button id="btn-layout" class="icon" aria-label="Layout builder (Ctrl+B Shift+B)" data-tip="Layout builder · Ctrl+B Shift+B"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM9 4v16M15 4v16"/></svg></button>
-    <button id="btn-team" class="icon" aria-label="Team presets" data-tip="Team presets"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.3a3.5 3.5 0 0 1 0 6.4M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg></button>
+    <button id="btn-agent" class="primary" aria-label="Start an agent" data-tip="Start an agent"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span class="lbl">Agent</span></button>
+    <button id="btn-shell" aria-label="New shell" data-tip="New shell next to the current pane"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6l5 5-5 5M11 18h9"/></svg><span class="lbl">Shell</span></button>
+    <button id="btn-folder" aria-label="Open folder (Ctrl+B F)" data-tip="Open a folder as a new space · Ctrl+B f"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/></svg><span class="lbl">Folder</span></button>
+    <button id="btn-team" aria-label="Team presets" data-tip="Start a team preset"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.3a3.5 3.5 0 0 1 0 6.4M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg><span class="lbl">Team</span></button>
   </div>
-  <div class="tgroup seg" role="group" aria-label="View">
-    <button data-cols="1" aria-pressed="false" data-tip="1 column · 1">1</button>
-    <button data-cols="2" aria-pressed="false" data-tip="2 columns · 2">2</button>
-    <button data-cols="3" aria-pressed="false" data-tip="3 columns · 3">3</button>
-    <button data-view="layout" aria-pressed="false" data-tip="Herdr's real splits · L">Splits</button>
+  <div class="tgroup" role="group" aria-label="View">
+    <div class="seg" role="group" aria-label="Grid columns or Herdr splits">
+      <button data-cols="1" aria-pressed="false" aria-label="1 column (1)" data-tip="1 column · 1">1</button>
+      <button data-cols="2" aria-pressed="false" aria-label="2 columns (2)" data-tip="2 columns · 2">2</button>
+      <button data-cols="3" aria-pressed="false" aria-label="3 columns (3)" data-tip="3 columns · 3">3</button>
+      <button data-view="layout" aria-pressed="false" aria-label="Herdr's real splits (L)" data-tip="Herdr's real splits · L">Splits</button>
+    </div>
+    <button id="btn-layout" class="icon" aria-label="Layout builder (Ctrl+B Shift+B)" data-tip="Layout builder · Ctrl+B Shift+B"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7"/></svg></button>
   </div>
-  <div id="counts" class="counts" aria-label="Agent states"></div>
+  <div class="tgroup" role="group" aria-label="Status">
+    <div id="counts" class="counts" role="group" aria-label="Agent states"></div>
+    <button id="btn-inbox" data-drawer="inbox" aria-label="Attention inbox (I)" data-tip="Attention inbox · I"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 13l2.5-8h13L21 13v6H3zM3 13h5l1.5 3h5L16 13h5"/></svg><span class="lbl">Inbox</span><span id="inbox-n" class="badge-n" hidden></span></button>
+    <button id="btn-usage" data-drawer="usage" aria-label="Usage and limits" data-tip="Usage and limits"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 14l4-4M4.9 19a9 9 0 1 1 14.2 0"/></svg><span class="lbl">Usage</span><span id="usage-n" class="badge-n"></span></button>
+  </div>
   <span class="grow"></span>
-  <div class="tgroup" role="group" aria-label="Panels">
-    <button id="btn-search" class="icon" aria-label="Search all screens (Ctrl+Shift+F)" data-tip="Search · Ctrl+Shift+F"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg></button>
-    <button id="btn-board" class="icon" aria-label="Agent board (Ctrl+B A)" data-tip="Agent board · Ctrl+B a"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg></button>
-    <button id="btn-agents" class="icon" aria-label="Agents hub (Ctrl+B M)" data-tip="herdr-agents · Ctrl+B m"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></button>
-    <button id="btn-tools" class="icon" aria-label="Tools (Ctrl+B .)" data-tip="Tools · Ctrl+B ."><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.8-.7-.7-2.8z"/></svg></button>
-    <button id="btn-usage" data-tip="Usage and limits">Usage <span id="usage-n" class="badge-n"></span></button>
-    <button id="btn-inbox" data-tip="Attention inbox · I">Inbox <span id="inbox-n" class="badge-n" hidden></span></button>
-    <button id="btn-palette" class="cmd" data-tip="Command palette"><span>Commands</span> <kbd>Ctrl K</kbd></button>
-    <button id="btn-help" class="icon" aria-label="Keys and guide (?)" data-tip="Keys · ?"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.5v.01"/></svg></button>
+  <div class="tgroup" role="group" aria-label="Tools">
+    <button id="btn-search" class="icon" data-drawer="search" aria-label="Search all screens (Ctrl+Shift+F)" data-tip="Search · Ctrl+Shift+F"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg></button>
+    <button id="btn-palette" class="cmd" aria-label="Command palette (Ctrl+K)" data-tip="Every command · Ctrl+K"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></svg><span class="lbl">Commands</span><kbd class="lbl">Ctrl K</kbd></button>
+    <button id="btn-more" class="icon" aria-label="More: board, agents hub, tools, keys, settings" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" data-tip="More"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" style="stroke-width:3.2"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></button>
     <label class="safe-t" data-tip="Read-only: every write is refused"><input type="checkbox" id="safe"> Safe</label>
   </div>
 </header>
+<div id="more-menu" class="menu card-popover more-menu" role="menu" aria-label="More" hidden>
+  <button role="menuitem" id="btn-board" data-drawer="board"><span>Agent board</span><kbd>Ctrl+B a</kbd></button>
+  <button role="menuitem" id="btn-agents" data-drawer="agents"><span>Agents hub (herdr-agents)</span><kbd>Ctrl+B m</kbd></button>
+  <button role="menuitem" id="btn-tools" data-drawer="tools"><span>Tools: check, headless, skills</span><kbd>Ctrl+B .</kbd></button>
+  <button role="menuitem" id="btn-spaces"><span>Spaces side by side</span><kbd>Ctrl+B S</kbd></button>
+  <button role="menuitem" id="btn-settings"><span>Settings (look)</span><kbd>Ctrl+B s</kbd></button>
+  <button role="menuitem" id="btn-help" data-drawer="help"><span>Keys and guide</span><kbd>?</kbd></button>
+  <button role="menuitem" id="btn-stopall" class="danger"><span>Stop everything…</span><kbd>Ctrl+B Q</kbd></button>
+</div>
 <div id="banner" class="banner" hidden role="alert"></div>
 <div id="rawbar" class="rawbar" hidden role="status"><span id="rawbar-text"></span><button id="rawbar-stop">Stop typing</button></div>
 <form id="bcast" class="bcast" hidden aria-label="Broadcast">
@@ -56,12 +66,14 @@
     <div id="rail-nav" class="rail-nav"></div>
     <section id="health" class="health" aria-label="Health"></section>
   </nav>
+  <div id="rail-split" class="divider v rail-split" role="separator" aria-orientation="vertical" aria-label="Sidebar width (arrows move, double-click resets)" tabindex="0"></div>
   <main class="main">
     <div id="empty" class="empty" hidden></div>
     <p id="grid-note" class="grid-note" aria-live="polite"></p>
     <div id="grid" class="grid" aria-label="Panes"></div>
   </main>
   <aside id="drawer" class="drawer" hidden aria-labelledby="drawer-title">
+    <div id="drawer-split" class="divider v drawer-split" role="separator" aria-orientation="vertical" aria-label="Panel width (arrows move, double-click resets)" tabindex="0"></div>
     <div class="drawer-h"><h2 id="drawer-title"></h2><button id="drawer-close" class="icon" aria-label="Close panel (Esc)"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div id="drawer-body" class="drawer-body"></div>
   </aside>

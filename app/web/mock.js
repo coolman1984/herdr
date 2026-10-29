@@ -9,6 +9,26 @@ export function createMock(R) {
   let running = q.get('down') !== '1';
   let rev = 0, n = 5, readOnly = false, prefs = {};
   try { prefs = JSON.parse(localStorage.getItem('deck.mock-prefs') || '{}'); } catch { /* fresh mock backend */ }
+  // &prefs={json} seeds saved settings (cols, rail, filter, sizes) for headless screenshots.
+  if (q.get('prefs')) prefs = { ...prefs, ...JSON.parse(q.get('prefs')) };
+  // &drag=v:-200,h:120,rail:80,click:#btn-inbox,drawer:-100 drags those dividers by N px after load (real
+  // pointer handlers); click:<selector> clicks a button first.
+  if (q.get('drag')) setTimeout(function dragWhenReady() {
+    if (!document.querySelector('#grid .card')) { setTimeout(dragWhenReady, 100); return; }
+    const sel = { v: '.divider.gd.v', h: '.divider.gd.h', rail: '#rail-split', drawer: '#drawer-split' };
+    for (const step of q.get('drag').split(',')) {
+      const [name, by] = step.split(':');
+      if (name === 'click') { document.querySelector(by).click(); continue; }   // click:#btn-inbox opens the drawer
+      const d = document.querySelector(sel[name]);
+      if (!d) { console.error('mock drag: no divider ' + name); continue; }
+      if (by === 'dbl') { d.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); continue; }   // v:dbl resets
+      if (by === 'key') { d.focus(); d.dispatchEvent(new KeyboardEvent('keydown', { key: name === 'h' ? 'ArrowDown' : 'ArrowRight', bubbles: true })); continue; }
+      const r = d.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2, dy = name === 'h';
+      const at = (t, px) => new PointerEvent(t, { bubbles: true, pointerId: 1, button: 0, clientX: dy ? x : x + px, clientY: dy ? y + px : y });
+      d.dispatchEvent(at('pointerdown', 0));
+      window.dispatchEvent(at('pointermove', +by / 2)); window.dispatchEvent(at('pointermove', +by)); window.dispatchEvent(at('pointerup', +by));
+    }
+  }, 1500);
   const reservations = new Map(), scopes = new Map();
   let visible = new Set(), clientId = 'c-mock-1';
   const lines = (arr) => arr.join('\n');

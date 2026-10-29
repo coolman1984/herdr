@@ -448,3 +448,29 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     exit-code checks went on to push the OLD commit (2026-10-29: harmless, `windows-toolkit` fast-forwarded
     to `main`). Write the message to a file and use `git commit -F <file>`, and check `$LASTEXITCODE`
     after every git write - `$ErrorActionPreference = 'Stop'` does not stop native commands.
+
+94. **A CSS grid row template on `<body>` breaks when a listed child is `hidden`** (2026-10-29, Deck round
+    5): `display:none` children are not grid items, so auto-placement shifts every later child up one
+    row - Deck's `.body` landed in an `auto` row and the `1fr` row became dead space under the status bar.
+    Use a flex column (`flex: 1 1 0; min-height: 0` on the area that must stretch) or explicit
+    `grid-row`/`grid-template-areas` for page shells whose bars can hide.
+
+95. **Deck cannot set a Herdr pane's terminal size** (2026-10-29, checked in `herdr-app/src/client`):
+    a tab's size comes only from the attached Herdr client terminal (`ClientMessage::Resize` on the
+    client protocol); the public `herdr pane resize --direction --amount` (API `pane.resize`) only moves a
+    split line inside that size. So a Deck card can never make the CLI wrap to the card's width; Deck
+    wraps the text itself (`screen.js` reflow). A real fix needs Herdr itself (upstream) or Deck acting
+    as a Herdr client, which would change the size of the owner's own Herdr window too.
+
+96. **`node --test app/tests/web/` runs only `contracts.test.mjs`** (2026-10-29): the folder has a
+    `package.json` whose `main` is that file, so node runs the folder as one module. Name every file:
+    `node --test app/tests/web/contracts.test.mjs app/tests/web/split.test.mjs`. Headless Edge
+    `--screenshot` with `--virtual-time-budget` can also fire before async page state exists; make test
+    hooks wait in the page for the element (Deck `mock.js &drag=` waits for `#grid .card`).
+
+97. **The web test DOM (`app/tests/web/dom.mjs`) is minimal** (2026-10-29): events do not bubble (no
+    parent chain), there is no global `removeEventListener`, `cancelAnimationFrame` or
+    `document.getElementById`, and selectors are only `.class`, `#id`, `[attr]` or `[attr="v"]` and a tag
+    name (no `:scope`, `:not()`, compound `.a.b`). Front-end code that the tests import uses
+    `window.addEventListener`, `document.querySelector('#id')` and simple class selectors; anything that
+    needs real bubbling is checked in the headless browser harness (`app/tests/deck-ui.ps1`).

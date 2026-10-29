@@ -150,6 +150,37 @@ export function openMenu(trigger, menu) {
   menu.querySelector('button')?.focus();
   return close;
 }
+// A menu that lives in the page (its items keep their ids): the trigger toggles it, arrows move,
+// Esc closes and returns focus to the trigger, a click outside or on an item closes it.
+export function bindMenu(trigger, menu) {
+  let ac = null;
+  const items = () => [...menu.querySelectorAll('button')];
+  const close = (focus) => {
+    if (menu.hidden) return;
+    menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); ac?.abort(); ac = null;
+    if (focus) trigger.focus();
+  };
+  const open = () => {
+    activeMenuClose?.();
+    menu.hidden = false; trigger.setAttribute('aria-expanded', 'true');
+    const r = trigger.getBoundingClientRect();
+    menu.style.top = Math.round(r.bottom + 6) + 'px'; menu.style.left = 'auto'; menu.style.right = Math.max(8, Math.round(innerWidth - r.right)) + 'px';
+    ac = new AbortController(); const opts = { signal: ac.signal };
+    document.addEventListener('pointerdown', (ev) => { if (!menu.contains(ev.target) && !trigger.contains(ev.target)) close(false); }, opts);
+    document.addEventListener('keydown', (ev) => {
+      const list = items(), i = list.indexOf(document.activeElement);
+      if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); close(true); }
+      else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); ev.stopImmediatePropagation(); list[(i + (ev.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length]?.focus(); }
+      else if (ev.key === 'Home' || ev.key === 'End') { ev.preventDefault(); ev.stopImmediatePropagation(); list[ev.key === 'Home' ? 0 : list.length - 1]?.focus(); }
+      else if (ev.key === 'Tab') close(false);
+    }, { ...opts, capture: true });
+    window.addEventListener('resize', () => close(false), opts);
+    items()[0]?.focus();
+  };
+  trigger.addEventListener('click', () => (menu.hidden ? open() : close(true)));
+  menu.addEventListener('click', (ev) => { if (ev.target.closest?.('button')) close(false); });
+  return { open, close };
+}
 // Patch text/attributes in place. Form controls keep their node, focus and unsaved value.
 export function patchContent(target, source) {
   const old = [...target.childNodes], fresh = [...source.childNodes], used = new Set();

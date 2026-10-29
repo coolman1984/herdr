@@ -145,9 +145,9 @@ try {
     Check 'Divider mouse resize' {
         JS "[...document.querySelectorAll('.rail-item.ws')].find(b=>b.querySelector('.rl1').textContent==='Deck R3 verification').click()" | Out-Null
         Click '[data-view="layout"]'
-        Wait-Js '!!document.querySelector(".divider.v")'
+        Wait-Js '!!document.querySelector("#grid .divider.v")'
         $before=J (Invoke-Lab @('pane','layout','--pane',$script:pane))
-        $pos=JS '(()=>{const r=document.querySelector(".divider.v").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+Math.min(100,r.height/2)}})()'
+        $pos=JS '(()=>{const r=document.querySelector("#grid .divider.v").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+Math.min(100,r.height/2)}})()'
         Send-Cdp 'Input.dispatchMouseEvent' @{type='mousePressed';x=$pos.x;y=$pos.y;button='left';clickCount=1} | Out-Null
         Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseMoved';x=($pos.x+70);y=$pos.y;button='left';buttons=1} | Out-Null
         Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseReleased';x=($pos.x+70);y=$pos.y;button='left';clickCount=1} | Out-Null
@@ -333,7 +333,7 @@ try {
                         Set-DeckSize $width 900
                         Open-DeckPage ("?theme=$theme"+$(if($mode -eq 'mock'){'&mock=1'}else{''}))
                         JS '(await import("./ui.js")).toast("Layout blocked fixture", "blocked", 60000)' | Out-Null
-                        $measure=JS '(()=>{const h=document.querySelector("#btn-help").getBoundingClientRect(),ts=[...document.querySelectorAll(".toast")].map(e=>e.getBoundingClientRect()),hs=[...document.querySelectorAll(".card:not([hidden]) .card-h")].map(e=>e.getBoundingClientRect());return {width:innerWidth,scroll:document.documentElement.scrollWidth,help:h.left>=0&&h.right<=innerWidth,overlap:ts.some(t=>hs.some(h=>t.left<h.right&&t.right>h.left&&t.top<h.bottom&&t.bottom>h.top)),theme:document.documentElement.dataset.theme,cards:hs.length}})()'
+                        $measure=JS '(()=>{const h=document.querySelector(".top .safe-t").getBoundingClientRect(),ts=[...document.querySelectorAll(".toast")].map(e=>e.getBoundingClientRect()),hs=[...document.querySelectorAll(".card:not([hidden]) .card-h")].map(e=>e.getBoundingClientRect());return {width:innerWidth,scroll:document.documentElement.scrollWidth,help:h.left>=0&&h.right<=innerWidth,overlap:ts.some(t=>hs.some(h=>t.left<h.right&&t.right>h.left&&t.top<h.bottom&&t.bottom>h.top)),theme:document.documentElement.dataset.theme,cards:hs.length}})()'
                         $row[$mode]=$measure
                         if($width -eq 1440 -and $mode -eq 'lab') { Save-DeckShot "r3-lab-$theme" | Out-Null }
                         Assert ($measure.scroll -le $width -and $measure.help -and -not $measure.overlap -and $measure.theme -eq $theme -and $measure.cards -gt 0) (J $measure)
