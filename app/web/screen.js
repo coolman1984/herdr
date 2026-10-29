@@ -17,7 +17,7 @@ const ro = new ResizeObserver((entries) => {
   for (const e of entries) {
     const v = e.target._view; if (!v) continue;
     v.h = e.contentRect.height;
-    if (v.w !== e.contentRect.width) { v.w = e.contentRect.width; v.fit(); }
+    if (v.w !== e.contentRect.width) { v.w = e.contentRect.width; v.fitSoon(); }
     if (v.follow) v.jump = true; v.need();
   }
 });
@@ -75,6 +75,14 @@ export class ScreenView {
     return (this.guessed = m >= 20 ? Math.min(m, 400) : 0);
   }
   fit() { this.fitPending = true; this.need(); }
+  // Width changes while a divider or the window is dragged: re-wrap at most every 100 ms, plus once at
+  // the end (a re-wrap re-parses every line, too costly for each frame).
+  fitSoon() {
+    clearTimeout(this.fitTimer);
+    const wait = this.fitAt == null ? 0 : 100 - (performance.now() - this.fitAt);   // first size: fit now
+    if (wait <= 0) { this.fitAt = performance.now(); this.fit(); }
+    else this.fitTimer = setTimeout(() => { this.fitAt = performance.now(); this.fit(); }, wait);
+  }
   prepare() {
     if (this.fitPending) { this.fitPending = false; this.applyFit(); }
     if (this.dirty && this.h && !this.lh) this.measureRow();

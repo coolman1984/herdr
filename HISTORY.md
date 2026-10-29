@@ -1324,3 +1324,35 @@ agent stub prints Codex's `›` input box.
 soak / handle slope (counters now exist for it); race detector. I2 (Herdr lifecycle events) and I4
 (xterm.js comparison) not attempted.
 **Lesson:** #89, #90, #91.
+
+## Phase 52 - Deck round 5: cards fill the window, every inner area resizable (2026-10-29)
+
+**Symptom:** at 1900x1030 two cards were ~440 px tall with the lower half of the window empty and the
+status bar floating in the middle (owner's screenshots 12:29 and 12:33); nothing could be resized in
+grid view; the cards showed a horizontal scrollbar and cut lines.
+**Cause (proven in `tasks/deck-r5-shots/before-*.png`):** `body` was a CSS grid `auto auto auto 1fr auto`
+for header, banner, rawbar, broadcast bar, `.body`, status bar. The three bars are `hidden`
+(`display:none`), so auto-placement moved `.body` into an `auto` row and the empty `1fr` row ended up
+under the status bar. Card rows were then sized from `100vh` formulas (a `min-height:1000px` media query
+halved them for an assumed second row). The horizontal scrollbar is from the owner's running exe:
+`app\HerdrDeck.exe` is dated 2026-10-24 and predates the round-4 reflow (`.screen` has
+`overflow-x: hidden` and wraps long lines since round 4) - it needs a rebuild.
+**Fix (`app/web`):** `body` is a flex column and `.body` takes the rest; `.main` is a flex column and the
+grid fills it; rows share the height (`minmax(0, Nfr)`), `--grid-min` makes many rows scroll instead of
+collapsing. New `split.js`: dividers between card columns and rows (grid view), on the rail edge and on
+the drawer edge; drag (window listeners, one write per frame), arrow keys (Shift = 4x), Home or
+double-click resets; minimum card 360x240 px, rail 140 px..50%, drawer 280 px..window-360; sizes
+saved in LS (`railW`, `drawerW`, `gridSizes` per column count and per row count). Screen refits on a
+width change at most every 100 ms (`ScreenView.fitSoon`). Herdr layout view and its own dividers are
+unchanged; it now also fills the height. `mock.js`: `&prefs=` and `&drag=` for headless screenshots.
+**Not possible from Deck:** sizing the real Herdr pane/PTY to a card (owner's addition): Herdr's
+public CLI/API only moves a split line (`pane resize --direction --amount`); the tab size comes from the
+attached Herdr client terminal (`ClientMessage::Resize`, client protocol) (#95). Deck wraps the text
+to the card instead.
+**Proof:** `build.ps1` exit 0 (go fmt/vet/test ok); `node --test` web tests 35/35 (5 new in
+`app/tests/web/split.test.mjs`; on HEAD that file fails: `split.js` missing); `verify-ui.ps1` lab +
+mock: 37 PASS / 9 FAIL on HEAD and on this branch, the same 8 pre-existing failures, plus "Divider mouse
+resize" which failed on HEAD and passes now (Herdr layout grid had no height). Screenshots:
+`tasks/deck-r5-shots/before-*` and `after-*` (1900x1030 and 1280x720, 2 and 4 cards, rail on/off,
+after drags, drawer drag, Splits view, double-click reset).
+**Lesson:** #94, #95, #96.

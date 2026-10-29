@@ -6,6 +6,7 @@ import { icon, glyph, ring } from './icons.js';
 import * as P from './panels.js';
 import * as Q from './parity.js';
 import * as G from './guard.js';
+import { initSplits, applySizes, layoutGrid, clearGrid } from './split.js';
 
 let prefs = {}, prefsTimer = 0, prefsReady = false, prefsWrite = Promise.resolve();
 function savePreferences() {
@@ -310,8 +311,8 @@ function renderMain() {
     prev = c.root;
     c.root.style.cssText = '';
   }
-  for (const h of grid.querySelectorAll('.divider')) h.remove();
-  if (lay) Q.placeLayout(grid, lay, cards);
+  for (const h of grid.querySelectorAll('.divider')) if (!h.classList.contains('gd')) h.remove();   // grid dividers (.gd) stay
+  if (lay) { clearGrid(grid); Q.placeLayout(grid, lay, cards); } else layoutGrid(grid, list.length, S.zoom ? 1 : S.cols);
   const hiddenN = [...S.panes.keys()].filter((k) => S.hidden.has(k)).length;
   $('#grid-note').textContent = S.view === 'layout' && !lay && !S.zoom ? 'Herdr layout view: pick a tab in the left rail (or a space) to see its real splits.'
     : list.length === 0 && S.panes.size ? 'No panes in this view.' : hiddenN ? `${hiddenN} hidden pane(s) - Ctrl+K "Show hidden panes"` : '';
@@ -623,6 +624,7 @@ async function boot() {
   if (new URLSearchParams(location.search).get('perf') === '1') import('./perf.js').catch((e) => toast('Perf overlay failed: ' + e.message, 'error'));
   P.applyLook();
   bindTop();
+  initSplits(LS);
   try { await initApi(); } catch (e) { toast('Mock failed to load: ' + e.message, 'error'); return; }
   window.addEventListener('error', (e) => toast('Page error: ' + e.message, 'error'));
   window.addEventListener('unhandledrejection', (e) => toast('Page error: ' + (e.reason?.message || e.reason), 'error'));
@@ -633,7 +635,7 @@ async function boot() {
     Object.assign(prefs, r.prefs || {});
     for (const [k, v] of Object.entries(prefs)) { try { localStorage.setItem('deck.' + k, JSON.stringify(v)); } catch { /* blocked local cache */ } }
     Object.assign(S, { filter: LS.get('filter', S.filter), cols: LS.get('cols', S.cols), view: LS.get('view', S.view), rail: LS.get('rail', S.rail), history: capHistory(LS.get('history', S.history)), hidden: new Set(LS.get('hiddenPanes', [])), pinned: new Set(LS.get('pinned', [])) });
-    P.applyLook(); prefsReady = true;
+    P.applyLook(); applySizes(); prefsReady = true;
   } catch (e) { toast('Preferences unavailable: ' + e.message, 'warn'); }
   Q.syncJobs();
   await loadState();

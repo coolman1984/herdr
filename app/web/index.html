@@ -56,12 +56,14 @@
     <div id="rail-nav" class="rail-nav"></div>
     <section id="health" class="health" aria-label="Health"></section>
   </nav>
+  <div id="rail-split" class="divider v rail-split" role="separator" aria-orientation="vertical" aria-label="Sidebar width (arrows move, double-click resets)" tabindex="0"></div>
   <main class="main">
     <div id="empty" class="empty" hidden></div>
     <p id="grid-note" class="grid-note" aria-live="polite"></p>
     <div id="grid" class="grid" aria-label="Panes"></div>
   </main>
   <aside id="drawer" class="drawer" hidden aria-labelledby="drawer-title">
+    <div id="drawer-split" class="divider v drawer-split" role="separator" aria-orientation="vertical" aria-label="Panel width (arrows move, double-click resets)" tabindex="0"></div>
     <div class="drawer-h"><h2 id="drawer-title"></h2><button id="drawer-close" class="icon" aria-label="Close panel (Esc)"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div id="drawer-body" class="drawer-body"></div>
   </aside>

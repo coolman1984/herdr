@@ -145,9 +145,9 @@ try {
     Check 'Divider mouse resize' {
         JS "[...document.querySelectorAll('.rail-item.ws')].find(b=>b.querySelector('.rl1').textContent==='Deck R3 verification').click()" | Out-Null
         Click '[data-view="layout"]'
-        Wait-Js '!!document.querySelector(".divider.v")'
+        Wait-Js '!!document.querySelector("#grid .divider.v")'
         $before=J (Invoke-Lab @('pane','layout','--pane',$script:pane))
-        $pos=JS '(()=>{const r=document.querySelector(".divider.v").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+Math.min(100,r.height/2)}})()'
+        $pos=JS '(()=>{const r=document.querySelector("#grid .divider.v").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+Math.min(100,r.height/2)}})()'
         Send-Cdp 'Input.dispatchMouseEvent' @{type='mousePressed';x=$pos.x;y=$pos.y;button='left';clickCount=1} | Out-Null
         Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseMoved';x=($pos.x+70);y=$pos.y;button='left';buttons=1} | Out-Null
         Send-Cdp 'Input.dispatchMouseEvent' @{type='mouseReleased';x=($pos.x+70);y=$pos.y;button='left';clickCount=1} | Out-Null
