@@ -101,8 +101,14 @@ func findEdge() (string, error) {
 	}
 	return "", fmt.Errorf("Microsoft Edge is missing. Install Edge to open Herdr Deck.")
 }
+
+// windowArgs opens the Deck in its own Edge profile. The page only talks to 127.0.0.1, and on a PC with a
+// system proxy Edge spent ~2.5 s detecting it before the first request, so the window uses no proxy.
+func windowArgs(url, profile string) []string {
+	return []string{"--app=" + url, "--user-data-dir=" + profile, "--window-size=1400,900", "--no-first-run", "--no-proxy-server"}
+}
 func openWindow(edge, url, profile string) error {
-	cmd := exec.Command(edge, "--app="+url, "--user-data-dir="+profile, "--window-size=1400,900", "--no-first-run")
+	cmd := exec.Command(edge, windowArgs(url, profile)...)
 	hideProcess(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
@@ -134,7 +140,7 @@ func systemHealth() (map[string]any, error) {
 		}
 		disks = append(disks, row)
 	}
-	return map[string]any{"ram_used_pct": status.Load, "ram_total_gb": float64(status.TotalPhys) / (1 << 30), "ram_available_mb": float64(status.AvailPhys) / (1 << 20), "disks": disks}, nil
+	return map[string]any{"ram_used_pct": status.Load, "ram_total_gb": float64(status.TotalPhys) / (1 << 30), "ram_available_mb": float64(status.AvailPhys) / (1 << 20), "ram_free_mb": float64(status.AvailPhys) / (1 << 20), "disks": disks}, nil
 }
 func processMemory(pid uint32) (uint64, error) {
 	handle, err := syscall.OpenProcess(0x0400|0x0010, false, pid)

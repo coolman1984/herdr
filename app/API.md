@@ -25,13 +25,13 @@ DONE means backend behavior verified; it does not certify every frontend button.
 | /api/tab/create, /rename, /close, /focus; /api/workspace/rename, /close, /focus | PARTIAL | IDs validated against fresh snapshot; CLI help inspected; live UI not verified |
 | POST /api/shell | PARTIAL | Handler implemented, split path verified; empty-session workspace path not separately exercised |
 | POST /api/agent/start, /stop, /focus | PARTIAL | Existing helper plus busy fallback; no paid AI agents started for verification; main-account normalization and next-account guard need review |
-| POST /api/herdr/start, /reload-config | PARTIAL | Implemented; not invoked; named-session Start currently uses default launcher and MUST be fixed before lab use |
+| POST /api/herdr/start, /reload-config | DONE | Named-session Start now runs `herdr --session <name> server` and names the session in the reply; the default session keeps `HerdrLauncher.exe`. Evidence: TestHerdrStartTargetsTheNamedSession (unit-tested; lab not run). /reload-config is unchanged |
 | GET /api/tasks, /api/tasks/read, /api/docs, /api/runs, /api/runs/read | DONE | Allow-list/traversal/docs tests; task list real lab. Actual run-history content not inspected |
 | GET /api/docs?name=KEYS | PARTIAL | Calls existing help -List; not live-tested. GUIDE and master skill documents supported |
-| GET /api/health | PARTIAL | RAM/disks/process RSS/handles/goroutines measured; pane process memory implemented. R21 ram_free_mb alias still missing (actual field ram_available_mb) |
+| GET /api/health | DONE | RAM/disks/process RSS/handles/goroutines measured; pane process memory implemented; `ram_free_mb` added next to `ram_available_mb`, all older fields kept. Evidence: TestHealthAddsRamFreeAlias (unit-tested; lab not run) |
 | POST /api/panes/close-finished | PARTIAL | Validates idle/done before any close; no live multi-close test |
 | GET /api/signin, POST /api/signin/open | PARTIAL | Three read-only probes; unsupported tools honestly unknown; per-account probes and login panes not tested |
-| GET /api/git | PARTIAL | Read-only status/stat handler; R24 paths/root fields NOT STARTED |
+| GET /api/git | DONE | Read-only status/stat plus R24 `root` and `paths` from `status --porcelain=v1 -z`; the handler now allows 15 s for its four git calls. Evidence: TestGitEndpointReportsRootAndPorcelainPaths, TestParsePorcelainZReadsRenamesAndSpaces (unit-tested; lab not run) |
 | POST /api/check | PARTIAL | Fixed script handler. Direct setup check has 3 external/concurrent-document failures; see README |
 | POST /api/lessons/append | DONE | Temp-directory behavior test confirms append-only numbered content; real lesson not appended through UI |
 | GET /api/jobs | PARTIAL | Bounded job results implemented; asynchronous live toolkit jobs not verified |
@@ -44,7 +44,7 @@ DONE means backend behavior verified; it does not certify every frontend button.
 | POST /api/agents/ask, /fanout, /team, /handoff | PARTIAL | Existing helper, bounded async jobs/temp plans; no actual agent dispatch or handoff tested |
 | POST /api/headless, /api/trial, /api/sync-skills | PARTIAL | Fixed-script adapters, bounded jobs. Not run: they launch agents/change external account copies |
 | /debug/pprof/* | PARTIAL | Token-protected, off unless --debug; not profiled |
-| /assets/* cache, WOFF2 MIME | PARTIAL | ETag/immutable/font/woff2 implemented for /assets; frontend currently uses /fonts, which still lacks immutable caching |
+| /assets/* and /fonts/* cache, WOFF2 MIME | DONE | One `staticHandler` serves both prefixes with ETag, `private, max-age=31536000, immutable` and `Content-Type: font/woff2`; the page itself stays no-store. Evidence: TestStaticHandlerCachesFontsAndAssets (unit-tested; lab not run) |
 
 ### Every safeguard — exact current status
 
@@ -52,14 +52,15 @@ DONE means backend behavior verified; it does not certify every frontend button.
 |---|---|---|
 | Auth/localhost/origin/cookie, hidden children, deadlines, bounded screen/queues | DONE | Unit tests, process stub has no console, PE GUI subsystem=2, disconnect/goroutine and queue-resync tests |
 | Blocked prompt guard + R17 status flicker | DONE | Real waiting fixture rejects 409 without answering; metadata-only poll regression passes |
+| Typed-input guard (`input_not_empty`) | DONE | A prompt/paste/ask/fanout that would land in an agent's input box while the owner has text there is refused with 409 `input_not_empty` (`agent`, `pane_id`, `typed`, `message`) and no write happens first; dim suggestion text and history prompts are not "typed". Evidence: TestInputTextMatchesEveryHerdrFixture, TestPromptAndPasteRefuseTextInTheInputBox, TestEmptyInputBoxStillAcceptsAPromptAndPaste, TestAskRefusesTypedInputBeforeAnyWrite, TestFanoutChecksEveryNamedAgentFirst (unit-tested; lab not run) |
 | Task readiness | DONE | /api/tasks/validate phrase warnings tested; frontend owns launch integration; wording presence is not proof |
-| File ownership reservations / R19 | PARTIAL | Overlap normalization tested; current API requires repo, uses owner-based release and absolute paths. Task/id/release route/409 conflict shape and persisted reload NOT STARTED |
-| Bounded waves / R21 | PARTIAL | Global capacity/RAM/disk floors and explicit queued release implemented. Frontend floor payload and ram_free_mb alias NOT STARTED |
-| Helper accounts / R20 | PARTIAL | Non-secret lead field + empty/same/unknown rejection implemented; error currently 502, not requested 409. Default account normalization and profile next need audit; no credential reads |
-| Research route / R22 | PARTIAL | Agent-start research rejected as unavailable. GET /api/headless/routes NOT STARTED; normal Cline coding headless still exists; never advertise it as verified research |
+| File ownership reservations / R19 | DONE | Frontend shape implemented: `GET /api/reservations` -> `{reservations,load_error}`, `POST {task,owner,paths}` -> `{ok,id,reservations}`, `POST /api/reservations/release {id}` -> `{ok}` or 404. Paths normalized to toolkit-relative forward-slash lower case, one trailing `/**` allowed; conflicts -> 409 with a `conflicts` list, 200-record limit, atomic file at `%APPDATA%\herdr\deck-reservations.json` reloaded on start (invalid file -> `load_error`). Evidence: TestReservationLifecycleConflictsAndReload, TestNormalizeReservationPathNormalizesAndRefuses (unit-tested; lab not run) |
+| Bounded waves / R21 | DONE | `ram_free_mb` alias plus an optional start floor `{"floor":{"ram_free_mb":N,"disk_free_gb":{"C:":N}}}` -> 409 `held: below the requested floor`; the capacity/RAM/disk policy refusals are now 409 status errors. Evidence: TestLaunchFloorRefusesBelowTheRequestedFloor, TestHealthAddsRamFreeAlias (unit-tested; lab not run) |
+| Helper accounts / R20 | DONE | `lead {tool,account,known}` in state; a Claude start is refused with 409 + `lead_account` unless the lead is known and the account is a different one; `""`/`main`/`default` resolve to `default_account` and start without an Account param; profile `next` starts claude on the least-used non-lead account below 95% (usage table parsed, 409 when none is left or the lead is unknown). No credential file is read. Evidence: TestClaudeAccountGuardRefusesTheLeadAndTheMainAlias, TestAccountAliasesMapOntoTheDefaultAccount, TestPickNextAccountSkipsTheLeadAndExhaustedAccounts (unit-tested; lab not run) |
+| Research route / R22 | DONE | `GET /api/headless/routes` -> `{"routes":[],"note":"...unavailable..."}` (fixed empty list, never claims research works); `POST /api/headless {"purpose":"research"}` -> 409. Normal Cline coding headless is unchanged and is still not advertised as verified research. Evidence: TestHeadlessRoutesStayEmptyAndResearchIsRefused (unit-tested; lab not run) |
 | Proof checklist + citation audit | DONE | /api/proof/audit tests: mentions/URLs never become verified; no pages opened. Frontend also implements its own view |
-| Scope drift / R24 | PARTIAL | Separate baseline/check handlers bounded and read-only; no live git baseline tested; requested git paths/root fields missing |
-| Uncertain delivery / R23 | PARTIAL | Latest 100 /api/deliveries records, rejected vs unknown, no replay tested. Requested dispatch_id/text_sha/key route and HTTP 504 NOT STARTED |
+| Scope drift / R24 | DONE | Separate baseline/check handlers bounded and read-only; `/api/git` adds `root` and `paths:[{path,code}]` so the frontend compares with a task's declared files without parsing text. Evidence: TestGitEndpointReportsRootAndPorcelainPaths, TestParsePorcelainZReadsRenamesAndSpaces (unit-tested; lab not run) |
+| Uncertain delivery / R23 | DONE | The prompt reply carries `dispatch_id`; `GET /api/dispatches?key=` returns the 20 newest `{dispatch_id,key,pane,text_sha,state,error,at}` records; a timeout after possible delivery is 504 `delivery unknown` with `dispatch_id`, a rejected submission is 502, and nothing is ever retried automatically. `/api/deliveries` still returns the same records. Evidence: TestPromptDispatchIDAndDispatchLedger, TestUncertainDeliveryIs504AndRejectedDeliveryIs502, TestUncertainDeliveryIsRecordedWithoutReplay (unit-tested; lab not run) |
 | Failure recovery cards | DONE | Error kind/next_step/cause fields + frontend classification; unknown causes explicitly unknown |
 
 ### NEXT STEPS (phone-friendly order)
@@ -168,9 +169,11 @@ sign in, sync accounts or stop the owner's session are NOT run by verification.
 
 - `GET /api/tasks/validate?file=tasks/x.md` → `{ready,warnings,method,proof:"not verified"}`.
   This checks explicit scope/answer/check/stop wording, never invents instructions.
-- `GET /api/reservations`; `POST /api/reservations {owner,repo,paths:["app/**"],release:false}`.
-  Case-normalized absolute paths; overlapping file/subtree writers are refused. Release only
-  that owner's record with `{owner,release:true}`. Shared dispatch bookkeeping, no filesystem lock.
+- `GET /api/reservations` -> `{reservations,load_error}`; `POST /api/reservations {task,owner,paths:["app/web/app.js"]}`
+  -> `{ok,id,reservations}` or 409 `reservation conflict` with a `conflicts` list; `POST /api/reservations/release {id}`.
+  Paths are toolkit-relative, lower-case, forward slashes, one trailing `/**` allowed; a reservation of the
+  same task replaces that task's earlier record. Shared dispatch bookkeeping, no filesystem lock.
+  Round 3 below documents the exact shapes and statuses.
 - `GET|POST /api/launch/policy {max_active:4,min_ram_mb:512,min_disk_gb:0.5}`. No work is killed.
   Direct agent starts check the chosen capacity and free RAM/project-drive disk floors.
 - `GET|POST /api/launch/queue` (POST uses the same fields as agent start). Returns a held launch ID.
@@ -184,8 +187,9 @@ sign in, sync accounts or stop the owner's session are NOT run by verification.
 - `POST /api/scope/baseline {id,repo,allowed:["app/**"]}`, then `GET /api/scope/check?id=...`.
   Read-only changed-path fingerprints distinguish pre-existing edits; unexpected changes
   produce a warning, never blame, rollback, commit, merge or deletion.
-- `GET /api/deliveries` retains the latest 100 prompt dispatches. Each guarded prompt creates
-  a dispatch ID; timeouts/errors after submission become `delivery unknown`. No automatic replay.
+- `GET /api/deliveries` retains the latest 100 prompt dispatches; `GET /api/dispatches?key=` returns the
+  20 newest with `dispatch_id,key,pane,text_sha,state`. Each guarded prompt creates a dispatch ID; a
+  timeout after possible delivery is 504 `delivery unknown`, a rejected submission is 502. No automatic replay.
 - Errors add `kind,next_step,cause` for recovery cards. Unknown causes remain unknown.
 
 These endpoints are implemented and being verified; frontend integration is owned by Opus.
@@ -193,8 +197,8 @@ The safe-mode toggle blocks all launch/reservation/file writes. Proof audit and 
 are read-only. Retention: 4 jobs active, 24 recent, 32 scope baselines, 64 reservations,
 128 paths per reservation, 512 changed files per scope comparison.
 
-Static assets `/assets/*` have ETag and private immutable one-year cache headers; WOFF2
-has `Content-Type: font/woff2`. They still require the cookie/token. HTML/API are no-store.
+Static assets `/assets/*` and the page fonts `/fonts/*` have ETag and private immutable one-year cache
+headers; WOFF2 has `Content-Type: font/woff2`. They still require the cookie/token. HTML/API are no-store.
 All paths below require `?t=TOKEN` (the token from the window URL), including assets and SSE.
 For JS/CSS imports, append this token to resource URLs. No CORS. JSON POSTs only; a present
 Origin must equal the Deck origin. Errors: HTTP 400/403/404/409/502 with `{"error":"message"}`.
@@ -259,3 +263,141 @@ requests then return 403. This endpoint itself can always turn the mode off by e
 No arbitrary executable, arbitrary path reader, credential file reader, or shell endpoint.
 Task/doc readers will use fixed allow-lists. Any stored settings/export must stay under
 `%APPDATA%/herdr/deck-*`. No git mutations. All child processes hidden and time-limited.
+
+## Round 3 (2026-10-26)
+
+The frontend's R19-R24 plus the input-box guard, implemented exactly as the frontend already calls it.
+Everything below is unit-tested; **the lab was not run**, so no row claims live verification. Build:
+`app\build.ps1` exit 0, `HerdrDeck.exe` 8,656,384 bytes (8.26 MiB), SHA256
+`70C0243EDC39F1970B8D5F2D6F8C7D1E2B6263F23A44FFAD7FC6C561EBF4CFDF`.
+
+### HTTP errors with a status and extra fields
+A handler may return `*statusError{Status, Msg, Fields}`. `failHTTP` then uses `Status` and merges every
+`Fields` key into the error body after `error`, `kind`, `next_step`, `cause`; a `Fields["error"]` value
+overrides `error`. Without a `*statusError`, `lockedWrite` and `/api/action` keep the old rule
+(`blocked:` -> 409, everything else -> 502). Test: TestStatusErrorCarriesItsOwnStatusAndFields.
+
+### Input-box guard (`input_not_empty`)
+`inputText(screen, tool) string` reads the agent's input box out of real Herdr ANSI output:
+- Claude: the last line containing the prompt glyph `U+276F` that has a rule line above it (a line of
+  only `U+2500`, at least 20 runes, ANSI stripped) and another rule line within 12 lines below it. The
+  region is that line after the glyph and its following space or NBSP (`U+00A0`), plus every line up to
+  the lower rule. A history prompt has no rule above it and is not a box.
+- Codex: the last line in the last ten lines that starts (after spaces) with `U+203A`; the region is the
+  rest of that line.
+Inside the region a visible rune counts as typed unless it is a space/NBSP or the current SGR style is
+dim. Dim = SGR 2, SGR 90, `38;5;n` with n == 8 or 232 <= n <= 250, or `38;2;r;g;b` with max-min <= 12 and
+max <= 170; `0`/`22`/`39` reset it. The result is ANSI-stripped, trimmed and at most 200 runes.
+
+Wired in for `action` "prompt" and "paste" on panes with an agent, for `/api/agents/ask` and for
+`/api/agents/fanout` (every named agent is checked first, so one typed box stops the whole fanout). The
+pane is read with `pane read <id> --source visible --lines 60 --format ansi`, and no write happens before
+the check. Refusal:
+
+    HTTP 409 {"error":"input_not_empty","kind":"agent_or_request_error","next_step":"...","cause":"...",
+              "agent":"<name or pane id>","pane_id":"w1:p1","typed":"<first 60 runes>",
+              "message":"<agent> has text in its input box - not sent"}
+
+Tests: TestInputTextMatchesEveryHerdrFixture (all nine fixtures under `app/tests/fixtures/input`),
+TestTypedTextIgnoresDimTextAndKeepsSpaces, TestPromptAndPasteRefuseTextInTheInputBox,
+TestEmptyInputBoxStillAcceptsAPromptAndPaste, TestAskRefusesTypedInputBeforeAnyWrite,
+TestFanoutChecksEveryNamedAgentFirst.
+
+### R19 - reservations
+- `GET /api/reservations` -> `{"reservations":[{"id":"res-<unixnano>","task":"tasks/a.md","owner":"codex-1","paths":["app/web/app.js"],"created":"..."}],"load_error":""}`.
+- `POST /api/reservations {"task","owner","paths":[...]}` -> 200 `{"ok":true,"id":...,"reservations":[...]}`.
+  - 409 `{"error":"reservation conflict","conflicts":[{"path":"app/web/app.js","task":"tasks/a.md","owner":"codex-1"}]}`
+    when another task already owns an overlapping path (the requested, normalized path is listed).
+  - 400 for a missing/too long task (1-200 bytes) or owner (1-120 bytes), an empty path list or more than
+    128 paths, a NUL, a `*`/`?` other than one trailing `/**`, or a path that leaves the toolkit root.
+  - 409 `reservation limit reached` above 200 records. The same task replaces its own earlier record.
+- `POST /api/reservations/release {"id"}` -> `{"ok":true}`, or 404 `reservation not found`.
+
+Normalization: trimmed, `\` -> `/`, leading `./` dropped, absolute paths made relative to the toolkit
+root, one trailing `/**` and any trailing `/` stripped, lower-cased (`app\WEB\App.js` ->
+`app/web/app.js`). Overlap: equal, or one path is the other plus `/`. The list is written atomically to
+`%APPDATA%\herdr\deck-reservations.json` and loaded once per process; a missing file means an empty list
+and an unreadable or invalid file keeps the list empty and reports the reason in `load_error` (never
+silently). This is dispatch bookkeeping only and never blocks file access.
+Tests: TestReservationLifecycleConflictsAndReload, TestNormalizeReservationPathNormalizesAndRefuses.
+
+### R20 - account guard
+State carries `lead:{"tool":"claude","account":"2030"|"","known":true|false}` (the non-secret account
+folder name of the Claude session that started the Deck).
+- A Claude start (`/api/agent/start`, `action` "start") is refused with 409
+  `{"error":"account guard: pick another account (the lead uses 2030)","lead_account":"2030"}` when the
+  lead is unknown, the account is empty, or the account equals the lead's.
+- `""`, `main` and `default` (any case) mean the profile's `default_account`. When a start goes ahead with
+  that account, the helper is called **without** an `Account` parameter (the main sign-in has no account
+  folder); any other account is passed through lower-cased.
+- Helper launches (`helper:true`) keep their rules (explicit account and lead account, different, one of
+  the owner's other accounts 1984/2040) and now also answer 409.
+- Profile `next` (Claude on the least-used account): `herdr-agents usage` is parsed with
+  `^(\S+?)\*?\s+(\d+)%\s+.+?\s(\d+)%\s`; the lead's row and every row at or above 95% (5-hour or weekly)
+  are skipped; lowest 5-hour, then lowest weekly, then name order wins. The launch then starts profile
+  `claude` with that account. 409 `no Claude account available besides the lead` when nothing is left,
+  and 409 when the lead account is unknown.
+No credential file is ever read.
+Tests: TestClaudeAccountGuardRefusesTheLeadAndTheMainAlias, TestAccountAliasesMapOntoTheDefaultAccount,
+TestPickNextAccountSkipsTheLeadAndExhaustedAccounts.
+
+### R21 - RAM field and start floors
+`GET /api/health` keeps every field and adds `ram_free_mb` with the same number as `ram_available_mb`.
+`POST /api/agent/start` accepts an optional
+`{"floor":{"ram_free_mb":N,"disk_free_gb":{"C:":N}}}`; when free RAM or a requested drive is below the
+floor the start is refused with 409
+`{"error":"held: below the requested floor","ram_free_mb":<now>,"disk_free_gb":{"C:":<now>}}`. A drive
+the health report does not list counts as below the floor (never guessed). The capacity, RAM and disk
+policy refusals (`held: ...`) are 409 status errors too; a health failure stays 502.
+Tests: TestLaunchFloorRefusesBelowTheRequestedFloor, TestHealthAddsRamFreeAlias.
+
+### R22 - research routes
+`GET /api/headless/routes` ->
+`{"routes":[],"note":"No server-search-only research route has been verified for the Deck; research stays unavailable."}`
+(a fixed empty list; the Deck never claims research works). `POST /api/headless` accepts an optional
+`"purpose"`; `"research"` -> 409 `research route unavailable: no verified server-search route`. Without
+`purpose` the existing Cline coding behaviour is unchanged.
+Test: TestHeadlessRoutesStayEmptyAndResearchIsRefused.
+
+### R23 - dispatch IDs and uncertain delivery
+- `POST /api/pane/prompt` (and the prompt action) -> `{"ok":true,"message":...,"output":...,"dispatch_id":"dispatch-<unixnano>"}`.
+- `GET /api/dispatches?key=<key>` -> `{"dispatches":[{...}]}`, newest first, at most 20, filtered by `key`
+  when given; `key` is `session|pane_id`. Each record is
+  `{"id","dispatch_id","key","pane","text_sha","state","error","at"}` with `state` `sent` | `unknown` |
+  `failed` and `text_sha` the hex SHA-256 of the prompt text.
+- A transport failure or timeout after a possible delivery -> 504
+  `{"error":"delivery unknown","dispatch_id":...,"detail":...}`. A submission rejected with
+  `exit status 2`, `agent_not_ready`, `agent_blocked` or `invalid_request` -> 502 with `dispatch_id`.
+- Nothing is ever retried automatically. `/api/deliveries` still returns the same records (latest 100).
+Tests: TestPromptDispatchIDAndDispatchLedger, TestUncertainDeliveryIs504AndRejectedDeliveryIs502,
+TestUncertainDeliveryIsRecordedWithoutReplay.
+
+### R24 - git root and paths
+`GET /api/git?key=` keeps `status`, `stat` and `text` and adds:
+- `root`: `git -C <cwd> rev-parse --show-toplevel` with forward slashes.
+- `paths`: `[{"path":"app/web/app.js","code":" M"}]` parsed from
+  `git --no-optional-locks -C <cwd> status --porcelain=v1 -z --untracked-files=all`; `code` is the first
+  two bytes, `path` is repo-relative with forward slashes. For a rename or copy entry the first NUL field
+  is the new name and the following field (the original name) is skipped.
+The handler now allows 15 s for its four git calls (starting `git.exe` takes about 2 s on this PC, which
+made the old 5 s budget time out).
+Tests: TestGitEndpointReportsRootAndPorcelainPaths, TestParsePorcelainZReadsRenamesAndSpaces.
+
+### /fonts cache
+The `/assets/*` cache block was extracted into `staticHandler(files fs.FS) http.Handler` and now covers
+`/fonts/*` as well: ETag over the file bytes, `Cache-Control: private, max-age=31536000, immutable`,
+`Content-Type: font/woff2` for `.woff2`, 304 on a matching `If-None-Match`, 404 for a missing file. The
+page itself stays no-store. Test: TestStaticHandlerCachesFontsAndAssets.
+
+### /api/herdr/start on a named session
+With `--session <name>` the Deck now starts `herdr --session <name> server` through the same hidden,
+detached process start the launcher uses, and answers
+`Herdr server for session <name> started`. Without `--session` it starts `launcher\HerdrLauncher.exe`
+exactly as before. Test: TestHerdrStartTargetsTheNamedSession.
+
+### build.ps1 finds Go
+Order: `$env:DECK_GO` (when set and present), `C:\Users\mflma\tools\go\go1.26.1\go\bin\go.exe`,
+`D:\tools\go\go1.26.10\go\bin\go.exe`, then `go.exe` on PATH. Nothing found fails with
+`Go not found: set DECK_GO to go.exe (tried: ...)`. The script prints `Go: <path>` once, then formats,
+vets, tests and builds as before.
+

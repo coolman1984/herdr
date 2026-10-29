@@ -2,14 +2,13 @@
 // bounded launch waves, helper account guard, research route guard, proof checklist, scope drift
 // alarm, uncertain delivery guard, failure recovery cards, research citation audit.
 // Rules: warn, never invent; never answer a blocked agent; never resend or revert by itself.
-import { api } from './api.js';
-import { el, $, toast, fail, dialog, confirm, copyText } from './ui.js';
+import { api, missing } from './api.js';
+import { el, $, toast, fail, dialog, confirm } from './ui.js';
 import { icon } from './icons.js';
 import * as P from './panels.js';
 
 let X;
 export function init(ctx) { X = ctx; }
-const missing = (e) => e.status === 404 || e.status === 405 || /^404/.test(e.message);
 const field = (label, input) => el('label', { class: 'field' }, el('span', { text: label }), input);
 const mark = (ok, warn) => el('span', { class: 'pmark ' + (ok ? 'ok' : warn ? 'warn' : 'bad'), 'aria-hidden': 'true' }, icon(ok ? 'check' : 'x'));
 
@@ -89,7 +88,7 @@ export function queuePanel() {
 function accountGuard(profile, account, override) {
   const kind = X.S.profiles.find((p) => p.name === profile)?.kind || profile;
   if (kind !== 'claude' && profile !== 'next') return { ok: true };
-  if (profile === 'next') return { ok: true, note: 'herdr-agents picks the least-used account (lead account excluded by the tool)' };
+  if (profile === 'next') return { ok: true, note: 'The Deck picks the least-used Claude account that is not the lead\'s (refused when none is left)' };
   const lead = X.S.lead;
   if (!account) return { ok: false, why: 'A Claude helper needs an explicit account (not the lead\'s).' };
   if (lead && lead.known && lead.account === account) return { ok: false, why: `Account ${account} is the lead's own account.` };
@@ -149,7 +148,9 @@ export async function launch(file) {
     conflicts = [];
     try {
       const r = (await api.reservations()).reservations || [];
-      for (const res of r) for (const p of res.paths) if (paths.includes(p.toLowerCase()) && res.task !== taskSel.value) conflicts.push({ path: p, task: res.task, owner: res.owner });
+      const norm = (x) => x.toLowerCase().replace(/\\/g, '/').replace(/\/\*\*$|\/+$/g, '');
+      const overlap = (a, b) => a === b || a.startsWith(b + '/') || b.startsWith(a + '/');   // same rule as the backend (R19)
+      for (const res of r) if (res.task !== taskSel.value) for (const p of res.paths) { const hit = paths.find((x) => overlap(norm(x), norm(p))); if (hit) conflicts.push({ path: hit, task: res.task, owner: res.owner }); }
     } catch (e) { conflicts.unavailable = true; if (!missing(e)) toast('Reservations: ' + e.message, 'error'); }
     if (routes === null) { try { routes = (await api.headlessRoutes()).routes || []; } catch { routes = undefined; } }
     paint();
@@ -168,12 +169,15 @@ export async function launch(file) {
   const chosen = taskSel.value, prompt = `Read CLAUDE.md and AGENTS.md, then do the task in ${chosen}`;
   const record = (key) => recordLaunch(key, { task: chosen, paths, at: Date.now() });
   const reserve = () => api.reservations && api.reserve(chosen, target.value === 'new' ? prof.value : X.nameOf(S.panes.get(target.value) || {}), paths)
-    .catch((e) => { if (!missing(e)) toast('Reservation: ' + e.message, 'error'); });
+    .catch((e) => {
+      const list = (e.body?.conflicts || []).map((c) => `${c.path} (${c.task}, ${c.owner})`).join('; ');
+      if (!missing(e)) toast('Reservation: ' + e.message + (list ? ' - ' + list : ''), 'error');
+    });
   let run;
   if (target.value === 'headless') run = () => X.act('Headless research', () => api.headless(prof.value, prompt), 'Research started headless');
   else if (target.value === 'new') {
     const cur = S.panes.get(X.currentKey());
-    run = async () => { const r = await X.act('Start agent', () => api.start({ profile: prof.value, model: '', effort: '', account: account.value.trim(), cwd: cur?.cwd || 'I:\\herdr', key: cur?.key || '' }), `Starting ${prof.value} for ${chosen}`);
+    run = async () => { const r = await X.act('Start agent', () => api.start({ profile: prof.value, model: '', effort: '', account: account.value.trim(), cwd: cur?.cwd || X.S.root, key: cur?.key || '' }), `Starting ${prof.value} for ${chosen}`);
       if (r) { pendingLaunch = { profile: prof.value, task: chosen, paths, prompt, at: Date.now() }; reserve(); toast(`When ${prof.value} is ready, its card offers "Send task"`, 'info', 9000); } };
   } else {
     const key = target.value;
@@ -205,10 +209,12 @@ export async function sendGuarded(key, text) {
     toast(`Sent to ${X.nameOf(X.S.panes.get(key) || {})}`, 'ok');
     return r || {};
   } catch (e) {
-    if (e.status === 504 || e.status === 0 || /time(d)? ?out|delivery unknown|Failed to fetch|NetworkError|network/i.test(e.message)) {
-      uncertain.set(key, { text, at: Date.now(), err: e.message, dispatch: e.dispatch_id });
+    // The owner is typing in that agent's box: nothing was sent, and nothing is retried.
+    if (e.code === 'input_not_empty') toast(e.message, 'warn', 9000);
+    else if (e.status === 504 || e.status === 0 || /time(d)? ?out|delivery unknown|Failed to fetch|NetworkError|network/i.test(e.message)) {
+      uncertain.set(key, { text, at: Date.now(), err: e.body?.detail || e.message, dispatch: e.dispatch_id });
       X.schedule(key);
-      toast('Delivery UNKNOWN: the prompt may or may not have arrived. Check the screen before resending.', 'warn', 12000);
+      toast(`Delivery UNKNOWN${e.dispatch_id ? ' (' + e.dispatch_id + ')' : ''}: the prompt may or may not have arrived. Check the screen before resending.`, 'warn', 12000);
     } else fail('Prompt')(e);
     return null;
   }
@@ -218,7 +224,7 @@ export const isUncertain = (key) => uncertain.has(key);
 // ---------- row 9: failure recovery cards ----------
 function classify(p, c) {
   const s = X.statusOf(p), tail = (c.view.plain.slice(-1500) || '').toLowerCase();
-  if (uncertain.has(p.key)) { const u = uncertain.get(p.key); return { kind: 'Delivery unknown', text: `Sent at ${new Date(u.at).toLocaleTimeString()}: "${u.text.slice(0, 80)}" - ${u.err}`, step: 'Read the screen; resend only if it did not arrive.', resend: true }; }
+  if (uncertain.has(p.key)) { const u = uncertain.get(p.key); return { kind: 'Delivery unknown' + (u.dispatch ? ' · ' + u.dispatch : ''), text: `Sent at ${new Date(u.at).toLocaleTimeString()}: "${u.text.slice(0, 80)}" - ${u.err}`, step: 'Read the screen; resend only if it did not arrive.', resend: true }; }
   if (s === 'blocked') {
     const k = /sign in|log in|login|not logged|authenticat/.test(tail) ? 'Sign-in needed' : /trust/.test(tail) ? 'Folder trust question'
       : /allow|approve|permission|\(y\/n\)|y\/n/.test(tail) ? 'Approval needed' : 'Question for you';
@@ -245,7 +251,11 @@ export function failureCard(c, p) {
       } }, 'Resend…') : '',
       f.resend ? el('button', { type: 'button', onclick: () => { uncertain.delete(p.key); X.schedule(p.key); } }, 'It arrived') : ''));
 }
+let bannerKey = null;
 export function transportBanner(connected, msg) {
+  const key = connected ? '' : msg || '-';
+  if (key === bannerKey) return;   // called every frame: rebuild only when the state changes
+  bannerKey = key;
   const b = $('#banner');
   b.hidden = connected;
   if (!connected) b.replaceChildren(el('strong', { text: 'Transport failure: ' }), el('span', { text: (msg || 'event stream lost') + ' - screens may be stale. The Deck reconnects by itself.' }),

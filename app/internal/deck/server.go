@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/pprof"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -20,9 +20,11 @@ import (
 type App struct {
 	herdr                           Herdr
 	token, origin, root             string
+	sessionName, herdrBin           string
 	profiles                        map[string]Profile
 	files                           http.Handler
 	reopen                          func() error
+	startDetached                   func(name string, args ...string) error
 	mu                              sync.Mutex
 	refreshMu                       sync.Mutex
 	actionMu                        sync.Mutex
@@ -36,11 +38,20 @@ type App struct {
 	debug                           bool
 	lead                            LeadIdentity
 	guards                          *GuardState
+	lastDispatch                    string
 }
 
 func newApp(h Herdr, session, token, origin, root string, profiles map[string]Profile) *App {
 	lead := leadIdentity(profiles)
-	return &App{herdr: h, token: token, origin: origin, root: root, profiles: profiles, lead: lead, state: State{Session: session, Panes: []Pane{}, Workspaces: []Nav{}, Tabs: []Nav{}, Lead: lead}, clients: map[chan []byte]bool{}, visible: map[string]bool{}, active: true, started: time.Now(), lastClient: time.Now(), jobs: map[string]*Job{}}
+	return &App{herdr: h, token: token, origin: origin, root: root, profiles: profiles, lead: lead, startDetached: startHiddenProcess, state: State{Session: session, Panes: []Pane{}, Workspaces: []Nav{}, Tabs: []Nav{}, Lead: lead, Root: root}, clients: map[chan []byte]bool{}, visible: map[string]bool{}, active: true, started: time.Now(), lastClient: time.Now(), jobs: map[string]*Job{}}
+}
+func startHiddenProcess(name string, args ...string) error {
+	cmd := hiddenCommand(context.Background(), name, args...)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait()
+	return nil
 }
 func (a *App) shouldExit(now time.Time) bool {
 	a.mu.Lock()
@@ -58,9 +69,28 @@ func respond(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }
+
+// statusError carries an HTTP status and extra JSON fields to the client.
+type statusError struct {
+	Status int
+	Fields map[string]any // merged into the error body; "error" is set from Msg
+	Msg    string
+}
+
+func (e *statusError) Error() string { return e.Msg }
 func failHTTP(w http.ResponseWriter, status int, err error) {
+	var detail *statusError
+	if errors.As(err, &detail) {
+		status = detail.Status
+	}
 	kind, next := recovery(err.Error())
-	respond(w, status, map[string]string{"error": err.Error(), "kind": kind, "next_step": next, "cause": "unknown unless stated in the observed error"})
+	body := map[string]any{"error": err.Error(), "kind": kind, "next_step": next, "cause": "unknown unless stated in the observed error"}
+	if detail != nil {
+		for key, value := range detail.Fields {
+			body[key] = value
+		}
+	}
+	respond(w, status, body)
 }
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
@@ -180,7 +210,10 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		out, err := a.action(r.Context(), v)
 		if err != nil {
 			status := 502
-			if strings.HasPrefix(err.Error(), "blocked:") {
+			var detail *statusError
+			if errors.As(err, &detail) {
+				status = detail.Status
+			} else if strings.HasPrefix(err.Error(), "blocked:") {
 				status = 409
 			}
 			failHTTP(w, status, err)
@@ -499,6 +532,7 @@ func (a *App) publish(old, next State) {
 	defer a.mu.Unlock()
 	next.ReadOnly = a.readOnly
 	next.Lead = a.lead
+	next.Root = a.root
 	a.state = next
 	if reflect.DeepEqual(old, next) {
 		return
@@ -544,6 +578,9 @@ type Action struct {
 }
 
 func (a *App) action(ctx context.Context, v Action) (string, error) {
+	a.mu.Lock()
+	a.lastDispatch = ""
+	a.mu.Unlock()
 	if strings.ContainsRune(v.Text, 0) || len(v.Text) > 64<<10 {
 		return "", fmt.Errorf("text too long or contains NUL")
 	}
@@ -552,12 +589,15 @@ func (a *App) action(ctx context.Context, v Action) (string, error) {
 		return call("server", "reload-config")
 	}
 	if v.Action == "launch" {
-		cmd := exec.Command(filepath.Join(a.root, "launcher", "HerdrLauncher.exe"))
-		hideProcess(cmd)
-		if err := cmd.Start(); err != nil {
+		if a.sessionName != "" {
+			if err := a.startDetached(a.herdrBin, "--session", a.sessionName, "server"); err != nil {
+				return "", err
+			}
+			return "Herdr server for session " + a.sessionName + " started", nil
+		}
+		if err := a.startDetached(filepath.Join(a.root, "launcher", "HerdrLauncher.exe")); err != nil {
 			return "", err
 		}
-		go cmd.Wait()
 		return "Herdr launcher started", nil
 	}
 	raw, err := a.herdr.Call(ctx, "api", "snapshot")
@@ -581,13 +621,25 @@ func (a *App) action(ctx context.Context, v Action) (string, error) {
 	if v.Pane != "" && pane == nil {
 		return "", fmt.Errorf("pane no longer exists in this session")
 	}
+	nextClaude := false
+	if v.Action == "start" && v.Profile == "next" {
+		usage, err := a.herdr.Helper(ctx, map[string]string{"Command": "usage"})
+		if err != nil {
+			return "", fmt.Errorf("account usage lookup: %w", err)
+		}
+		account, err := pickNextAccount(usage, a.lead.Account)
+		if err != nil {
+			return "", err
+		}
+		v.Profile, v.Account, nextClaude = "claude", account, true
+	}
 	if v.Action == "shell" || v.Action == "start" {
 		if v.Action == "start" {
 			if err := a.launchGuard(paneRequest{Profile: v.Profile, Model: v.Model, Effort: v.Effort, Account: v.Account, Cwd: v.Cwd}); err != nil {
 				return "", err
 			}
 		}
-		if v.Action == "start" && (v.Profile == "next" || v.Worktree != "") {
+		if v.Action == "start" && (nextClaude || v.Worktree != "") {
 			params := map[string]string{"Command": "start", "Target": v.Profile}
 			if v.Worktree != "" {
 				params["Worktree"] = v.Worktree
@@ -601,8 +653,8 @@ func (a *App) action(ctx context.Context, v Action) (string, error) {
 			if v.Effort != "" {
 				params["Effort"] = v.Effort
 			}
-			if v.Account != "" {
-				params["Account"] = v.Account
+			if account := mainAccountAlias(a.profiles[v.Profile], v.Account); account != "" {
+				params["Account"] = account
 			}
 			return a.herdr.Helper(ctx, params)
 		}
@@ -662,15 +714,15 @@ func (a *App) action(ctx context.Context, v Action) (string, error) {
 		if v.Effort != "" {
 			params["Effort"] = v.Effort
 		}
-		if v.Account != "" {
-			params["Account"] = v.Account
+		if account := mainAccountAlias(a.profiles[v.Profile], v.Account); account != "" {
+			params["Account"] = account
 		}
 		output, startErr := a.herdr.Helper(ctx, params)
 		if startErr != nil {
 			if !strings.Contains(startErr.Error(), "agent_pane_busy") {
 				return "", fmt.Errorf("start failed in %s: %w", id, startErr)
 			}
-			command, e := fallbackCommand(a.profiles[v.Profile], v.Model, v.Effort, v.Account)
+			command, e := fallbackCommand(a.profiles[v.Profile], v.Model, v.Effort, mainAccountAlias(a.profiles[v.Profile], v.Account))
 			if e != nil {
 				return "", e
 			}
@@ -690,22 +742,35 @@ func (a *App) action(ctx context.Context, v Action) (string, error) {
 		if strings.TrimSpace(v.Text) == "" {
 			return "", fmt.Errorf("prompt is empty")
 		}
-		screen, err := a.herdr.Call(ctx, "pane", "read", pane.ID, "--source", "visible", "--lines", "200", "--format", "text")
+		screen, err := a.herdr.Call(ctx, "pane", "read", pane.ID, "--source", "visible", "--lines", "60", "--format", "ansi")
 		if err != nil {
 			return "", err
 		}
 		if pane.Status == "blocked" || blockedScreen(string(screen)) {
 			return "", fmt.Errorf("blocked: this pane needs your explicit key or paste action; no prompt sent")
 		}
-		if pane.Agent != "" || pane.Name != "" {
-			target := pane.Name
-			if target == "" {
-				target = pane.ID
-			}
-			return a.deliver(ctx, pane.ID, "agent", "prompt", target, v.Text)
+		if err := inputNotEmpty(string(screen), *pane); err != nil {
+			return "", err
 		}
-		return a.deliver(ctx, pane.ID, "pane", "run", pane.ID, v.Text)
+		args := []string{"agent", "prompt", pane.Name, v.Text}
+		if pane.Agent == "" && pane.Name == "" {
+			args = []string{"pane", "run", pane.ID, v.Text}
+		} else if pane.Name == "" {
+			args[2] = pane.ID
+		}
+		out, dispatch, err := a.deliver(ctx, session+"|"+pane.ID, pane.ID, v.Text, args...)
+		a.mu.Lock()
+		a.lastDispatch = dispatch
+		a.mu.Unlock()
+		return out, err
 	case "paste":
+		screen, err := a.herdr.Call(ctx, "pane", "read", pane.ID, "--source", "visible", "--lines", "60", "--format", "ansi")
+		if err != nil {
+			return "", err
+		}
+		if err := inputNotEmpty(string(screen), *pane); err != nil {
+			return "", err
+		}
 		return call("pane", "send-text", pane.ID, v.Text)
 	case "keys":
 		valid := map[string]bool{"esc": true, "ctrl+c": true, "enter": true, "up": true, "down": true, "tab": true, "y": true, "n": true, "left": true, "right": true, "backspace": true}

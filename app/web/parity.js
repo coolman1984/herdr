@@ -1,8 +1,8 @@
 // Parity with today's Herdr setup (tasks/herdr-deck-parity.md A) + the "better" features (B):
 // Ctrl+B chords, folder picker, columns, layout builder, board, spaces, stop-all, agents hub,
 // tools, Herdr split layout + drag resize/swap, global search, composer chips, done strip.
-import { api } from './api.js';
-import { el, $, toast, fail, dialog, confirm, confirmTyped, ask, copyText, ago } from './ui.js';
+import { api, missing, why } from './api.js';
+import { el, $, toast, fail, dialog, confirm, confirmTyped, ask, ago } from './ui.js';
 import { icon } from './icons.js';
 import * as P from './panels.js';
 import * as G from './guard.js';
@@ -27,8 +27,6 @@ export function init(ctx) {
   });
 }
 let dropOn = null;
-const missing = (e) => e.status === 404 || e.status === 405 || /^404/.test(e.message);
-const why = (e) => (missing(e) ? 'Not available yet: the backend has no endpoint for this (requested in app/API-REQUESTS.md).' : e.message);
 const cur = () => X.S.panes.get(X.currentKey());
 const field = (label, input) => el('label', { class: 'field' }, el('span', { text: label }), input);
 
@@ -244,7 +242,7 @@ async function settings() {
 
 // ---------- A5-A7 folder picker ----------
 export async function folderPicker(agent) {
-  const path = el('input', { 'aria-label': 'Folder path', spellcheck: false, value: cur()?.cwd || 'I:\\herdr' });
+  const path = el('input', { 'aria-label': 'Folder path', spellcheck: false, value: cur()?.cwd || X.S.root });
   const recent = el('ul', { class: 'list folders', 'aria-label': 'Recent folders' });
   const browse = el('ul', { class: 'list folders', 'aria-label': 'Sub-folders' });
   const note = el('p', { class: 'muted small' });
@@ -308,7 +306,7 @@ export async function layoutBuilder() {
   const draw = () => {
     const n = Math.max(1, Math.min(6, +count.value || 1));
     while (rows.length < n) {
-      const f = el('input', { 'aria-label': `Column ${rows.length + 1} folder`, value: rows[rows.length - 1]?.folder.value || cur()?.cwd || 'I:\\herdr', spellcheck: false });
+      const f = el('input', { 'aria-label': `Column ${rows.length + 1} folder`, value: rows[rows.length - 1]?.folder.value || cur()?.cwd || X.S.root, spellcheck: false });
       const runs = el('select', { 'aria-label': `Column ${rows.length + 1} runs` }, runsOptions());
       const model = el('input', { 'aria-label': `Column ${rows.length + 1} model`, placeholder: 'model (optional)' });
       const account = el('input', { 'aria-label': `Column ${rows.length + 1} account`, placeholder: 'account', size: 6 });
@@ -388,7 +386,7 @@ export async function stopAll() {
 }
 export function nextClaude() {
   const p = cur();
-  return X.act('Claude on next account', () => api.start({ profile: 'next', model: '', effort: '', account: '', cwd: p?.cwd || 'I:\\herdr', key: p?.key || '' }), 'Starting Claude on the least-used account…');
+  return X.act('Claude on next account', () => api.start({ profile: 'next', model: '', effort: '', account: '', cwd: p?.cwd || X.S.root, key: p?.key || '' }), 'Starting Claude on the least-used account…');
 }
 
 // ---------- A12 help: chords + Herdr keys + Deck keys + GUIDE.md, one search ----------

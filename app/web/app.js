@@ -13,7 +13,7 @@ const LS = {
 };
 
 export const S = {
-  session: '', herdr: { running: true, error: '' }, panes: new Map(), workspaces: [], tabs: [], profiles: [], layouts: [],
+  session: '', root: '', paneCols: new Map(), herdr: { running: true, error: '' }, panes: new Map(), workspaces: [], tabs: [], profiles: [], layouts: [],
   filter: LS.get('filter', { ws: null, tab: null }), cols: LS.get('cols', 2), view: LS.get('view', 'grid'), zoom: null, current: null,
   selected: new Set(), connected: false, lastUpdate: 0, safe: false, rail: LS.get('rail', true),
   hidden: new Set(LS.get('hiddenPanes', [])), pinned: new Set(LS.get('pinned', [])),
@@ -54,16 +54,18 @@ function schedule(key) {
 function flush() {
   frame = 0;
   const t0 = performance.now();
-  if (structDirty) { structDirty = false; renderRail(); renderMain(); renderTop(); P.refreshOpen(); }
+  const struct = structDirty, anyCard = dirty.size > 0;
+  if (structDirty) { structDirty = false; renderRail(); renderMain(); }
   for (const k of dirty) if (cards.has(k)) updateCard(cards.get(k), S.panes.get(k));
-  if (dirty.size) { renderTop(); P.refreshOpen(); }
   dirty.clear();
-  renderStatus();
-  // Screens last: every write above is done; rows only write (no layout reads here).
+  // Screens before the top bar: setting scrollTop forces a layout, and it must not find the rest of
+  // the page dirty (profiled: 2.3 s of 10 s in paintScroll while the top bar was rewritten first).
   const views = [...paintSet].filter((v) => v.paintSize());
   paintSet.clear();
   for (const v of views) v.paintScroll();
   for (const v of views) v.paint();
+  if (struct || anyCard) { renderTop(); P.refreshOpen(); }
+  renderStatus();
   Q.frameDone(performance.now() - t0);
 }
 
@@ -95,9 +97,17 @@ function applyState(st) {
   if (st.herdr) S.herdr = st.herdr;
   if (st.workspaces) S.workspaces = st.workspaces;
   if (st.tabs) S.tabs = st.tabs;
-  if (st.layouts) S.layouts = st.layouts;
+  if (st.layouts) {
+    S.layouts = st.layouts;
+    // Real column count of each pane (Herdr rect width) for fit-to-width; refit only the cards that changed.
+    const next = new Map();
+    for (const l of S.layouts || []) for (const lp of l.panes || []) if (lp.rect?.width > 0) next.set(S.session + '|' + lp.pane_id, Math.round(lp.rect.width));
+    for (const [k, c] of cards) if (next.get(k) !== S.paneCols.get(k)) c.view.setCols(next.get(k) || 0);
+    S.paneCols = next;
+  }
   if (st.profiles) S.profiles = st.profiles;
   if (st.lead) S.lead = st.lead;
+  if (st.root) S.root = st.root;
   if (st.read_only != null) setSafe(!!st.read_only, false);
   if (st.error) toast('Backend: ' + st.error, 'error');
   if (st.panes) {
@@ -305,6 +315,7 @@ function makeCard(p) {
   Q.dragSwap(head, key);
   const scr = el('div', { class: 'screen', tabindex: '0', role: 'log', 'aria-live': 'off' });
   c.view = new ScreenView(scr, requestPaint, c.ac.signal); c.screenBox = scr;
+  c.view.setCols(S.paneCols.get(key) || 0);
   scr.addEventListener('keydown', (ev) => P.rawKey(ev, c));
   c.err = el('div', { class: 'card-err', role: 'alert' });
   c.done = el('div', { class: 'card-done', hidden: true });
@@ -361,6 +372,7 @@ function updateCard(c, p) {
     for (const pt of q) if (!c.view.patch(pt)) { resync(`screen version ${c.view.sv} != ${pt.from_version} for ${p.pane_id}`); break; }
   }
   p.screen = undefined;   // the view owns the text now; keep no second copy per pane
+  if (!S.paneCols.has(p.key)) c.view.fit();   // no layout width: guess from the text (throttled to 2 s)
   const s = statusOf(p), t = tok(p), name = nameOf(p), kind = kindOf(p);
   const hist = S.hist.get(p.key) || [];
   const h = [s, name, kind, JSON.stringify(t), p.cwd, p.title, p.error, S.queue.get(p.key)?.length || 0, S.selected.has(p.key), S.finished.has(p.key), hist.length, S.zoom === p.key, G.isUncertain(p.key)].join('|');
@@ -446,31 +458,39 @@ function currentKey() {
   return a ? a.dataset.key : S.current && S.panes.has(S.current) ? S.current : filteredPanes()[0]?.key;
 }
 
-// ---------- top bar + status line ----------
+// ---------- top bar + status line (runs every frame while panes stream: write only what changed) ----------
+const setText = (n, v) => { v = String(v); if (n && n.textContent !== v) n.textContent = v; };
+const setAttr = (n, k, v) => { if (n.getAttribute(k) !== v) n.setAttribute(k, v); };
+let lastCounts = '';
 function renderTop() {
   const list = [...S.panes.values()];
   const blocked = list.filter((p) => statusOf(p) === 'blocked').length;
   const n = P.inboxCount();
-  const ib = $('#btn-inbox');
-  $('#inbox-n').textContent = n; $('#inbox-n').hidden = !n;
+  const ib = $('#btn-inbox'), inboxN = $('#inbox-n');
+  setText(inboxN, n); if (inboxN.hidden !== !n) inboxN.hidden = !n;
   ib.classList.toggle('alarm', blocked > 0);
-  ib.setAttribute('aria-label', `Inbox, ${n} items, ${blocked} blocked`);
-  $('#session').textContent = MOCK ? 'mock' : (S.session.split(/[\\/]/).slice(-2, -1)[0] || S.session || '');
-  $('#session').title = S.session;
-  $('#bcast').hidden = S.selected.size === 0;
-  $('#bcast-n').textContent = `${S.selected.size} selected`;
+  setAttr(ib, 'aria-label', `Inbox, ${n} items, ${blocked} blocked`);
+  setText($('#session'), MOCK ? 'mock' : (S.session.split(/[\\/]/).slice(-2, -1)[0] || S.session || ''));
+  if ($('#session').title !== S.session) $('#session').title = S.session;
+  if ($('#bcast').hidden !== (S.selected.size === 0)) $('#bcast').hidden = S.selected.size === 0;
+  setText($('#bcast-n'), `${S.selected.size} selected`);
   const counts = {}; for (const p of list) { const s = statusOf(p); counts[s] = (counts[s] || 0) + 1; }
-  $('#counts').replaceChildren(...['blocked', 'working', 'idle', 'done'].filter((s) => counts[s]).map((s) =>
-    el('span', { class: 'count', 'data-s': s }, el('span', { class: 'dot', 'data-s': s }), `${counts[s]} ${s}`)));
-  document.title = (blocked ? `(${blocked}!) ` : '') + 'Herdr Deck';
-  const hp = $('#health .hp');
-  if (hp) hp.textContent = `${list.length} panes, ${list.filter((p) => isAgent(p) && ['idle', 'done'].includes(statusOf(p))).length} idle agents`;
+  const sig = JSON.stringify(counts);
+  if (sig !== lastCounts) {
+    lastCounts = sig;
+    $('#counts').replaceChildren(...['blocked', 'working', 'idle', 'done'].filter((s) => counts[s]).map((s) =>
+      el('span', { class: 'count', 'data-s': s, 'aria-label': `${counts[s]} ${s}` }, el('span', { class: 'dot', 'data-s': s }), String(counts[s]), el('span', { class: 'cw', text: ' ' + s }))));
+  }
+  const title = (blocked ? `(${blocked}!) ` : '') + 'Herdr Deck';
+  if (document.title !== title) document.title = title;
+  setText($('#health .hp'), `${list.length} panes, ${list.filter((p) => isAgent(p) && ['idle', 'done'].includes(statusOf(p))).length} idle agents`);
   for (const c of cards.values()) if (c.sel.checked !== S.selected.has(c.key)) c.sel.checked = S.selected.has(c.key);
 }
 function renderStatus() {
   const parts = [S.connected ? 'connected' : (S.downMsg || 'connecting...'), `${S.panes.size} panes`, S.safe && 'SAFE MODE (read-only)', MOCK && 'MOCK DATA'];
-  $('#status-text').textContent = parts.filter(Boolean).join('  ·  ');
-  $('#statusbar').dataset.ok = S.connected ? '1' : '0';
+  setText($('#status-text'), parts.filter(Boolean).join('  ·  '));
+  const ok = S.connected ? '1' : '0';
+  if ($('#statusbar').dataset.ok !== ok) $('#statusbar').dataset.ok = ok;
   G.transportBanner(S.connected || !S.loaded, S.downMsg);
 }
 let ageTimer = 0;

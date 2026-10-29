@@ -12,22 +12,27 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type Reservation struct {
+	ID      string    `json:"id"`
+	Task    string    `json:"task"`
 	Owner   string    `json:"owner"`
-	Repo    string    `json:"repo"`
 	Paths   []string  `json:"paths"`
 	Created time.Time `json:"created"`
 }
 type Delivery struct {
-	ID    string    `json:"id"`
-	Pane  string    `json:"pane"`
-	State string    `json:"state"`
-	Error string    `json:"error"`
-	At    time.Time `json:"at"`
+	ID       string    `json:"id"`
+	Dispatch string    `json:"dispatch_id"`
+	Key      string    `json:"key"`
+	Pane     string    `json:"pane"`
+	TextSHA  string    `json:"text_sha"`
+	State    string    `json:"state"`
+	Error    string    `json:"error"`
+	At       time.Time `json:"at"`
 }
 type ScopeBaseline struct {
 	Repo    string
@@ -63,12 +68,63 @@ func leadIdentity(profiles map[string]Profile) LeadIdentity {
 	return result
 }
 
+// normalizeAccount maps the main sign-in aliases onto the profile's default account folder.
+func normalizeAccount(p Profile, account string) string {
+	normalized := strings.ToLower(strings.TrimSpace(account))
+	if normalized == "" || normalized == "main" || normalized == "default" {
+		return p.DefaultAccount
+	}
+	return normalized
+}
+
+// mainAccountAlias drops the account the main sign-in already uses: it has no account folder.
+func mainAccountAlias(p Profile, account string) string {
+	if normalized := normalizeAccount(p, account); normalized == p.DefaultAccount {
+		return ""
+	} else {
+		return normalized
+	}
+}
+
+// pickNextAccount reads the usage table and returns the least-used account that is not the lead's.
+func pickNextAccount(usage, lead string) (string, error) {
+	if lead == "" {
+		return "", &statusError{Status: 409, Msg: "account guard: the lead account is unknown, so no next account can be chosen"}
+	}
+	row := regexp.MustCompile(`^(\S+?)\*?\s+(\d+)%\s+.+?\s(\d+)%\s`)
+	best := ""
+	bestFive, bestWeek := 0, 0
+	for _, line := range strings.Split(usage, "\n") {
+		match := row.FindStringSubmatch(strings.TrimRight(line, "\r"))
+		if match == nil {
+			continue
+		}
+		five, fiveErr := strconv.Atoi(match[2])
+		week, weekErr := strconv.Atoi(match[3])
+		if fiveErr != nil || weekErr != nil {
+			continue
+		}
+		name := match[1]
+		if name == lead || five >= 95 || week >= 95 {
+			continue
+		}
+		if best == "" || five < bestFive || (five == bestFive && week < bestWeek) || (five == bestFive && week == bestWeek && name < best) {
+			best, bestFive, bestWeek = name, five, week
+		}
+	}
+	if best == "" {
+		return "", &statusError{Status: 409, Msg: "no Claude account available besides the lead"}
+	}
+	return best, nil
+}
+
 type GuardState struct {
 	Reservations []Reservation
 	Deliveries   []Delivery
 	Scopes       map[string]ScopeBaseline
 	Policy       LaunchPolicy
 	Queue        []*LaunchEntry
+	LoadError    string
 }
 type LaunchEntry struct {
 	ID      string      `json:"id"`
@@ -79,9 +135,26 @@ type LaunchEntry struct {
 }
 
 func (a *App) initGuardsLocked() {
-	if a.guards == nil {
-		a.guards = &GuardState{Reservations: []Reservation{}, Deliveries: []Delivery{}, Scopes: map[string]ScopeBaseline{}, Policy: LaunchPolicy{MaxActive: 4, MinRAMMB: 512, MinDiskGB: 0.5}, Queue: []*LaunchEntry{}}
+	if a.guards != nil {
+		return
 	}
+	guards := &GuardState{Reservations: []Reservation{}, Deliveries: []Delivery{}, Scopes: map[string]ScopeBaseline{}, Policy: LaunchPolicy{MaxActive: 4, MinRAMMB: 512, MinDiskGB: 0.5}, Queue: []*LaunchEntry{}}
+	data, err := os.ReadFile(reservationPath())
+	if err == nil {
+		if e := json.Unmarshal(data, &guards.Reservations); e != nil {
+			guards.Reservations = []Reservation{}
+			guards.LoadError = "reservations file is invalid: " + e.Error()
+		}
+	} else if !os.IsNotExist(err) {
+		guards.LoadError = "reservations file could not be read: " + err.Error()
+	}
+	if guards.Reservations == nil {
+		guards.Reservations = []Reservation{}
+	}
+	a.guards = guards
+}
+func reservationPath() string {
+	return filepath.Join(os.Getenv("APPDATA"), "herdr", "deck-reservations.json")
 }
 func normalizeOwnership(repo, path string) (string, error) {
 	if !filepath.IsAbs(repo) || strings.HasPrefix(repo, `\\`) {
@@ -105,6 +178,37 @@ func normalizeOwnership(repo, path string) (string, error) {
 }
 func overlaps(a, b string) bool {
 	return a == b || strings.HasPrefix(a, b+`\`) || strings.HasPrefix(b, a+`\`)
+}
+func normalizeReservationPath(root, path string) (string, error) {
+	normalized := strings.TrimSpace(strings.ReplaceAll(path, `\`, "/"))
+	if strings.ContainsRune(normalized, 0) {
+		return "", fmt.Errorf("reservation path contains a NUL byte")
+	}
+	normalized = strings.TrimPrefix(normalized, "./")
+	if strings.HasSuffix(normalized, "/**") {
+		normalized = strings.TrimSuffix(normalized, "/**")
+	} else if strings.ContainsAny(normalized, "*?") {
+		return "", fmt.Errorf("reserve concrete file paths or directory/** scopes")
+	}
+	normalized = strings.TrimSuffix(normalized, "/")
+	if normalized == "" {
+		return "", fmt.Errorf("reservation path is empty")
+	}
+	if filepath.IsAbs(normalized) || strings.HasPrefix(normalized, "/") {
+		relative, err := filepath.Rel(root, filepath.FromSlash(normalized))
+		if err != nil {
+			return "", fmt.Errorf("reservation path is not under the toolkit root")
+		}
+		normalized = filepath.ToSlash(relative)
+	}
+	normalized = filepath.ToSlash(filepath.Clean(filepath.FromSlash(normalized)))
+	if normalized == "." || normalized == ".." || strings.HasPrefix(normalized, "../") {
+		return "", fmt.Errorf("reservation path leaves the toolkit root")
+	}
+	return strings.ToLower(normalized), nil
+}
+func reservationOverlaps(a, b string) bool {
+	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }
 func readiness(text string) map[string]any {
 	lower := strings.ToLower(text)
@@ -140,17 +244,17 @@ func recovery(message string) (string, string) {
 	}
 	return "agent_or_request_error", "Read the exact error and pane output; the cause is not verified."
 }
-func (a *App) deliver(ctx context.Context, pane string, args ...string) (string, error) {
+func (a *App) deliver(ctx context.Context, key, pane, text string, args ...string) (string, string, error) {
 	id := fmt.Sprintf("dispatch-%d", time.Now().UnixNano())
-	record := Delivery{ID: id, Pane: pane, State: "sending", At: time.Now()}
+	sum := sha256.Sum256([]byte(text))
+	record := Delivery{ID: id, Dispatch: id, Key: key, Pane: pane, TextSHA: hex.EncodeToString(sum[:]), State: "sent", At: time.Now()}
 	out, err := a.herdr.Call(ctx, args...)
-	record.State = "accepted"
 	if err != nil {
-		record.State = "delivery unknown"
+		record.State = "unknown"
 		record.Error = err.Error()
 		for _, code := range []string{"exit status 2", "agent_not_ready", "agent_blocked", "invalid_request"} {
 			if strings.Contains(err.Error(), code) {
-				record.State = "rejected"
+				record.State = "failed"
 			}
 		}
 	}
@@ -162,32 +266,33 @@ func (a *App) deliver(ctx context.Context, pane string, args ...string) (string,
 	}
 	a.mu.Unlock()
 	if err != nil {
-		if record.State == "rejected" {
-			return "", fmt.Errorf("dispatch %s rejected before submission: %w", id, err)
+		if record.State == "failed" {
+			return "", id, &statusError{Status: 502, Msg: fmt.Sprintf("dispatch %s rejected before submission: %v", id, err), Fields: map[string]any{"dispatch_id": id}}
 		}
-		return "", fmt.Errorf("delivery unknown (%s): %w; inspect state/output before any explicit resend", id, err)
+		return "", id, &statusError{Status: 504, Msg: "delivery unknown", Fields: map[string]any{"dispatch_id": id, "detail": err.Error()}}
 	}
-	return "Dispatch " + id + " accepted (submission acknowledged; completion not verified).\n" + string(out), nil
+	return "Dispatch " + id + " accepted (submission acknowledged; completion not verified).\n" + string(out), id, nil
 }
 func (a *App) launchGuard(p paneRequest) error {
 	if p.Purpose == "research" {
-		return fmt.Errorf("research route unavailable: no server-search-only adapter has been independently verified in this Deck; pane/browser routes are refused")
+		return &statusError{Status: 409, Msg: "research route unavailable: no server-search-only adapter has been independently verified in this Deck; pane/browser routes are refused"}
 	}
 	profile := a.profiles[p.Profile]
 	if profile.Kind == "claude" {
-		if !a.lead.Known || p.Account == "" || p.Account == a.lead.Account {
-			return fmt.Errorf("account guard: pick another account; lead identity is unknown, empty, or matches the selected account")
+		account := normalizeAccount(profile, p.Account)
+		if !a.lead.Known || account == "" || account == a.lead.Account {
+			return &statusError{Status: 409, Msg: "account guard: pick another account (the lead uses " + leadName(a.lead) + ")", Fields: map[string]any{"lead_account": a.lead.Account}}
 		}
 	}
 	if p.Helper && profile.Kind == "claude" {
 		if p.Account == "" || p.LeadAccount == "" {
-			return fmt.Errorf("helper account identity unknown: choose an explicit helper account and lead account")
+			return &statusError{Status: 409, Msg: "helper account identity unknown: choose an explicit helper account and lead account"}
 		}
 		if p.Account == p.LeadAccount {
-			return fmt.Errorf("Claude helpers must use an account different from the lead")
+			return &statusError{Status: 409, Msg: "Claude helpers must use an account different from the lead"}
 		}
 		if p.Account != "1984" && p.Account != "2040" {
-			return fmt.Errorf("Claude helper must use the owner's other account 1984 or 2040")
+			return &statusError{Status: 409, Msg: "Claude helper must use the owner's other account 1984 or 2040"}
 		}
 	}
 	a.mu.Lock()
@@ -202,7 +307,7 @@ func (a *App) launchGuard(p paneRequest) error {
 		}
 	}
 	if active >= policy.MaxActive {
-		return fmt.Errorf("held: %d active agents reach the chosen limit %d", active, policy.MaxActive)
+		return &statusError{Status: 409, Msg: fmt.Sprintf("held: %d active agents reach the chosen limit %d", active, policy.MaxActive)}
 	}
 	health, err := systemHealth()
 	if err != nil {
@@ -210,7 +315,7 @@ func (a *App) launchGuard(p paneRequest) error {
 	}
 	available, _ := health["ram_available_mb"].(float64)
 	if available < policy.MinRAMMB {
-		return fmt.Errorf("held: free RAM %.0f MB is below %.0f MB floor", available, policy.MinRAMMB)
+		return &statusError{Status: 409, Msg: fmt.Sprintf("held: free RAM %.0f MB is below %.0f MB floor", available, policy.MinRAMMB)}
 	}
 	drive := strings.ToUpper(filepath.VolumeName(p.Cwd))
 	if drive == "" {
@@ -221,15 +326,48 @@ func (a *App) launchGuard(p paneRequest) error {
 			if disk["drive"] == drive {
 				free, known := disk["free_gb"].(float64)
 				if !known {
-					return fmt.Errorf("held: free disk space unavailable")
+					return &statusError{Status: 409, Msg: "held: free disk space unavailable"}
 				}
 				if free < policy.MinDiskGB {
-					return fmt.Errorf("held: disk free %.2f GB is below %.2f GB floor", free, policy.MinDiskGB)
+					return &statusError{Status: 409, Msg: fmt.Sprintf("held: disk free %.2f GB is below %.2f GB floor", free, policy.MinDiskGB)}
 				}
 			}
 		}
 	}
+	if p.Floor != nil {
+		short := p.Floor.RAMFreeMB > 0 && available < p.Floor.RAMFreeMB
+		free := map[string]float64{}
+		known := map[string]float64{}
+		if disks, ok := health["disks"].([]map[string]any); ok {
+			for _, disk := range disks {
+				name, _ := disk["drive"].(string)
+				if value, ok := disk["free_gb"].(float64); ok {
+					known[strings.ToUpper(name)] = value
+				}
+			}
+		}
+		for name, want := range p.Floor.DiskFreeGB {
+			value, ok := known[strings.ToUpper(name)]
+			if !ok {
+				short = true
+				continue
+			}
+			free[strings.ToUpper(name)] = value
+			if value < want {
+				short = true
+			}
+		}
+		if short {
+			return &statusError{Status: 409, Msg: "held: below the requested floor", Fields: map[string]any{"ram_free_mb": available, "disk_free_gb": free}}
+		}
+	}
 	return nil
+}
+func leadName(lead LeadIdentity) string {
+	if lead.Account == "" {
+		return "unknown"
+	}
+	return lead.Account
 }
 func (a *App) guardEndpoint(w http.ResponseWriter, r *http.Request) bool {
 	path := r.URL.Path
@@ -254,20 +392,30 @@ func (a *App) guardEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		respond(w, 200, result)
 		return true
 	}
-	if path == "/api/deliveries" || path == "/api/launch/policy" || path == "/api/launch/queue" || path == "/api/reservations" {
+	if path == "/api/deliveries" || path == "/api/dispatches" || path == "/api/launch/policy" || path == "/api/launch/queue" || path == "/api/reservations" {
 		if r.Method == "GET" {
+			key := r.URL.Query().Get("key")
 			a.mu.Lock()
 			a.initGuardsLocked()
 			var result any
 			switch path {
 			case "/api/deliveries":
 				result = map[string]any{"deliveries": append([]Delivery{}, a.guards.Deliveries...)}
+			case "/api/dispatches":
+				list := []Delivery{}
+				for i := len(a.guards.Deliveries) - 1; i >= 0 && len(list) < 20; i-- {
+					if key != "" && a.guards.Deliveries[i].Key != key {
+						continue
+					}
+					list = append(list, a.guards.Deliveries[i])
+				}
+				result = map[string]any{"dispatches": list}
 			case "/api/launch/policy":
 				result = a.guards.Policy
 			case "/api/launch/queue":
 				result = map[string]any{"queue": append([]*LaunchEntry{}, a.guards.Queue...)}
 			case "/api/reservations":
-				result = map[string]any{"reservations": append([]Reservation{}, a.guards.Reservations...)}
+				result = map[string]any{"reservations": append([]Reservation{}, a.guards.Reservations...), "load_error": a.guards.LoadError}
 			}
 			a.mu.Unlock()
 			respond(w, 200, result)
@@ -360,62 +508,94 @@ func (a *App) guardEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	case "/api/reservations":
 		var p struct {
-			Owner   string   `json:"owner"`
-			Repo    string   `json:"repo"`
-			Paths   []string `json:"paths"`
-			Release bool     `json:"release"`
+			Task  string   `json:"task"`
+			Owner string   `json:"owner"`
+			Paths []string `json:"paths"`
 		}
 		if !readBody(w, r, &p) {
 			return true
 		}
 		a.lockedWrite(w, func() (any, error) {
+			if p.Task == "" || len(p.Task) > 200 {
+				return nil, &statusError{Status: 400, Msg: "reservation task must be 1-200 bytes"}
+			}
 			if p.Owner == "" || len(p.Owner) > 120 {
-				return nil, fmt.Errorf("owner required")
+				return nil, &statusError{Status: 400, Msg: "reservation owner must be 1-120 bytes"}
+			}
+			if len(p.Paths) == 0 || len(p.Paths) > 128 {
+				return nil, &statusError{Status: 400, Msg: "reserve 1-128 paths"}
 			}
 			normalized := []string{}
-			if !p.Release {
-				if len(p.Paths) == 0 || len(p.Paths) > 128 {
-					return nil, fmt.Errorf("reserve 1–128 paths")
+			for _, path := range p.Paths {
+				n, e := normalizeReservationPath(a.root, path)
+				if e != nil {
+					return nil, &statusError{Status: 400, Msg: e.Error()}
 				}
-				for _, path := range p.Paths {
-					n, e := normalizeOwnership(p.Repo, path)
-					if e != nil {
-						return nil, e
-					}
-					normalized = append(normalized, n)
-				}
+				normalized = append(normalized, n)
 			}
 			a.mu.Lock()
 			defer a.mu.Unlock()
 			a.initGuardsLocked()
-			next := []Reservation{}
+			conflicts := []map[string]string{}
+			kept := []Reservation{}
 			for _, old := range a.guards.Reservations {
-				if old.Owner == p.Owner {
+				if old.Task == p.Task {
 					continue
 				}
-				if !p.Release {
-					for _, x := range normalized {
-						for _, y := range old.Paths {
-							if overlaps(x, y) {
-								return nil, fmt.Errorf("path overlaps reservation by %s: %s", old.Owner, x)
-							}
+				for _, x := range normalized {
+					for _, y := range old.Paths {
+						if reservationOverlaps(x, y) {
+							conflicts = append(conflicts, map[string]string{"path": x, "task": old.Task, "owner": old.Owner})
 						}
 					}
 				}
-				next = append(next, old)
+				kept = append(kept, old)
 			}
-			if !p.Release {
-				next = append(next, Reservation{Owner: p.Owner, Repo: p.Repo, Paths: normalized, Created: time.Now()})
+			if len(conflicts) > 0 {
+				return nil, &statusError{Status: 409, Msg: "reservation conflict", Fields: map[string]any{"conflicts": conflicts}}
 			}
-			if len(next) > 64 {
-				return nil, fmt.Errorf("reservation limit reached")
+			if len(kept) >= 200 {
+				return nil, &statusError{Status: 409, Msg: "reservation limit reached"}
 			}
-			data, _ := json.Marshal(next)
-			if err := atomicWrite(filepath.Join(os.Getenv("APPDATA"), "herdr", "deck-state", "reservations.json"), data); err != nil {
+			entry := Reservation{ID: fmt.Sprintf("res-%d", time.Now().UnixNano()), Task: p.Task, Owner: p.Owner, Paths: normalized, Created: time.Now()}
+			kept = append(kept, entry)
+			data, _ := json.Marshal(kept)
+			if err := atomicWrite(reservationPath(), data); err != nil {
 				return nil, err
 			}
-			a.guards.Reservations = next
-			return map[string]any{"ok": true, "reservations": next}, nil
+			a.guards.Reservations = kept
+			return map[string]any{"ok": true, "id": entry.ID, "reservations": kept}, nil
+		})
+		return true
+	case "/api/reservations/release":
+		var p struct {
+			ID string `json:"id"`
+		}
+		if !readBody(w, r, &p) {
+			return true
+		}
+		a.lockedWrite(w, func() (any, error) {
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			a.initGuardsLocked()
+			kept := []Reservation{}
+			found := false
+			for _, old := range a.guards.Reservations {
+				if old.ID == p.ID {
+					found = true
+					continue
+				}
+				kept = append(kept, old)
+			}
+			if !found {
+				return nil, &statusError{Status: 404, Msg: "reservation not found"}
+			}
+			data, _ := json.Marshal(kept)
+			if err := atomicWrite(reservationPath(), data); err != nil {
+				return nil, err
+			}
+			a.guards.Reservations = kept
+			return map[string]any{"ok": true}, nil
 		})
 		return true
 	case "/api/proof/audit":

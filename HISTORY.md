@@ -1159,3 +1159,77 @@ The pre-merge main setup check has 28 failures: foreign I: key paths and master/
 mismatches (20), stale installed skill copies (6), and existing duplicate history/lesson
 numbers (2). These machine setup and baseline issues were not repaired by this merge.
 Linux runtime behaviour remains unverified on this Windows PC.
+
+## Phase 47 - C: cleanup by Sol; Deck round 3 restarted with DeepSeek Flash (2026-10-26)
+
+**Symptom:** C: had 1.57 GB free of ~123 GB. The Deck round-3 work of 2026-10-25 never ran: the
+frontend start failed with `EmptyResponse` and the backend was never started.
+**Cleanup (Codex GPT-6.1-Sol medium, spec `tasks/sol-free-c-drive.md`):** it used its own
+`c-drive-safe-cleanup` and `windows-disk-cleanup-guard` skills only (Inspect -> Preview -> Clean),
+and kept the Recycle Bin step to C:. C: 1,681,948,672 -> 2,716,782,592 bytes free (Temp 957 MB, npm
+cache 139 MB, crash dumps 51 MB); 30 locked/denied paths skipped. Proof: lead read
+`~\.cache\disk-cleanup-guard\cleanup-log.txt` (DELETED/CLEANED lines match) and `Get-PSDrive C`.
+Report with a read-only survey of the biggest folders (AppData 21 GiB, Downloads 6.4 GiB, .codex
+3.3 GiB, .rustup 2.6 GiB - owner decides): `tasks/sol-free-c-drive-result.md`. Pane closed.
+**Traps seen:** `ask codex -Fresh` hit Codex's new "where should the new conversation run" dialog
+and reported DONE early (#73); a Cline self-update hid the `cline` command for two minutes (#74).
+**Deck round 3:** owner chose ONE worker, DeepSeek V4.1 Flash (`ds-flash`, headless), with lead
+review and Sonnet 5.5 high fixes. Phase 1 spec `tasks/deck-r3-ds-backend.md` (R19-R24, account
+guard, named-session start, /fonts cache, `input_not_empty` guard with real ANSI fixtures in
+`app/tests/fixtures/input/`, lesson #75). Baseline before it: `app\build.ps1` exit 0, exe 8,600,576 bytes.
+**Phase 1 result (DeepSeek, answer `tasks/deck-r3-ds-backend-answer.md`):** DONE, items 4.0-4.11, 21
+new tests; old code does not compile against them (30 missing symbols). It also fixed `build.ps1`,
+which had a hard-coded Go path from another PC and exited 1 (#77), and raised the `/api/git` budget from
+5 s to 15 s (#76).
+**Lead review:** the lead's own `build.ps1` run failed in 2 of 4 full test runs:
+`TestEveryCLIRequestHasACancelDeadline` -> `contain child process: Access is denied`. The bug was already
+there (`herdr.go` unchanged): under load the 100 ms deadline killed the child between `cmd.Start()` and
+`AssignProcessToJobObject`, and the job error hid the timeout (#78). Fix: `runCommand` reports the
+timeout when `ctx.Err()` is set; 4 of 4 full runs pass. Second fix: in `input.go`, a basic foreground
+colour (30-37, 91-97) now ends a grey run, so text typed in white after grey text is still seen; new
+assertion in `TestTypedTextIgnoresDimTextAndKeepsSpaces` fails on the delegate's version. Final
+`build.ps1`: exit 0, 8,657,920 bytes. Lab not run: every R3 route is unit-tested only.
+**Lesson:** #73, #74, #75, #76, #77, #78.
+
+## Phase 48 - Deck round 3 phase 2: lead finishes the code, Codex Astra tests, Sonnet watches (2026-10-28)
+
+**Owner's choice:** the lead finishes the Deck itself; Codex `gpt-6-astra` medium verifies it live
+(spec `tasks/deck-r3-codex-terra.md`, tester only, no product code); a Claude Sonnet 5.5 high helper on
+account 1984 watches Codex and scores it (`tasks/deck-r3-sonnet-watch.md`, log
+`tasks/deck-r3-sonnet-watch-log.md`). Build notes for the tester: `tasks/deck-r3-lead-notes.md`.
+**Lead's changes (observed, harness `app/tests/deck-ui.ps1` = isolated APPDATA + headless Deck + one
+headless Edge over CDP):**
+- Sideways scroll at every width (66 px, even at 2560): the right-hand tooltip was centred past the edge;
+  it now opens leftwards; counts compact below 1700 px. scrollWidth == innerWidth at 900/1100/1440/2560,
+  dark and light; help icon visible; no toast over a visible card header (one bottom-right stack).
+- `?theme=` was ignored (only the stored choice was read): now applied and remembered.
+- Hard-coded `I:\herdr` defaults (the other PC) -> `State.root` from the backend (test
+  `TestStateReportsTheToolkitRoot`).
+- Size: HTML/JS/CSS now gzip-compressed with ETag revalidation (`TestStaticHandlerGzipsPageCodeAndRevalidates`):
+  209,386 B raw -> 70,013 B transferred; budget redefined as < 150 KB transferred. Dead code removed.
+- Cold first paint 3.4 s: Edge proxy detection (#79); the Deck window now uses `--no-proxy-server`
+  (`TestDeckWindowSkipsTheSystemProxy`): 3,384 -> 876 ms in the harness.
+- Stress 8 panes, 20 s: 46 -> 60 fps, long tasks 15 -> 0, render p95 17.9 -> 10 ms (#83). Target 8 ms
+  not reached (scrollTop forced layout remains ~2.5 ms/frame).
+- R3 wiring: `input_not_empty` toast with the server's sentence, never retried; dispatch id on the
+  delivery-unknown card; reservation conflicts listed; client overlap = backend folder rule; Usage panel
+  reads the real `herdr-agents usage` table.
+**Codex repair:** the 2026-10-27 interrupted npm update had broken `codex`; npm cannot fetch the binary
+through the proxy; a complete 0.157.1 set from `~\.codex\packages` was installed (#81, #82). Not updated
+to 0.165.0.
+**Lesson:** #79-#84.
+
+## Phase 49 - Codex updated to 0.165.0: GPT-6.1-Sol works again (2026-10-29)
+
+**Symptom:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium` on 0.157.1 failed with HTTP 400
+`The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.` (#85).
+**Cause:** the old CLI version; 0.165.0 (npm latest) accepts the model on the same account.
+**Fix:** backup of the 0.157.1 package in the lead's session scratchpad; `npm install -g
+@openai/codex@0.165.0` (installed the Windows binary package this time); its files were hash-compared
+with a ranged, integrity-checked download of the same tarball: 0 differences (#86).
+**Proof:** `codex --version` -> `codex-cli 0.165.0`; headless `codex exec ... gpt-6.1-sol medium` -> `OK`,
+exit 0; `herdr-agents start codex -Model gpt-6.1-sol -Effort medium` -> STARTED pane wV:p3, `ask` ->
+`SOL-LIVE-OK`, no error line, footer `GPT-6.1-Sol medium`.
+Same day, owner's request: every scheduled task of `Computer Use\opening-nerp-tcode` (22 GMES_* /
+MF_Ops_* tasks; 5 were active, MF_Ops_RemoteControl was running) was stopped and disabled "for now".
+**Lesson:** #85, #86.

@@ -1,6 +1,8 @@
 package deck
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -14,7 +16,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -130,6 +134,7 @@ func run(assets fs.FS) error {
 		defer bridge.Socket.Close()
 	}
 	app := newApp(bridge, identity, token, origin, root, profiles)
+	app.sessionName, app.herdrBin = *session, bin
 	app.debug = *debugMode
 	defer app.closeJobs()
 	var edge string
@@ -149,28 +154,7 @@ func run(assets fs.FS) error {
 	if err != nil {
 		return err
 	}
-	static := http.FileServer(http.FS(files))
-	app.files = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/assets/") {
-			data, e := fs.ReadFile(files, strings.TrimPrefix(r.URL.Path, "/"))
-			if e != nil {
-				http.NotFound(w, r)
-				return
-			}
-			hash := sha256.Sum256(data)
-			tag := `"` + hex.EncodeToString(hash[:]) + `"`
-			w.Header().Set("ETag", tag)
-			w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
-			if strings.HasSuffix(r.URL.Path, ".woff2") {
-				w.Header().Set("Content-Type", "font/woff2")
-			}
-			if r.Header.Get("If-None-Match") == tag {
-				w.WriteHeader(304)
-				return
-			}
-		}
-		static.ServeHTTP(w, r)
-	})
+	app.files = staticHandler(files)
 	if err = os.MkdirAll(filepath.Dir(recordPath), 0700); err != nil {
 		return err
 	}
@@ -214,4 +198,92 @@ func run(assets fs.FS) error {
 			}
 		}
 	}
+}
+
+var textTypes = map[string]string{".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
+
+type compressedFile struct {
+	plain, gz []byte
+	tag       string
+}
+
+// staticHandler serves the embedded page and caches assets and fonts immutably. HTML, JS and CSS
+// are gzip-compressed once and revalidated by ETag, so a new exe is picked up at the next load.
+func staticHandler(files fs.FS) http.Handler {
+	static := http.FileServer(http.FS(files))
+	var mu sync.Mutex
+	cache := map[string]*compressedFile{}
+	load := func(name string) (*compressedFile, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if f := cache[name]; f != nil {
+			return f, nil
+		}
+		data, err := fs.ReadFile(files, name)
+		if err != nil {
+			return nil, err
+		}
+		var buf bytes.Buffer
+		zw, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		zw.Write(data)
+		if err = zw.Close(); err != nil {
+			return nil, err
+		}
+		hash := sha256.Sum256(data)
+		f := &compressedFile{plain: data, gz: buf.Bytes(), tag: `"` + hex.EncodeToString(hash[:16]) + `"`}
+		cache[name] = f
+		return f, nil
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		if name == "" {
+			name = "index.html"
+		}
+		immutable := strings.HasPrefix(name, "assets/") || strings.HasPrefix(name, "fonts/")
+		if kind, ok := textTypes[filepath.Ext(name)]; ok && !immutable && !strings.Contains(name, "..") {
+			f, err := load(name)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			h := w.Header()
+			h.Set("Content-Type", kind)
+			h.Set("Cache-Control", "no-cache")
+			h.Set("ETag", f.tag)
+			h.Set("Vary", "Accept-Encoding")
+			if r.Header.Get("If-None-Match") == f.tag {
+				w.WriteHeader(304)
+				return
+			}
+			body := f.plain
+			if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+				h.Set("Content-Encoding", "gzip")
+				body = f.gz
+			}
+			h.Set("Content-Length", strconv.Itoa(len(body)))
+			if r.Method != "HEAD" {
+				w.Write(body)
+			}
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/assets/") || strings.HasPrefix(r.URL.Path, "/fonts/") {
+			data, err := fs.ReadFile(files, strings.TrimPrefix(r.URL.Path, "/"))
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			hash := sha256.Sum256(data)
+			tag := `"` + hex.EncodeToString(hash[:]) + `"`
+			w.Header().Set("ETag", tag)
+			w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+			if strings.HasSuffix(r.URL.Path, ".woff2") {
+				w.Header().Set("Content-Type", "font/woff2")
+			}
+			if r.Header.Get("If-None-Match") == tag {
+				w.WriteHeader(304)
+				return
+			}
+		}
+		static.ServeHTTP(w, r)
+	})
 }

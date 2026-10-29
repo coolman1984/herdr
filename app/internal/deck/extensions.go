@@ -3,6 +3,7 @@ package deck
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -34,6 +35,10 @@ type paneRequest struct {
 	LeadAccount string   `json:"lead_account"`
 	Purpose     string   `json:"purpose"`
 	Route       string   `json:"route"`
+	Floor       *struct {
+		RAMFreeMB  float64            `json:"ram_free_mb"`
+		DiskFreeGB map[string]float64 `json:"disk_free_gb"`
+	} `json:"floor"`
 }
 
 func (a *App) paneID(key string) (string, error) {
@@ -59,7 +64,10 @@ func (a *App) lockedWrite(w http.ResponseWriter, fn func() (any, error)) {
 	result, err := fn()
 	if err != nil {
 		status := 502
-		if strings.HasPrefix(err.Error(), "blocked:") {
+		var detail *statusError
+		if errors.As(err, &detail) {
+			status = detail.Status
+		} else if strings.HasPrefix(err.Error(), "blocked:") {
 			status = 409
 		}
 		failHTTP(w, status, err)
@@ -180,8 +188,15 @@ func (a *App) extensions(w http.ResponseWriter, r *http.Request) bool {
 					return nil, err
 				}
 			}
+			a.mu.Lock()
+			dispatch := a.lastDispatch
+			a.mu.Unlock()
 			go a.refresh(context.Background(), true)
-			return map[string]any{"ok": true, "message": result, "output": result}, nil
+			response := map[string]any{"ok": true, "message": result, "output": result}
+			if dispatch != "" {
+				response["dispatch_id"] = dispatch
+			}
+			return response, nil
 		})
 		return true
 	}
@@ -402,7 +417,7 @@ func (a *App) extensions(w http.ResponseWriter, r *http.Request) bool {
 			failHTTP(w, 404, fmt.Errorf("pane folder unavailable"))
 			return true
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 		defer cancel()
 		status, err := runCommand(ctx, "git.exe", "", "--no-optional-locks", "-C", cwd, "status", "--short")
 		if err != nil {
@@ -414,7 +429,17 @@ func (a *App) extensions(w http.ResponseWriter, r *http.Request) bool {
 			failHTTP(w, 502, err)
 			return true
 		}
-		respond(w, 200, map[string]string{"status": string(status), "stat": string(stat), "text": string(status) + "\n" + string(stat)})
+		top, err := runCommand(ctx, "git.exe", "", "--no-optional-locks", "-C", cwd, "rev-parse", "--show-toplevel")
+		if err != nil {
+			failHTTP(w, 502, err)
+			return true
+		}
+		porcelain, err := runCommand(ctx, "git.exe", "", "--no-optional-locks", "-C", cwd, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+		if err != nil {
+			failHTTP(w, 502, err)
+			return true
+		}
+		respond(w, 200, map[string]any{"status": string(status), "stat": string(stat), "text": string(status) + "\n" + string(stat), "root": filepath.ToSlash(strings.TrimSpace(string(top))), "paths": parsePorcelainZ(porcelain)})
 		return true
 	case "/api/check":
 		var p struct{}
@@ -490,6 +515,23 @@ func (a *App) extensions(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
+// parsePorcelainZ reads `git status --porcelain=v1 -z`: one "XY path" per NUL field, with the new
+// name first and the original name in the following field for renames and copies.
+func parsePorcelainZ(raw []byte) []map[string]string {
+	paths := []map[string]string{}
+	fields := strings.Split(string(raw), "\x00")
+	for i := 0; i < len(fields); i++ {
+		field := fields[i]
+		if len(field) < 4 {
+			continue
+		}
+		if field[0] == 'R' || field[0] == 'C' {
+			i++
+		}
+		paths = append(paths, map[string]string{"path": filepath.ToSlash(field[3:]), "code": field[:2]})
+	}
+	return paths
+}
 func readAllowed(root, relative string) (string, error) {
 	if filepath.IsAbs(relative) || relative == "" {
 		return "", fmt.Errorf("invalid relative file")

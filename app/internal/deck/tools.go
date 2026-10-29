@@ -10,6 +10,14 @@ import (
 )
 
 func (a *App) toolEndpoint(w http.ResponseWriter, r *http.Request) bool {
+	if r.URL.Path == "/api/headless/routes" {
+		if r.Method != "GET" {
+			failHTTP(w, 405, fmt.Errorf("GET required"))
+			return true
+		}
+		respond(w, 200, map[string]any{"routes": []map[string]any{}, "note": "No server-search-only research route has been verified for the Deck; research stays unavailable."})
+		return true
+	}
 	command := strings.TrimPrefix(r.URL.Path, "/api/agents/")
 	reads := map[string]bool{"tools": true, "status": true, "read": true, "diff": true, "history": true, "collect": true, "watch": true, "accounts": true, "usage": true}
 	if reads[command] {
@@ -63,6 +71,7 @@ func (a *App) toolEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		Model      string   `json:"model"`
 		Effort     string   `json:"effort"`
 		Account    string   `json:"account"`
+		Purpose    string   `json:"purpose"`
 		Run        string   `json:"run"`
 		TrialRoot  string   `json:"trial_root"`
 		TimeoutSec int      `json:"timeout_sec"`
@@ -95,6 +104,9 @@ func (a *App) toolEndpoint(w http.ResponseWriter, r *http.Request) bool {
 					if pane.Status == "blocked" {
 						return nil, fmt.Errorf("blocked: agent needs the owner; no ask submitted")
 					}
+					if err := a.checkInput(r.Context(), pane); err != nil {
+						return nil, err
+					}
 				}
 			}
 			if !found {
@@ -107,6 +119,19 @@ func (a *App) toolEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		case "/api/agents/fanout":
 			if len(p.Names) < 1 || len(p.Names) > 8 || strings.TrimSpace(p.Text) == "" {
 				return nil, fmt.Errorf("select 1–8 agents and a task")
+			}
+			state, err := a.currentSnapshot(r.Context())
+			if err != nil {
+				return nil, err
+			}
+			for _, name := range p.Names {
+				for _, pane := range state.Panes {
+					if pane.Name == name {
+						if err := a.checkInput(r.Context(), pane); err != nil {
+							return nil, err
+						}
+					}
+				}
 			}
 			params = map[string]any{"Command": "fanout", "Task": p.Text, "Agents": p.Names}
 		case "/api/agents/team":
@@ -140,6 +165,9 @@ func (a *App) toolEndpoint(w http.ResponseWriter, r *http.Request) bool {
 			path := filepath.Join(dir, fmt.Sprintf("handoff-%d.md", time.Now().UnixNano()))
 			params = map[string]any{"Command": "handoff", "TaskFile": path, "DeckHandoffText": p.Text}
 		case "/api/headless":
+			if p.Purpose == "research" {
+				return nil, &statusError{Status: 409, Msg: "research route unavailable: no verified server-search route"}
+			}
 			profile, ok := a.profiles[p.Profile]
 			if !ok || profile.Kind != "cline" {
 				return nil, fmt.Errorf("headless requires a Cline profile")

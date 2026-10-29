@@ -11,8 +11,28 @@ export const MAX_LINES = 2000;
 const OVERSCAN = 12, SHIFT_SEARCH = 600;
 
 const ro = new ResizeObserver((entries) => {
-  for (const e of entries) { const v = e.target._view; if (v) { v.h = e.contentRect.height; if (v.follow) v.jump = true; v.need(); } }
+  for (const e of entries) {
+    const v = e.target._view; if (!v) continue;
+    v.h = e.contentRect.height;
+    if (v.w !== e.contentRect.width) { v.w = e.contentRect.width; v.fit(); }
+    if (v.follow) v.jump = true; v.need();
+  }
 });
+
+// Fit to width: a card shows its pane at the pane's real column count, so the font is scaled until those
+// columns fill the card (no wasted right half, no cut lines). The monospace advance is measured once.
+let charRatio = 0;
+function monoRatio() {
+  if (charRatio) return charRatio;
+  const s = document.body.appendChild(document.createElement('span'));
+  s.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font:100px var(--font-mono)';
+  s.textContent = 'M'.repeat(20);
+  charRatio = s.getBoundingClientRect().width / 2000 || 0.6;
+  s.remove();
+  return charRatio;
+}
+export const fitState = { on: true, base: 13 };
+const PAD = 24;   // .trow left + right padding
 
 export class ScreenView {
   constructor(box, requestPaint, signal) {
@@ -36,6 +56,30 @@ export class ScreenView {
     signal?.addEventListener('abort', () => { ro.unobserve(box); box._view = null; });
   }
   get lines() { return this.raw.length; }
+
+  // Columns of the real pane (Herdr layout rect width); 0 = unknown -> longest recent line.
+  setCols(n) { if (n !== this.cols) { this.cols = n; this.fit(); } }
+  guessCols() {
+    const now = performance.now();
+    if (this.guessAt && now - this.guessAt < 2000) return this.guessed || 0;
+    this.guessAt = now;
+    let m = 0;
+    for (let i = Math.max(0, this.raw.length - 200); i < this.raw.length; i++) { const l = stripAnsi(this.raw[i]).length; if (l > m) m = l; }
+    return (this.guessed = m >= 20 ? Math.min(m, 400) : 0);
+  }
+  fit() {
+    let fs = fitState.base;
+    const cols = this.cols || this.guessCols();
+    if (fitState.on && cols && this.w > PAD + 40) {
+      const max = fitState.base * 1.25, min = Math.min(9, fitState.base);
+      fs = Math.max(min, Math.min(max, Math.floor(((this.w - PAD) / (cols * monoRatio())) * 4) / 4));
+    }
+    if (fs === this.fs) return;
+    this.fs = fs;
+    if (fs === fitState.base) { this.box.style.removeProperty('--mono-size'); this.box.style.removeProperty('--row-h'); }
+    else { this.box.style.setProperty('--mono-size', fs + 'px'); this.box.style.setProperty('--row-h', Math.round(fs * 1.5) + 'px'); }
+    this.resetMetrics();
+  }
   get plain() { return (this.plainCache ??= stripAnsi(this.raw.join('\n'))); }
 
   // Full screen text from the backend.

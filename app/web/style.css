@@ -96,6 +96,9 @@ body.safe [data-w] { opacity: .4; pointer-events: none; }
 }
 [data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; translate: -50% 0; transition-delay: 450ms; }
 .card [data-tip]::after { top: auto; bottom: calc(100% + 8px); }
+/* the right-hand top group opens its tips leftwards: a centred tip there widened the page (sideways scroll) */
+.top .tgroup:last-child [data-tip]::after { left: auto; right: 0; translate: 0 -4px; }
+.top .tgroup:last-child [data-tip]:hover::after, .top .tgroup:last-child [data-tip]:focus-visible::after { translate: 0 0; }
 
 /* ---------- top bar (56px) ---------- */
 .top { height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 12px 0 8px; border-bottom: 1px solid var(--line); background: var(--bg); min-width: 0; }
@@ -118,6 +121,7 @@ body.safe [data-w] { opacity: .4; pointer-events: none; }
 .top > * { flex-shrink: 0; }
 .top .grow { flex-shrink: 1; min-width: 0; }
 @media (max-width: 1500px) { .cmd span { display: none; } .count { padding: 0 6px; } }
+@media (max-width: 1700px) { .count .cw { display: none; } }
 @media (max-width: 1279px) { .counts { display: none; } .sess { display: none; } }
 @media (max-width: 1100px) { #btn-folder, #btn-team, #btn-shell { display: none; } }
 
@@ -185,10 +189,10 @@ body.no-rail .rail { visibility: hidden; }
 .glyph { width: 22px; height: 22px; display: block; }
 .tt { min-width: 0; display: grid; }
 .tt1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ttl { height: auto; padding: 0; border: 0; background: none; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 28ch; flex-shrink: 0; }
-.tt { flex: 1; }
+.ttl { height: auto; padding: 0; border: 0; background: none; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 28ch; min-width: min(14ch, 100%); flex: 0 1 auto; white-space: nowrap; }
+.tt { flex: 1; overflow: hidden; }
 .ttl:hover { background: none; text-decoration: underline; text-underline-offset: 3px; }
-.chips { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+.chips { display: flex; gap: 4px; min-width: 0; overflow: hidden; flex: 0 100 auto; }   /* chips give way before the name */
 .chip { height: 20px; padding: 0 8px; border-radius: var(--r-pill); border: 1px solid var(--line); font: 11px/18px var(--font-mono); color: var(--muted); white-space: nowrap; }
 .chip.model { color: var(--ink); background: var(--surface-2); }
 .chip.hot { color: var(--amber); border-color: var(--amber); }
@@ -254,6 +258,7 @@ body.no-rail .rail { visibility: hidden; }
 .keys button.icon { width: 28px; height: 28px; }
 @container (max-width: 520px) { .key:nth-child(n+6) { display: none; } }
 .card { container-type: inline-size; }
+@container (max-width: 760px) { .ctx-t, .chips .chip:not(.model) { display: none; } }
 @container (max-width: 480px) { .ctx-t, .chips .chip:not(.model) { display: none; } .key:nth-child(n+4) { display: none; } }
 
 .more { position: relative; }
@@ -364,8 +369,10 @@ div.row, .dlg-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: c
 .statusbar { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .conn { width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
 .statusbar[data-ok="1"] .conn { background: var(--green); }
-.toasts { position: fixed; right: 16px; bottom: 40px; display: grid; gap: 8px; z-index: 60; width: min(360px, calc(100vw - 32px)); }
-.toasts.loud { bottom: auto; top: 68px; }
+/* one stack bottom-right (loud ones nearest the corner): a toast never covers a card header */
+.toast-stack { position: fixed; right: 16px; bottom: 40px; display: flex; flex-direction: column; gap: 8px; z-index: 60; width: min(360px, calc(100vw - 32px)); pointer-events: none; }
+.toasts { display: grid; gap: 8px; }
+.toast-stack .toast { pointer-events: auto; }
 .toast {
   display: flex; gap: 10px; align-items: flex-start; padding: 10px 8px 10px 14px; border-radius: var(--r-menu); background: var(--surface-2);
   box-shadow: var(--shadow-float), inset 3px 0 0 var(--blue); font-size: 13px; animation: toastin var(--t-mid) var(--ease);

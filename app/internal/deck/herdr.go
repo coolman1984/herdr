@@ -64,6 +64,10 @@ func runCommand(ctx context.Context, name string, stdin string, args ...string) 
 		if e != nil {
 			cmd.Process.Kill()
 			cmd.Wait()
+			if ctx.Err() != nil {
+				// The deadline killed the child before it joined the job; report the timeout.
+				return nil, fmt.Errorf("%s timed out or cancelled: %w", filepath.Base(name), ctx.Err())
+			}
 			return nil, e
 		}
 		defer closeMutex(job)

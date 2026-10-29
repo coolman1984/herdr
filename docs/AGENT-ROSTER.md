@@ -9,7 +9,7 @@ third-party pages (approximate), so they guide choices; they are not invoices.
 | Agent (profile) | CLI / version | Models available here | Thinking levels | Works now? |
 |---|---|---|---|---|
 | **Claude Code** (`claude`) | 2.1.308 | Opus 5.5 (default, effort high), Sonnet 5.5, Haiku 5.5 | low ... max | **Yes** (the lead) |
-| **Codex** (`codex`) | codex-cli 0.164.0 | GPT-6.1-Sol, 475k context; business plan | low, medium (default), high, xhigh, ultra, max (`-Effort`) | **Yes** |
+| **Codex** (`codex`) | codex-cli 0.165.0 | GPT-6.1-Sol, 475k context; business plan | low, medium (default), high, xhigh, ultra, max (`-Effort`) | **Yes** |
 | **Antigravity** (`agy`, `gemini`, `gemini-flash`) | agy 1.4.7 (Google, replaces Gemini CLI) | Gemini 4 Argon (low/med/high), Gemini 3.8 Flash (low/med/high), Claude Opus 5.5 / Sonnet 5.5, GPT-OSS 120B | in the model name, or `--effort` | **Yes** (`AGY-OK` in 19 s) |
 | **Cline** (`cline`, `cline-flash`, `ds-flash`, `deepseek`, `kimi`) | 3.0.73 | **Cline Pass** ($9.99/month, owner signed in 2026-10-22): `cline-pass/glm-5.3`, `glm-5.3-flash`, `deepseek-v4-pro`, `kimi-k3` (+ 8 more, docs/CLINE-PASS.md) | `--thinking none..xhigh` | **Yes** - all four answered (~60 s start-up each); DeepSeek works through Cline Pass despite the network block on its own API |
 | **OpenCode** (`opencode`) | 1.19.4 | Zen/Go catalogue: Kimi K2.6, GLM-5.1, DeepSeek V4 Pro/Flash, Gemini 3.x, GPT-5.x, MiMo ... | per model | **No**: OpenAI sign-in expired (401); Zen models answer with an error page |

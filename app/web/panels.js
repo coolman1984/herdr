@@ -1,25 +1,31 @@
 // Dialogs, drawer panels and the command palette (P0 + P1 + P2 features around the grid).
-import { api } from './api.js';
-import { el, $, toast, fail, dialog, confirm, confirmTyped, ask, copyText, ago } from './ui.js';
+import { api, missing, why } from './api.js';
+import { el, $, toast, fail, dialog, confirm, ask, copyText, ago } from './ui.js';
+import { fitState } from './screen.js';
 import * as Q from './parity.js';
 import * as G from './guard.js';
 
 let X; // context from app.js (state + helpers); set by init()
 export function init(ctx) { X = ctx; }
-const missing = (e) => e.status === 404 || e.status === 405 || /^404/.test(e.message);
-const why = (e) => (missing(e) ? 'not available yet: the backend has no endpoint for this (see app/API-REQUESTS.md)' : e.message);
 
 // ---------- look: theme, font size, density ----------
 export function applyLook() {
   const L = X ? X.LS : { get: (k, d) => { try { return JSON.parse(localStorage.getItem('deck.' + k)) ?? d; } catch { return d; } } };
   const r = document.documentElement;
-  r.dataset.theme = L.get('theme', 'dark');
+  // ?theme=light|dark|hc wins once and is remembered like a palette choice.
+  const asked = new URLSearchParams(location.search).get('theme');
+  if (['dark', 'light', 'hc'].includes(asked) && X && L.get('theme', 'dark') !== asked) X.LS.set('theme', asked);
+  r.dataset.theme = ['dark', 'light', 'hc'].includes(asked) ? asked : L.get('theme', 'dark');
   r.dataset.density = L.get('density', 'normal');
   const fs = L.get('font', 13);
   r.style.setProperty('--mono-size', fs + 'px');
   r.style.setProperty('--row-h', Math.round(fs * 1.5) + 'px');
+  fitState.base = fs; fitState.on = L.get('fit', true);
 }
-export function setLook(k, v) { X.LS.set(k, v); applyLook(); for (const p of X.S.panes.values()) { const c = X.card(p.key); if (c) c.view.resetMetrics(); X.schedule(p.key); } }
+export function setLook(k, v) {
+  X.LS.set(k, v); applyLook();
+  for (const p of X.S.panes.values()) { const c = X.card(p.key); if (c) { c.view.fs = null; c.view.fit(); c.view.resetMetrics(); } X.schedule(p.key); }
+}
 
 // ---------- empty state ----------
 export function renderEmpty(box, down) {
@@ -82,7 +88,7 @@ export async function startAgent(preset) {
   const effort = el('select', { 'aria-label': 'Effort' }, EFFORTS.map((e) => el('option', { value: e, text: e || '(profile default)' })));
   const account = el('input', { 'aria-label': 'Account', list: 'accts', spellcheck: false, size: 8 });
   const accts = el('datalist', { id: 'accts' });
-  const cwd = el('input', { 'aria-label': 'Folder', value: cur?.cwd || 'I:\\herdr', spellcheck: false });
+  const cwd = el('input', { 'aria-label': 'Folder', value: cur?.cwd || X.S.root, spellcheck: false });
   const where = el('select', { 'aria-label': 'Where' }, el('option', { value: 'split', text: 'Split right of the current pane' }), el('option', { value: 'new', text: 'New pane (Herdr decides)' }));
   const sync = () => {
     const p = profiles.find((x) => x.name === prof.value) || {};
@@ -106,7 +112,7 @@ export async function startAgent(preset) {
 }
 export async function newShell() {
   const cur = X.S.panes.get(X.currentKey());
-  return X.act('New shell', () => (cur ? api.split(cur.key, cur.cwd) : api.shell('I:\\herdr')), 'Shell opened');
+  return X.act('New shell', () => (cur ? api.split(cur.key, cur.cwd) : api.shell(X.S.root)), 'Shell opened');
 }
 
 // ---------- P1.1 Paste to pane ----------
@@ -217,7 +223,7 @@ export function usage() {
     b.textContent = '';
     if (!u.accounts && (u.output || u.text)) u.accounts = parseUsage(u.output || u.text);
     u.text = u.text || u.output;
-    for (const a of u.accounts || []) b.append(el('h3', { text: 'Account ' + a.name }), a.five_hour != null ? bar('5 hours', a.five_hour) : '', a.weekly != null ? bar('weekly', a.weekly) : '');
+    for (const a of u.accounts || []) b.append(el('h3', { text: 'Account ' + a.name + (a.main ? ' (main sign-in)' : '') }), a.five_hour != null ? bar('5 hours', a.five_hour) : '', a.weekly != null ? bar('weekly', a.weekly) : '');
     if (!(u.accounts || []).length) b.append(el('p', { class: 'muted small', text: 'No percentages found in the output; see the raw text.' }));
     if (u.codex) b.append(el('h3', { text: 'Codex' }), bar('5 hours', u.codex.five_hour ?? 0), bar('weekly', u.codex.weekly ?? 0));
     const tok = [...X.S.panes.values()].filter((p) => p.tokens && Object.keys(p.tokens).length);
@@ -229,10 +235,14 @@ export function usage() {
   });
 }
 
-// "herdr-agents usage" prints one line per account with "5h N%" / "week N%" style numbers.
+// "herdr-agents usage" prints a table: `2030*  16%  Mon 11:50  11%  Fri 13:00 ...` (account, 5h %,
+// reset, weekly %, ...; * = main sign-in). Older output used "5h N%" / "week N%" words; both are read.
+const USAGE_ROW = /^(\S+?)\*?\s+(\d{1,3})%\s+.+?\s(\d{1,3})%\s/;
 export function parseUsage(text) {
   const out = [];
   for (const line of text.split('\n')) {
+    const row = USAGE_ROW.exec(line);
+    if (row) { out.push({ name: row[1], five_hour: +row[2], weekly: +row[3], main: /^\S+\*/.test(line), line: line.trim() }); continue; }
     const five = /5\s*-?h(?:our)?s?\D{0,12}?(\d{1,3})\s*%/i.exec(line), week = /week(?:ly)?\D{0,12}?(\d{1,3})\s*%/i.exec(line);
     if (!five && !week) continue;
     const name = (/\b(\d{4})\b/.exec(line) || /^\s*([\w.-]+)/.exec(line) || ['', '?'])[1];
@@ -283,7 +293,7 @@ export async function team() {
   const have = new Set(X.S.profiles.map((p) => p.name));
   const pick = el('div', { class: 'list' }, TEAMS.map((t, i) => el('label', { class: 'li' }, el('input', { type: 'radio', name: 'team', value: i, checked: i === 0 }),
     ` ${t.name}`, el('span', { class: 'muted small', text: ' - ' + t.profiles.map((p) => (have.has(p) ? p : p + ' (missing)')).join(', ') }))));
-  const cwd = el('input', { 'aria-label': 'Folder', value: X.S.panes.get(X.currentKey())?.cwd || 'I:\\herdr' });
+  const cwd = el('input', { 'aria-label': 'Folder', value: X.S.panes.get(X.currentKey())?.cwd || X.S.root });
   const v = await dialog({ title: 'Start a team', body: el('div', {}, pick, el('label', { class: 'field' }, el('span', { text: 'Folder' }), cwd),
     el('p', { class: 'muted small', text: 'Each agent starts with its profile defaults, one after another. Research teams run headless outside the Deck (owner rule).' })),
     actions: [{ label: 'Cancel', value: null }, { label: 'Start team', value: 'ok', kind: 'primary' }] });
@@ -490,6 +500,7 @@ function commands() {
   for (const n of [1, 2, 3]) add(`${n} column${n > 1 ? 's' : ''}`, () => X.setCols(n), String(n));
   add('Theme: dark', () => setLook('theme', 'dark')); add('Theme: light', () => setLook('theme', 'light')); add('Theme: high contrast', () => setLook('theme', 'hc'));
   add('Font bigger', () => setLook('font', Math.min(22, X.LS.get('font', 13) + 1))); add('Font smaller', () => setLook('font', Math.max(10, X.LS.get('font', 13) - 1)));
+  add(X.LS.get('fit', true) ? 'Screen: fit to width OFF (fixed font)' : 'Screen: fit to width ON', () => setLook('fit', !X.LS.get('fit', true)));
   add('Density: compact', () => setLook('density', 'compact')); add('Density: normal', () => setLook('density', 'normal'));
   add(S.safe ? 'Safe mode: off (allow writes)' : 'Safe mode: on (read-only)', () => X.setSafe(!S.safe));
   add('Save layout', saveLayout);
@@ -538,15 +549,4 @@ export function palette(prefix = '') {
   d.addEventListener('close', () => d.remove());
   inp.value = prefix;
   document.body.append(d); d.showModal(); paint(); inp.focus();
-}
-
-// ---------- ? overlay ----------
-const SHORTCUTS = [['Ctrl+K', 'Command palette'], ['?', 'This help'], ['1 / 2 / 3', 'Grid columns'], ['J / K or ] / [', 'Next / previous card'],
-  ['Z', 'Zoom the current card (Esc returns)'], ['/ or P', 'Prompt box of the current card'], ['Enter / Shift+Enter', 'Send / new line in a prompt box'],
-  ['Up / Down (empty prompt)', 'Prompt history'], ['X', 'Select card for broadcast'], ['I', 'Attention inbox'], ['Alt+Up / Alt+Down', 'Previous / next workspace or tab'],
-  ['Ctrl+Shift+V', 'Paste to pane (current card)'], ['Ctrl+Shift+C', 'Copy screen (current card)'], ['Ctrl+Shift+X', 'Leave raw typing mode'], ['Tab / Shift+Tab', 'Move between controls']];
-export function help() {
-  dialog({ title: 'Keyboard shortcuts', wide: true,
-    body: el('table', { class: 'keys-t' }, el('tbody', {}, SHORTCUTS.map(([k, v]) => el('tr', {}, el('th', {}, el('kbd', { text: k })), el('td', { text: v }))))),
-    actions: [{ label: 'Close', value: 'ok', kind: 'primary', focus: true }] });
 }
