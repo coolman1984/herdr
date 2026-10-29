@@ -64,13 +64,17 @@ func (f *failingTransport) Call(ctx context.Context, args ...string) ([]byte, er
 	return nil, fmt.Errorf("timed out after possible delivery")
 }
 func TestUncertainDeliveryIsRecordedWithoutReplay(t *testing.T) {
+	t.Setenv("APPDATA", t.TempDir())
 	a := newApp(&failingTransport{}, "lab", "test-token", "http://127.0.0.1:9876", "", map[string]Profile{})
-	_, err := a.deliver(context.Background(), "w1:p1", "agent", "prompt", "coder", "task")
+	_, dispatch, err := a.deliver(context.Background(), "lab|w1:p1", "w1:p1", "task", "agent", "prompt", "coder")
 	if err == nil || !strings.Contains(err.Error(), "delivery unknown") {
 		t.Fatal("uncertain delivery hidden")
 	}
-	if len(a.guards.Deliveries) != 1 || a.guards.Deliveries[0].State != "delivery unknown" {
-		t.Fatal("missing ledger")
+	if dispatch == "" {
+		t.Fatal("uncertain delivery has no dispatch id")
+	}
+	if len(a.guards.Deliveries) != 1 || a.guards.Deliveries[0].State != "unknown" || a.guards.Deliveries[0].Key != "lab|w1:p1" {
+		t.Fatalf("missing ledger: %+v", a.guards.Deliveries)
 	}
 }
 func TestScriptBridgePassesJSONAsDataAndSwitchesAsBooleans(t *testing.T) {

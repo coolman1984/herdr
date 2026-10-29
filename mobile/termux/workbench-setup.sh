@@ -57,6 +57,9 @@ if [ "${1:-}" != "--now" ]; then
   [ -f "$stamp" ] && [ $(( $(date +%s) - $(cat "$stamp") )) -lt $(( UPDATE_EVERY_HOURS * 3600 )) ] && exit 0
 fi
 exec 9>"$WB/update.lock"; flock -n 9 || exit 0
+# a phone: lowest CPU and disk priority, and the slow apt upgrade at most once a week
+renice -n 19 $$ >/dev/null 2>&1; ionice -c3 -p $$ >/dev/null 2>&1
+apt_due=1; [ "${1:-}" != "--now" ] && [ -f "$WB/last-apt" ] && [ $(( $(date +%s) - $(cat "$WB/last-apt") )) -lt 604800 ] && apt_due=0
 step() { echo "== $*"; "$@" || echo "!! failed: $*"; }
 npm_pkgs=()
 [ "${CODEX:-0}" = 1 ]    && npm_pkgs+=(@openai/codex)
@@ -65,7 +68,7 @@ npm_pkgs=()
 [ "${COPILOT:-0}" = 1 ]  && npm_pkgs+=(@github/copilot)
 # shellcheck disable=SC2206
 npm_pkgs+=($NPM_EXTRA)
-step apt-get update -y && step apt-get upgrade -y
+if [ "$apt_due" = 1 ]; then step apt-get update -y && step apt-get upgrade -y; date +%s > "$WB/last-apt"; fi
 [ ${#npm_pkgs[@]} -gt 0 ] && step npm install -g "${npm_pkgs[@]/%/@latest}"
 if [ "${CLAUDE:-0}" = 1 ]; then
   if command -v claude >/dev/null; then step claude update

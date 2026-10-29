@@ -314,3 +314,102 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     one `local` line before any name exists - split assignments. Herdr's Gemini CLI integration
     target is `antigravity-cli` (profile `gemini` runs `agy`). Cline has no `herdr integration`
     target yet.
+
+73. **Codex v0.163 `/new` asks "Where should the new conversation run?"** (1 = current worktree,
+    2 = new Git worktree), so `ask codex -Fresh` lands its task text in that dialog. On 2026-10-26
+    the "1" of the spec heading `## 1. Role` picked option 1 by luck, the rest reached the composer,
+    and `ask` printed `DONE` within seconds while Codex had only just started. After `-Fresh` on
+    Codex, read the screen before trusting `DONE`; wait with `collect`. The lead's own send-keys to
+    answer the dialog was refused by Claude's auto-mode classifier: the owner answers it.
+
+74. **Cline updates itself after a run, and `cline` is missing while it does.** On 2026-10-26 a
+    63-second headless run was followed by `npm update -g cline --tag latest` (3.0.73 -> 3.0.74,
+    08:27-08:29). In that window npm had renamed the shims to `%APPDATA%\npm\.cline-XXXX` and
+    `herdr-headless.ps1` failed with `cline is not installed`. It is not a cleanup or a broken install:
+    look for a `node ... npm-cli.js update -g cline` process, wait for it to exit, then run again.
+    It needs disk on C: (LESSONS #60). Unknown Cline Pass model ids fail fast with `model not found`;
+    a model's own answer about its identity proves nothing (DeepSeek said "claude-sonnet-4-5").
+
+75. **How agent input boxes look in Herdr's ANSI output** (`pane read --format ansi`, 2026-10-26):
+    Herdr re-emits colours as truecolor SGR - Claude Code's grey prompt/suggestion text is
+    `ESC[38;2;153;153;153m` and its rules `ESC[38;2;136;136;136m`, not SGR 2/90. The Claude prompt
+    glyph `❯` (U+276F) is followed by a NO-BREAK SPACE (U+00A0), so `"❯ "` with 0x20 never matches.
+    Real capture: `app/tests/fixtures/input/claude-empty.real.ansi`.
+    A history prompt (`❯` line with no `─` rule above it) is not the input box. Codex's prompt is
+    `›` (U+203A) + space with an SGR 2 placeholder.
+
+76. **Every `git.exe` start costs about 2 s on this PC** (Defender; `git status --short` measured
+    2.31 s and 1.96 s, 2026-10-26). Give a handler that runs N git calls a budget of at least 2.5 s x N
+    (the Deck's `/api/git` went 5 s -> 15 s). `git status --porcelain=v1 -z` writes a rename as
+    `R  <NEW>\0<OLD>\0`, and `rev-parse --show-toplevel` already returns forward slashes.
+
+77. **Go builds on this PC:** Go is portable at `D:\tools\go\go1.26.10\go\bin\go.exe`, not on PATH
+    (`app\build.ps1` looks in `$env:DECK_GO`, then known paths, then PATH). Never run two Go builds at
+    once: with ~4 GB RAM free the compiler died with `runtime: cannot allocate memory`. PowerShell hides
+    `go test`/`go vet` failures behind a `NativeCommandError`; run
+    `cmd /c "go ... > out.txt 2>&1"` and read the file.
+
+78. **A Windows job object cannot take a process that is already dead.** `exec.CommandContext` kills
+    the child when the deadline passes; if that happens before `AssignProcessToJobObject`, the assign
+    fails with `Access is denied` and hides the real cause (the timeout). Check `ctx.Err()` before
+    reporting a containment error. A test with a 100 ms deadline shows it only under load (2 of 4
+    full runs), never alone.
+
+79. **Edge on this PC loses ~2.5 s to proxy detection before its first request, even to 127.0.0.1**
+    (2026-10-28, headless Edge over CDP: `requestStart` 3,157 ms by default vs 653 ms with
+    `--no-proxy-server`; first paint 3,384 -> 876 ms; `curl` got the same page in 11 ms). The Deck window
+    therefore starts Edge with `--no-proxy-server` (its own profile, page talks only to 127.0.0.1).
+
+80. **PowerShell 7 `Start-Process -ArgumentList` does not quote an argument that contains spaces** (paths
+    under `D:\WORK\Software Development\...` split into two arguments, the program refused its flags and a
+    wait loop without a timeout hung). Use `ProcessStartInfo.ArgumentList` (`Start-UiProcess` in
+    `app/tests/deck-ui.ps1`) and give every wait loop a deadline.
+
+81. **An interrupted `npm update -g @openai/codex` leaves Codex unusable:** on 2026-10-27 08:06 the shims
+    were left renamed (`%APPDATA%\npm\.codex-XXXX`, `.codex.cmd-XXXX`), so `codex` was "not recognized";
+    `npm install -g @openai/codex@latest` restored the shims but twice dropped the 118 MB optional
+    `@openai/codex-win32-x64` package silently ("changed 2 packages", then `Missing optional dependency`)
+    on this proxy (`npm pack` of it: `npm error network ... proxy`). The launcher also accepts the binary
+    in `node_modules\@openai\codex\vendor\x86_64-pc-windows-msvc\bin\codex.exe`, but `codex.exe` alone is
+    not enough: its tools need `codex-code-mode-host.exe` beside it (Codex answered BLOCKED "cannot find
+    codex-code-mode-host.exe"). Working repair: copy a COMPLETE, same-version set - e.g.
+    `~\.codex\packages\app-server-daemon\releases\<ver>-x86_64-pc-windows-msvc\` (bin\, codex-path\,
+    codex-resources\) - to that `vendor\x86_64-pc-windows-msvc\` folder (0.157.1 on 2026-10-28).
+
+82. **`curl -C -` can corrupt a resumed download:** when the registry answered a resume with the full
+    file instead of a 206 range, curl appended it (150 MB file for a 118 MB tarball). Download in explicit
+    `-r start-end` ranges, append a piece only when `Content-Range` starts at the current size, and check
+    the npm `dist.integrity` SHA-512 at the end.
+
+83. **Deck rendering: a forced layout costs what is dirty when it runs.** Setting `scrollTop` (follow
+    mode) forces a synchronous layout; with the top bar rewritten earlier in the same frame it cost 2.3 s
+    of 10 s in the 8-pane stress mock. Screens first, top bar after, and write DOM text only when it
+    changed: 46 -> 60 fps, long tasks 15 -> 0, render p95 17.9 -> 10 ms.
+
+84. **A Claude helper told to "watch every 5 minutes" stops after one round:** its turn ends and nothing
+    wakes it (2026-10-28, the Sonnet watcher wrote round 1 and said "checking again at 17:35"). Give it
+    `/loop 5m <one round ...; stop the loop when done>`; it schedules the rounds itself (cron job that
+    lives while that session is open).
+
+85. **Codex 0.157.1 cannot run GPT-6.1-Sol on this account:** after the #81 repair put 0.157.1 in place,
+    `start codex -Model gpt-6.1-sol` started fine, but the first turn failed with HTTP 400
+    `"The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account." (model_not_found)`
+    (2026-10-28 17:54). `ask` still reported `DONE: ... is idle`, so the error line was easy to miss. Check
+    `codex --version` (the roster lists 0.164.0) before delegating to Sol, and read the screen for
+    `■ {"type":"error"` after every DONE. Fixed 2026-10-29 by 0.165.0 (#86): Sol medium answers.
+
+86. **Updating Codex through the proxy (2026-10-29, 0.157.1 -> 0.165.0):** the registry's HEAD answer
+    for the 174 MB `codex-<ver>-win32-x64.tgz` has no `Content-Length`; read the total from a `-r 0-0`
+    request's `Content-Range` instead. 11 ranges of 16 MB then downloaded cleanly and matched
+    `dist.integrity`. This time `npm install -g @openai/codex@0.165.0` itself also installed the optional
+    package (`node_modules\@openai\codex\node_modules\@openai\codex-win32-x64`, 47 files, hashes equal to
+    the verified tarball, 3 min), so the proxy failure of #81 is intermittent: run npm first, then check
+    that folder exists and `codex --version` shows the new version; keep the ranged download as the
+    fallback. Before the first turn the 0.165.0 footer reads `GPT-6.1-Sol default` although the process
+    has `-c model_reasoning_effort=medium`; after the first turn it reads `GPT-6.1-Sol medium`.
+
+87. **`ask -TaskFile` with a long spec can return `DONE: <name> is idle` before the agent starts**
+    (2026-10-29, Codex 0.165.0 Astra, 170-line spec): the answer showed only the pasted prompt, no report
+    file existed, yet seconds later `herdr agent list` showed the agent `working` on the task. A DONE whose
+    "recent output" is just the prompt is not a result: check `agent list` / `read -Visible`, then wait
+    with `collect -Agents <name>` instead of resending.

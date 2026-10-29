@@ -1,0 +1,17 @@
+[0m[38;2;153;153;153m❯ [0mold prompt from history, already sent
+● Done.
+
+
+[0m[38;2;153;153;153m● [0mSaving real Claude empty-input ANSI fixture[0m[38;2;153;153;153m · 4s[0m
+[0m[38;2;153;153;153m  ⎿  $ $h="$env:LOCALAPPDATA\Programs\Herdr\bin\herdr.exe"; $dir = "app\tests\fixtures\input"; New-Item -ItemType Directory -Force $dir | Out-Null; $raw = & $h pane read wR:p1 --source visible --lines 30 [0m
+     [0m[38;2;153;153;153m--format ansi; [IO.File]::WriteAllText((Join-Path (Resolve-Path $dir) 'claude-empty.real.ansi'), (($… (3s)[0m
+     [0m[38;2;153;153;153m(ctrl+b to run in background)[0m
+
+[0m[38;2;255;153;51m✶ Booping… [0m[38;2;153;153;153m(14m 23s · ↓[0m [0m[38;2;153;153;153m14.5k tokens)[0m
+[0m[38;2;153;153;153m  ⎿  Tip: Running multiple Claude sessions? Use /color and /rename to tell them apart at a glance.[0m
+
+[0m[38;2;136;136;136m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;153;153;153m❯ [0m
+[0m[38;2;136;136;136m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+  [0m[38;2;153;153;153mOpus 5.5 | $3.01 | 202.2k/1000.0k (20%)[0m
+  [0m[38;2;255;204;0m⏵⏵ auto mode on[0m[38;2;153;153;153m (shift+tab to cycle) · ← 1 agent[0m

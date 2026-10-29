@@ -1,10 +1,22 @@
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
-$deckGo = 'C:\Users\mflma\tools\go\go1.26.1\go\bin\go.exe'
-if (-not (Test-Path -LiteralPath $deckGo)) {
-    $deckGo = (Get-Command go.exe -ErrorAction Stop).Source
+$deckCandidates = @()
+if ($env:DECK_GO) { $deckCandidates += $env:DECK_GO }
+$deckCandidates += 'C:\Users\mflma\tools\go\go1.26.1\go\bin\go.exe'
+$deckCandidates += 'D:\tools\go\go1.26.10\go\bin\go.exe'
+$deckGo = $null
+foreach ($deckCandidate in $deckCandidates) {
+    if ($deckCandidate -and (Test-Path -LiteralPath $deckCandidate -PathType Leaf)) { $deckGo = $deckCandidate; break }
 }
+if (-not $deckGo) {
+    $deckFound = Get-Command go.exe -ErrorAction SilentlyContinue
+    if ($deckFound) { $deckGo = $deckFound.Source }
+}
+if (-not $deckGo) {
+    throw "Go not found: set DECK_GO to go.exe (tried: $($deckCandidates -join ', '), go.exe on PATH)"
+}
+Write-Output "Go: $deckGo"
 $deckOldLocation = Get-Location
 $deckOldCache = $env:GOCACHE
 $deckOldTemp = $env:GOTMPDIR

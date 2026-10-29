@@ -7,3 +7,6 @@
 /tests/*.exe
 /tests/*address*.json
 /tests/evidence/
+/HerdrDeck.exe~
+/tests/tmp-edge/
+/tests/shots/

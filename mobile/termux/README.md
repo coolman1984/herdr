@@ -24,6 +24,9 @@ curl -fsSL https://raw.githubusercontent.com/coolman1984/herdr/main/mobile/termu
 | `dev shell` | سطر أوامر عادي جوه الورشة |
 | `dev update` | يحدّث كل حاجة دلوقتي |
 | `radar` | يكشف المشاكل، يصلّحها، يبعت تقرير لـ Claude، ويفتح herdr |
+| `radar deep` | فحص كامل وتفصيلي (أبطأ) لما تكون في مشكلة غامضة |
+| `radar fast` | يقيس سرعة الورشة تاني ويختار الأسرع |
+| `radar safe` | لو ظهرلك كلام فيه assertion failed: يرجّع الوضع الآمن على طول |
 | `radar hermes` | يعيد تركيب Hermes من الصفر (إعداداتك ومفاتيحك محفوظة) |
 | `ship "رسالة"` | يحفظ كل التعديلات ويرفعها على GitHub (بيعيد المحاولة لو النت فصل) |
 

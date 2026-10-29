@@ -52,6 +52,7 @@ type State struct {
 	FocusedPane string          `json:"focused_pane_id"`
 	ReadOnly    bool            `json:"read_only"`
 	Lead        LeadIdentity    `json:"lead"`
+	Root        string          `json:"root"` // the toolkit folder; the page's default folder
 }
 
 func parseSnapshot(raw []byte, session string) (State, error) {

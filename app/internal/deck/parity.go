@@ -416,7 +416,7 @@ func (a *App) parity(w http.ResponseWriter, r *http.Request) bool {
 		})
 		return true
 	}
-	if strings.HasPrefix(r.URL.Path, "/api/agents/") || r.URL.Path == "/api/headless" || r.URL.Path == "/api/trial" || r.URL.Path == "/api/sync-skills" {
+	if strings.HasPrefix(r.URL.Path, "/api/agents/") || strings.HasPrefix(r.URL.Path, "/api/headless") || r.URL.Path == "/api/trial" || r.URL.Path == "/api/sync-skills" {
 		return a.toolEndpoint(w, r)
 	}
 	if r.URL.Path == "/api/docs" && r.URL.Query().Get("name") == "KEYS" {

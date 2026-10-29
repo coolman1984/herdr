@@ -24,15 +24,22 @@ export const ROUTES = {
   reservations: '/api/reservations', release: '/api/reservations/release', headlessRoutes: '/api/headless/routes', jobs: '/api/jobs',
 };
 
-const withToken = (path) => path + (path.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(TOKEN);
+export const missing = (e) => e.status === 404 || e.status === 405 || /^404/.test(e.message);
+export const why = (e) => (missing(e) ? 'Not available: the backend has no endpoint for this.' : e.message);
+
+const withToken =(path) => path + (path.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(TOKEN);
 
 async function readJson(res) {
   const text = await res.text();
   let body = null;
   try { body = text ? JSON.parse(text) : {}; } catch { body = null; }
   if (!res.ok) {
-    const msg = (body && (body.error || body.message)) || text.slice(0, 300) || res.statusText;
-    const err = new Error(`${res.status}: ${msg}`); err.status = res.status; err.dispatch_id = body?.dispatch_id; err.body = body; throw err;
+    // A code-like error ("input_not_empty") comes with a readable `message`: show the sentence.
+    const code = body && /^[a-z]+(_[a-z]+)+$/.test(body.error || '') ? body.error : '';
+    const msg = (body && ((code && body.message) || body.error || body.message)) || text.slice(0, 300) || res.statusText;
+    const err = new Error(code ? msg : `${res.status}: ${msg}`);
+    Object.assign(err, { status: res.status, code, dispatch_id: body?.dispatch_id, body });
+    throw err;
   }
   if (body === null) throw new Error('Backend sent invalid JSON: ' + text.slice(0, 200));
   if (body.ok === false) throw new Error(body.error || body.message || 'Backend said the action failed');

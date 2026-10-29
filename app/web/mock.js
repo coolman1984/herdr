@@ -45,7 +45,7 @@ export function createMock(R) {
       panes: ps.map((p, i) => ({ pane_id: p.pane_id, rect: { x: each * i, y: 0, width: i === ps.length - 1 ? w - each * i : each, height: h } })) };
   });
   const state = () => running
-    ? { session: 'lab', lead: { tool: 'claude', account: '2040', known: true }, herdr: { running: true, error: '' }, panes: [...panes.values()].map(({ n: _n, ...p }) => p), workspaces, tabs, layouts: layouts(), profiles, error: '' }
+    ? { session: 'lab', root: 'I:\\herdr', lead: { tool: 'claude', account: '2040', known: true }, herdr: { running: true, error: '' }, panes: [...panes.values()].map(({ n: _n, ...p }) => p), workspaces, tabs, layouts: layouts(), profiles, error: '' }
     : { session: 'lab', herdr: { running: false, error: 'herdr.sock not found (mock)' }, panes: [], workspaces: [], tabs: [], profiles, error: '' };
 
   let sink = null;
