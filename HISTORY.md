@@ -1396,3 +1396,63 @@ fail on the phase-1 commit). `verify-ui.ps1` 38 PASS / 8 FAIL; all 8 also fail o
 Claude. `herdr-headless.ps1` stays for one-shot runs. Agents are started with `herdr pane run`
 because `herdr-agents start/team` still fails with `agent_pane_busy` (#60, #89).
 **Lesson:** #89.
+
+## Phase 55 - Deck round 6: calm restyle, light + dark theme that follows Windows (2026-10-29)
+
+**Owner's request:** "the user interface is ... not professional and ugly; make it simple. I want this
+design and style and font, light and dark theme" (reference screenshot 2026-10-29 17 26 39: charcoal
+cards, hairline borders, round coloured icons on a thin timeline, kebab menus).
+**Symptom (round-5 shots):** lime-green (#D4FF3A) buttons, accent borders and underlines on every
+pressed control, loud amber "NEEDS YOU" block, mono-font chips, two rows of key and icon buttons on
+every card, a custom display font (Alexandria).
+**Fix (`app/web`):** new tokens on `:root` only (dark #141416 page / #1F1F22 cards / #2C2C30 lines,
+light #F5F5F7 / white / #E4E4E8), 12 px card radius, one calm blue (#3B82F6 / #2563EB) for Agent and
+Send only; system font (Segoe UI Variable), mono only in the terminal; ANSI palettes tuned per theme.
+Top-bar buttons are ghost buttons, the view switch is a segmented track. Cards: round agent icons
+(the only colour in a header), quiet chips, status = dot + text, "Needs you" a soft amber pill; split
+buttons and the broadcast box show on hover/focus; the `...` card menu moved into the header; the key
+row (Esc, Ctrl+C, ...) and copy/rename/close show only while the card has focus (all also in `...`).
+Rail = a timeline: every status dot in one column on a thin line. Theme: `system` (default, follows
+`prefers-color-scheme` live) / light / dark / high contrast; a top-bar button cycles System -> Light ->
+Dark (saved with `LS`); Settings and Ctrl+K have "Theme: system".
+**Bug fixed on the way:** a card's `...` menu closed whenever ANY element scrolled (window scroll
+listener in capture mode), so a streaming pane closed it at once; now only a scroll that moves the
+trigger closes it (`ui.js openMenu`).
+**Proof:** `build.ps1 -Output app\HerdrDeck.r6.exe` exit 0 (go test ok); `node --test` 38/38.
+Shots `tasks/deck-r6-shots/r6-{dark,light}-{2,4}cards-{1900x1030,1280x720}.png`, `*-more-menu-*`,
+`*-card-menu-*` (mock page; menus shot over DevTools because `--screenshot` resizes the window and a
+resize closes menus). `verify-ui.ps1` not run for this phase.
+**Lesson:** #101.
+
+## Phase 56 - Deck round 6 phase 2: Herdr panes take the card width (2026-10-29)
+
+**Symptom (owner's screenshot 2026-10-29 17 29 44):** the CLI text filled only the left third of a
+wide card; the rest was empty.
+**Cause (proven in the lab):** with no Herdr terminal attached, Herdr keeps every tab at 120x40, so two
+panes are 60 columns each (a PowerShell pane printed `57 columns x 38 rows`). Only an attached client
+sets the size (#95).
+**Fix:** Deck joins Herdr as a size-only client. `app/internal/deck/sizer.go` (+ `sizer_windows.go`
+pipe dial) speaks the stable endpoint hello on `herdr-client.sock`, sends `ClientShellResize` only when
+the size changes, reads and drops everything Herdr streams back, reconnects at most every 5 s and
+detaches on exit; `POST /api/size {cols,rows}` (not in read-only mode). Page: `web/herdrsize.js`
+measures the visible cards' screens in cells at the base font (first card row = columns, first card
+column = rows, + Herdr's 3x2 pane frame), debounced 300 ms, sent only on change; a zoomed card sends
+nothing. Measuring at the base font means the fit-to-width font never changes the answer: no loop.
+**Grid view choice:** Deck does not rearrange the owner's Herdr splits. It sizes the tab area from the
+first row of cards, which matches exactly when the cards show one tab (rail tab filter or Splits
+view). In "All panes" with tabs of different shapes, a tab whose pane count differs from the card
+columns gets a wider or narrower pane, and Deck's own reflow wraps it as before.
+**Second Herdr window (from Herdr's code, not run live):** each tab follows one client; the first
+viewer controls it until another client claims it (typing or focusing there). Deck never answers a
+Herdr size change, it only re-sends when its own card area changes, so the two cannot fight in a loop;
+the owner's terminal window may resize the panes until Deck's window is next resized.
+**Proof:** lab only (isolated APPDATA, `herdr --session lab`), real Claude Code in pane 1 (left at its
+folder-trust question, not answered), PowerShell printing its size in pane 2: before 57x38; after the
+Deck page loaded at 1900x1030: tab area 212x37, panes 106 wide, PowerShell `103 columns x 35 rows` =
+the card's 103 cells; at 1280x720: `62 columns x 20 rows`. Shots
+`tasks/deck-r6-shots/r6-phase2-claude-fills-card-1900x1030.png` (dark) and
+`r6-phase2-claude-fills-card-light-1280x720.png`. `go test` ok (2 new TestSizer*: fake Herdr checks the
+hello JSON, the exact resize bytes, no frame for an unchanged size, a refusal and the retry window);
+`node --test` 42/42 (4 new in `herdrsize.test.mjs`); both new test files cannot run on the phase-1
+commit (`sizer.go`, `herdrsize.js` missing).
+**Lesson:** #95 (rewritten), #102.

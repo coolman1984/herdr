@@ -18,6 +18,7 @@ DONE means backend behavior verified; it does not certify every frontend button.
 | GET /api/accounts, /api/usage | PARTIAL | Existing herdr-agents bridge; JSON/stdin bridge tested; actual account usage not live-tested |
 | POST /api/visible, /api/visibility | DONE | Used by lab/soak; hidden polling pauses; keep SSE open |
 | POST /api/read-only | DONE | Unit and real lab mutation returns 403 |
+| POST /api/size `{cols,rows}` | DONE | Deck card area in cells -> Herdr tab size via the client pipe (`sizer.go`); answers `{cols,rows,attached,error}`; skipped in read-only mode. Evidence: TestSizer*, lab proof HISTORY 56 |
 | POST /api/action | PARTIAL | Legacy action route implemented; core prompt/keys/rename/close tested, not every action |
 | POST /api/reopen | DONE | Second instance reached existing headless instance, exit 0; visible Edge focus not verified |
 | /api/pane/prompt, /keys, /text, /rename, /split, /close | DONE | Real lab computed output, offline foreground codex.exe fixture, blocked rejection 409, rename/down-split/close JSON read-back |

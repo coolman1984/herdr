@@ -99,6 +99,7 @@ export function createMock(R) {
   const handlers = {
     [R.state]: state,
     [R.visible]: ({ client_id, keys }) => { if (client_id !== clientId) throw new Error('unknown client'); visible = new Set(keys); emit('state', state()); return ok(''); },
+    [R.size]: ({ cols, rows }) => ({ cols, rows, attached: true }),
     [R.prefs]: (d) => { if (d.prefs) { prefs = d.prefs; localStorage.setItem('deck.mock-prefs', JSON.stringify(prefs)); } return { prefs }; },
     [R.readOnly]: ({ enabled }) => { readOnly = !!enabled; emit('settings', { read_only: readOnly }); return ok(''); },
     [R.raw]: ({ key, text, keys }) => { if (text) append(need(key), text); if (keys?.length) append(need(key), '[keys ' + keys.join(' ') + ']'); return ok(''); },

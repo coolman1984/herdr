@@ -9,13 +9,26 @@ let X; // context from app.js (state + helpers); set by init()
 export function init(ctx) { X = ctx; }
 
 // ---------- look: theme, font size, density ----------
+export const THEMES = ['system', 'light', 'dark', 'hc'];
+export const THEME_NAMES = { system: 'System', light: 'Light', dark: 'Dark', hc: 'High contrast' };
+const darkQuery = globalThis.matchMedia ? globalThis.matchMedia('(prefers-color-scheme: dark)') : null;
+const systemDark = () => !darkQuery || darkQuery.matches;
+darkQuery?.addEventListener?.('change', () => { if (document.documentElement.dataset.themePref === 'system') applyLook(); });
+// The top-bar theme button cycles System -> Light -> Dark (high contrast stays a Settings choice).
+const nextTheme = (t) => ({ system: 'light', light: 'dark' })[t] || 'system';
+export function cycleTheme() { setLook('theme', nextTheme(X.LS.get('theme', 'system'))); }
 export function applyLook() {
   const L = X ? X.LS : { get: (k, d) => { try { return JSON.parse(localStorage.getItem('deck.' + k)) ?? d; } catch { return d; } } };
   const r = document.documentElement;
-  // ?theme=light|dark|hc wins once and is remembered like a palette choice.
+  // ?theme=system|light|dark|hc wins once and is remembered like a palette choice.
+  // 'system' (the default) follows Windows' light/dark setting (prefers-color-scheme) and its changes.
   const asked = new URLSearchParams(location.search).get('theme');
-  if (['dark', 'light', 'hc'].includes(asked) && X && L.get('theme', 'dark') !== asked) X.LS.set('theme', asked);
-  r.dataset.theme = ['dark', 'light', 'hc'].includes(asked) ? asked : L.get('theme', 'dark');
+  if (THEMES.includes(asked) && X && L.get('theme', 'system') !== asked) X.LS.set('theme', asked);
+  const want = THEMES.includes(asked) ? asked : L.get('theme', 'system');
+  r.dataset.themePref = want;
+  r.dataset.theme = want === 'system' ? (systemDark() ? 'dark' : 'light') : want;
+  const tb = document.querySelector('#btn-theme');
+  if (tb) { const t = 'Theme: ' + THEME_NAMES[want] + ' (click: ' + THEME_NAMES[nextTheme(want)] + ')'; tb.setAttribute('aria-label', t); tb.dataset.tip = t; }
   r.dataset.density = L.get('density', 'normal');
   const fs = L.get('font', 13);
   r.style.setProperty('--mono-size', fs + 'px');
@@ -530,7 +543,7 @@ function commands() {
   add('Select all visible panes', () => { for (const p of X.filteredPanes()) S.selected.add(p.key); X.schedule(); for (const p of X.filteredPanes()) X.schedule(p.key); }, 'broadcast');
   add('Compare selected panes', compare);
   for (const n of [1, 2, 3]) add(`${n} column${n > 1 ? 's' : ''}`, () => X.setCols(n), String(n));
-  add('Theme: dark', () => setLook('theme', 'dark')); add('Theme: light', () => setLook('theme', 'light')); add('Theme: high contrast', () => setLook('theme', 'hc'));
+  add('Theme: system (follow Windows)', () => setLook('theme', 'system')); add('Theme: dark', () => setLook('theme', 'dark')); add('Theme: light', () => setLook('theme', 'light')); add('Theme: high contrast', () => setLook('theme', 'hc'));
   add('Font bigger', () => setLook('font', Math.min(22, X.LS.get('font', 13) + 1))); add('Font smaller', () => setLook('font', Math.max(10, X.LS.get('font', 13) - 1)));
   add(X.LS.get('fit', true) ? 'Screen: fit to width OFF (fixed font)' : 'Screen: fit to width ON', () => setLook('fit', !X.LS.get('fit', true)));
   add('Density: compact', () => setLook('density', 'compact')); add('Density: normal', () => setLook('density', 'normal'));

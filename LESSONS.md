@@ -455,12 +455,19 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     Use a flex column (`flex: 1 1 0; min-height: 0` on the area that must stretch) or explicit
     `grid-row`/`grid-template-areas` for page shells whose bars can hide.
 
-95. **Deck cannot set a Herdr pane's terminal size** (2026-10-29, checked in `herdr-app/src/client`):
-    a tab's size comes only from the attached Herdr client terminal (`ClientMessage::Resize` on the
-    client protocol); the public `herdr pane resize --direction --amount` (API `pane.resize`) only moves a
-    split line inside that size. So a Deck card can never make the CLI wrap to the card's width; Deck
-    wraps the text itself (`screen.js` reflow). A real fix needs Herdr itself (upstream) or Deck acting
-    as a Herdr client, which would change the size of the owner's own Herdr window too.
+95. **A Herdr tab's size comes only from an attached client; Deck now is one** (2026-10-29, corrected
+    in Deck round 6 phase 2): with no client attached every tab stays 120x40, so 2 panes get 60 columns
+    each. The public `herdr pane resize --direction --amount` only moves a split line inside that size.
+    Deck joins as a size-only "client shell" (`app/internal/deck/sizer.go`) on the client pipe
+    `\\.\pipe\<session dir>\herdr-client.sock`: frame = u32 LE length + bincode *standard*
+    (varint ints, varint enum tag, varint-length strings). Hello = `ClientMessage::EndpointControl`
+    (tag **20**) kind `endpoint.hello.v1` + JSON (`surface_size`, `surface_active:true`, the four `*.v1`
+    codec lists); welcome = `ServerMessage::EndpointControl` (tag 20) `endpoint.welcome.v1`; resize =
+    `ClientShellResize` (tag 12: cell w, cell h, cols, rows, pixel_mouse). Read tags from Herdr's own test
+    `client_message_wire_tags_reflect_current_order` (wire.rs), not by counting variants (a miscount
+    sent tag 19 and Herdr closed the pipe without a word). With one client Herdr resizes every tab
+    (`resize_tabs_for_only_shell_client`). Each pane keeps a frame of 3 columns and 2 rows (a 60x40
+    rect runs its program at 57x38). The client must keep reading: Herdr streams snapshots to it.
 
 96. **`node --test app/tests/web/` runs only `contracts.test.mjs`** (2026-10-29): the folder has a
     `package.json` whose `main` is that file, so node runs the folder as one module. Name every file:
@@ -504,3 +511,12 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     a "Queued messages ... Enter with empty input to steer first" box, and nothing happens until an empty
     `enter` is sent. Check the screen for "Queued messages" before judging an idle Cline as stalled. Both
     models also end turns after long plans; DeepSeek still made real commits when nudged step by step.
+
+101. **Headless Edge `--screenshot` resizes the page before it captures** (2026-10-29, Deck round 6):
+    anything that closes on `resize` (Deck menus) is gone in the shot even when the page opened it.
+    Shoot open menus over DevTools instead: `Emulation.setDeviceMetricsOverride` once, navigate, run
+    the click with `Runtime.evaluate`, then `Page.captureScreenshot`.
+
+102. **A lab Herdr session restores its panes on the next start** (2026-10-29): `server stop` saves
+    `sessions\lab\session.json`, so a script that splits a pane adds one more pane on every run. Delete
+    the lab session folder (in an isolated APPDATA) before a run that needs a known layout.

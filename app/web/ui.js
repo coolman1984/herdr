@@ -145,7 +145,8 @@ export function openMenu(trigger, menu) {
   document.addEventListener('pointerdown', (ev) => { if (!menu.contains(ev.target) && !trigger.contains(ev.target)) close(); }, opts);
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); close(); } }, { ...opts, capture: true });
   window.addEventListener('resize', close, opts);
-  window.addEventListener('scroll', (ev) => { if (!menu.contains(ev.target)) close(); }, { ...opts, capture: true });
+  // Only a scroll that moves the trigger closes the menu: a pane screen streaming text elsewhere must not.
+  window.addEventListener('scroll', (ev) => { if (!menu.contains(ev.target) && ev.target.contains?.(trigger)) close(); }, { ...opts, capture: true });
   menu.addEventListener('click', (ev) => { if (ev.target.closest('button')) close(); }, opts);
   menu.querySelector('button')?.focus();
   return close;

@@ -58,7 +58,7 @@ export function icon(name, cls = '') {
   return s;
 }
 
-// Agent glyph: tool colour + a simple mark. kind = Herdr agent kind / profile kind.
+// Agent glyph: a filled tool-colour circle + a white mark (the only colour in a card header). kind = Herdr agent kind / profile kind.
 const GLYPH = {
   claude: ['#d97757', '<path d="M12 4v16M4 12h16M6.3 6.3l11.4 11.4M17.7 6.3L6.3 17.7" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>'],
   codex: ['#10a37f', '<path d="M12 4l7 4v8l-7 4-7-4V8z" fill="none" stroke="#fff" stroke-width="2"/>'],
@@ -73,7 +73,7 @@ export function glyph(kind) {
   s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'glyph'); s.setAttribute('aria-hidden', 'true');
   const inner = mark.startsWith('<') ? mark
     : `<text x="12" y="16.5" text-anchor="middle" font-size="${mark.length > 1 ? 10 : 13}" font-weight="700" fill="#fff" font-family="Segoe UI,system-ui,sans-serif">${mark}</text>`;
-  s.innerHTML = `<rect width="24" height="24" rx="7" fill="${bg}"/>` + inner;
+  s.innerHTML = `<circle cx="12" cy="12" r="12" fill="${bg}"/>` + inner;
   return s;
 }
 
