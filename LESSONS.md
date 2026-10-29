@@ -436,3 +436,15 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     showed `codex` / `done` while the pane's title was `pwsh.exe` (2026-10-29, lab). Tests of "agent gone"
     must wait until `agent list` no longer has the pane. In the owner's real case (2026-10-28) the exited
     agent showed as `unknown` with no agent, which the Deck now refuses with `agent_exited`.
+
+92. **Codex `-s workspace-write` cannot write inside `.git`:** `git fetch` fails with
+    `error: cannot open '.git/FETCH_HEAD': Permission denied` (2026-10-29, Sol 6.1 push task), so a
+    sandboxed Codex cannot commit or push. Owner's choice for pushes: the delegate runs the read-only part
+    (checks, stage list, secret scan, commit body) and the lead runs the git writes. Its `node --test` also
+    fails in that sandbox with `spawn EPERM`; `node --test --test-isolation=none <file>` works there.
+
+93. **`git commit -F - @'...'@` in PowerShell does not pipe the message:** the here-string becomes an extra
+    argument (a pathspec), git exits 1 with "did not match any file(s)", and a chained script without
+    exit-code checks went on to push the OLD commit (2026-10-29: harmless, `windows-toolkit` fast-forwarded
+    to `main`). Write the message to a file and use `git commit -F <file>`, and check `$LASTEXITCODE`
+    after every git write - `$ErrorActionPreference = 'Stop'` does not stop native commands.
