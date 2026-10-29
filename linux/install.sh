@@ -42,7 +42,7 @@ link_bin() {
   fi
   run_or_dry mkdir -p "$BIN_DIR"
   run_or_dry ln -sf "$src" "$dest"
-  say "linked $dest"
+  [[ "$DRY_RUN" -eq 1 ]] || say "linked $dest"
 }
 
 copy_if_missing() {
@@ -54,7 +54,7 @@ copy_if_missing() {
   fi
   run_or_dry mkdir -p "$(dirname "$to")"
   run_or_dry cp "$from" "$to"
-  say "copied $to"
+  [[ "$DRY_RUN" -eq 1 ]] || say "copied $to"
 }
 
 copy_skill_tree_if_missing() {
