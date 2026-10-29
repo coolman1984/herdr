@@ -1388,3 +1388,11 @@ false -> true, menu item click closes the menu and opens its panel, focus back o
 divider still calls `api.resize` (before and after). `node --test` 38/38 (3 new in `nav.test.mjs`, all 3
 fail on the phase-1 commit). `verify-ui.ps1` 38 PASS / 8 FAIL; all 8 also fail on HEAD 764efb69 (divider resize, spaces join, usage panel, tools drawer, prompt history, raw typing, broadcast, typed-input guard); the 16 layout checks (900-2560 px, both themes) pass. Shots `tasks/deck-r5-shots/nav-before-*`, `nav-after-*`.
 **Lesson:** #97.
+## Phase 54 - Cline agents get panes again (2026-10-29)
+
+**Symptom:** the owner asked for Cline MiniMax M3.1 (high) to take over a coding task "with a pane".
+**Cause:** owner decision; the 2026-10-23 rule kept Cline headless only (#47).
+**Fix:** CLAUDE.md section 0 now lets Cline agents have panes beside the lead, like Codex/Antigravity/
+Claude. `herdr-headless.ps1` stays for one-shot runs. Agents are started with `herdr pane run`
+because `herdr-agents start/team` still fails with `agent_pane_busy` (#60, #89).
+**Lesson:** #89.

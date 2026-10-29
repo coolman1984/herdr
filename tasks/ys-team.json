@@ -1,0 +1,6 @@
+{ "agents": [
+  { "name": "ys-backend", "agent": "codex", "model": "gpt-6.1-sol", "effort": "high",
+    "cwd": "I:\\yousef-slint", "taskFile": "I:\\herdr\\tasks\\ys-backend.md" },
+  { "name": "ys-ui", "agent": "claude", "account": "2040",
+    "cwd": "I:\\yousef-slint\\.wt\\ui", "taskFile": "I:\\herdr\\tasks\\ys-ui.md" }
+] }

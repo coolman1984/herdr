@@ -19,8 +19,9 @@ LESSONS.md, behaviour changes in HISTORY.md, agent strengths and steering in
 docs/AGENT-ROSTER.md and docs/TEAM-PLAYBOOK.md, delegate rules in AGENTS.md. Nothing valuable
 stays only in a chat.
 
-**Agent panes (owner's rule, 2026-10-23):** only Codex, Antigravity and Claude agents get panes,
-split vertically to the right of the lead. Cline models run headless with no pane (LESSONS #47).
+**Agent panes (owner's rule, 2026-10-23; Cline added back 2026-10-29):** Codex, Antigravity, Claude
+and Cline agents get panes, split vertically to the right of the lead. (2026-10-23 to 2026-10-29 Cline ran
+headless with no pane, LESSONS #47; `herdr-headless.ps1` stays available for one-shot Cline runs.)
 Only coding, review and fix work gets a pane; research runs headless.
 **Close finished panes (owner's rule, 2026-10-24):** the PC is short on RAM and disk; the lead
 stops every pane it opened as soon as the task is done and no more work is planned, and removes

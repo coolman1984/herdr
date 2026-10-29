@@ -474,3 +474,33 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     name (no `:scope`, `:not()`, compound `.a.b`). Front-end code that the tests import uses
     `window.addEventListener`, `document.querySelector('#id')` and simple class selectors; anything that
     needs real bubbling is checked in the headless browser harness (`app/tests/deck-ui.ps1`).
+98. **Codex "Selected model is at capacity" ends the turn, and `ask` still exits 0** (2026-10-29,
+    GPT-6.1-Sol high, review of another repo): the run stopped mid-task with no report file, but the
+    answer looked like a normal DONE. Always check the promised output file exists. Resuming in the
+    same conversation (a short `ask` without `-Fresh`: "continue from where you stopped") worked and kept
+    everything it had already read. Also: a Codex started without `-Cwd` runs in `I:\herdr`, so its
+    `workspace-write` sandbox lets it READ other folders but write only under `I:\herdr`. Put report and
+    scratch paths there, and create scratch folders before you send the task. Codex's scratch copies can
+    end up with ACLs that block a later `Remove-Item` (Access denied).
+99. **A rustup install can list components that have no files** (2026-10-29, `I:\dev\rustup`, GNU host,
+    after an earlier interrupted install): `rustup component list --installed` showed cargo, rust-std and
+    rust-mingw, but `cargo.exe` was missing ("not applicable to the toolchain") and builds failed with
+    E0463 (no std). Check `lib\rustlib\manifest-<component>-*` files. Fix that worked:
+    `rustup component remove <c>` then `rustup component add <c>`. Also: the auto-mode classifier refuses
+    to let the lead download and run installers or set permanent user env vars; give the owner a script
+    (`! pwsh -File I:/path/script.ps1` - forward slashes, the `!` shell eats backslashes) and keep env
+    vars per shell (an `env.ps1` to dot-source). `herdr-agents team/start` still fails with
+    `agent_pane_busy` (#60); `herdr pane run <pane> "<cli> ... \"<first prompt>\""` started Codex and a
+    second-account Claude fine (the pane already had CLAUDE_CONFIG_DIR set). Codex model ids live in
+    `~/.codex/models_cache.json` (2026-10-29: gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra, gpt-6-luna).
+100. **Cline Pass has no `minimax-m3.1`; it is `cline-pass/minimax-m3.1-flash`** (2026-10-29): the TUI
+    starts with the wrong id and shows the model in its footer, and the error ("model not found") appears
+    only on the first prompt. Prove a model id first with a 5-second headless run
+    (`herdr-headless.ps1 -Profile cline -Model <id> -Task "Reply with exactly: OK"`). `cline-pass/minimax-m3`
+    also works. Cline's TUI can open a "Get Cline Desktop - press Enter to open" pop-up over the first
+    prompt: send `esc`, never `enter` (that opens a web page).
+    **Cline TUI turns end often, and a message sent while it works is only QUEUED** (2026-10-29,
+    MiniMax M3.1 Flash and DeepSeek V4.1 Flash on a big Rust task): Herdr then shows the agent `idle` with
+    a "Queued messages ... Enter with empty input to steer first" box, and nothing happens until an empty
+    `enter` is sent. Check the screen for "Queued messages" before judging an idle Cline as stalled. Both
+    models also end turns after long plans; DeepSeek still made real commits when nudged step by step.
