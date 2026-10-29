@@ -1,23 +1,32 @@
 // Herdr Deck frontend: store, event stream, pane grid / Herdr layout, rail, keyboard. No framework.
 import { api, initApi, MOCK } from './api.js';
-import { el, $, toast, fail, confirm, ask, copyText } from './ui.js';
+import { el, $, toast, fail, confirm, ask, copyText, sameValues, queuePatch, openMenu } from './ui.js';
 import { ScreenView } from './screen.js';
 import { icon, glyph, ring } from './icons.js';
 import * as P from './panels.js';
 import * as Q from './parity.js';
 import * as G from './guard.js';
 
+let prefs = {}, prefsTimer = 0, prefsReady = false, prefsWrite = Promise.resolve();
+function savePreferences() {
+  const snapshot = JSON.parse(JSON.stringify(prefs));
+  prefsWrite = prefsWrite.catch(() => {}).then(() => api.savePrefs(snapshot));
+  prefsWrite.catch(fail('Preferences'));
+}
 const LS = {
-  get(k, d) { try { const v = localStorage.getItem('deck.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('deck.' + k, JSON.stringify(v)); } catch { /* storage blocked: the setting lasts for this run only */ } },
+  get(k, d) { if (Object.hasOwn(prefs, k)) return prefs[k]; try { const v = localStorage.getItem('deck.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { prefs[k] = v; if (prefsReady) { clearTimeout(prefsTimer); prefsTimer = setTimeout(savePreferences, 500); } try { localStorage.setItem('deck.' + k, JSON.stringify(v)); } catch { /* storage blocked: the setting lasts for this run only */ } },
 };
+
+const capHistory = (history) => Object.fromEntries(Object.entries(history || {}).slice(-100).map(([key, rows]) =>
+  [key, Array.isArray(rows) ? rows.slice(-50).map((text) => String(text).slice(0, 32768)) : []]));
 
 export const S = {
   session: '', root: '', paneCols: new Map(), herdr: { running: true, error: '' }, panes: new Map(), workspaces: [], tabs: [], profiles: [], layouts: [],
   filter: LS.get('filter', { ws: null, tab: null }), cols: LS.get('cols', 2), view: LS.get('view', 'grid'), zoom: null, current: null,
   selected: new Set(), connected: false, lastUpdate: 0, safe: false, rail: LS.get('rail', true),
   hidden: new Set(LS.get('hiddenPanes', [])), pinned: new Set(LS.get('pinned', [])),
-  queue: new Map(), history: LS.get('history', {}), timeline: [], hist: new Map(), finished: new Set(),
+  queue: new Map(), history: capHistory(LS.get('history', {})), timeline: [], hist: new Map(), finished: new Set(),
   raw: null, loaded: false, lastNotified: null, alarmAt: new Map(),
 };
 
@@ -33,16 +42,16 @@ const ctxPct = (p) => { const m = /(\d+(?:\.\d+)?)\s*%/.exec(tok(p).ctx || tok(p
 
 // ---------- write guard (safe mode is enforced by the backend too) ----------
 async function act(what, fn, okMsg) {
-  if (S.safe) { toast('Safe mode is on: writes are disabled', 'warn'); return null; }
+  if (S.safe || S.writeBlocked || S.panes.get(currentKey())?.stale) { toast('Writes disabled: safe mode or stale connection', 'warn'); return null; }
   try {
     const r = await fn();
     toast(okMsg || (r && (r.message || r.output)) || what + ' done', 'ok');
     return r || {};
-  } catch (e) { fail(what)(e); return null; }
+  } catch (e) { if (['input_unknown', 'input_not_empty', 'agent_exited'].includes(e.code)) toast(e.message, 'warn', 9000); else fail(what)(e); return null; }
 }
 
 // ---------- render scheduling: only changed cards, once per frame ----------
-const cards = new Map();
+export const cards = new Map();
 const dirty = new Set();
 let structDirty = true, frame = 0;
 const paintSet = new Set();
@@ -56,12 +65,14 @@ function flush() {
   const t0 = performance.now();
   const struct = structDirty, anyCard = dirty.size > 0;
   if (structDirty) { structDirty = false; renderRail(); renderMain(); }
+  for (const n of document.querySelectorAll('[data-w]')) { const off = !!(S.safe || S.writeBlocked || S.panes.get(n.closest('.card')?.dataset.key)?.stale); if (n.disabled !== off) n.disabled = off; }
   for (const k of dirty) if (cards.has(k)) updateCard(cards.get(k), S.panes.get(k));
   dirty.clear();
   // Screens before the top bar: setting scrollTop forces a layout, and it must not find the rest of
   // the page dirty (profiled: 2.3 s of 10 s in paintScroll while the top bar was rewritten first).
-  const views = [...paintSet].filter((v) => v.paintSize());
-  paintSet.clear();
+  const pending = [...paintSet]; paintSet.clear();
+  for (const v of pending) v.prepare();
+  const views = pending.filter((v) => v.paintSize());
   for (const v of views) v.paintScroll();
   for (const v of views) v.paint();
   if (struct || anyCard) { renderTop(); P.refreshOpen(); }
@@ -70,18 +81,21 @@ function flush() {
 }
 
 // ---------- state merge ----------
-function mergePane(np) {
+export function mergePane(np) {
   const key = np.key || (S.session + '|' + np.pane_id);
   const old = S.panes.get(key);
   const before = old ? statusOf(old) : null;
+  const topologyChanged = old && ((np.workspace_id !== undefined && np.workspace_id !== old.workspace_id) || (np.tab_id !== undefined && np.tab_id !== old.tab_id));
+  const wasAgent = old && isAgent(old);
   const pt = np.screen_patch;
   if (pt) delete np.screen_patch;
   const p = old ? Object.assign(old, np, { key }) : { tokens: {}, screen: '', ...np, key };
   // Patches queue in order (several can arrive before the next frame); a full screen replaces them.
-  if (typeof np.screen === 'string') p.pq = null;
-  if (pt) (p.pq ||= []).push(pt);
+  if (typeof np.screen === 'string') { p.pq = null; p.patchBytes = 0; p.needsResync = false; }
+  if (pt && !p.needsResync && !queuePatch(p, pt)) resync('screen patch queue overflow for ' + key);
   if (!old) { S.panes.set(key, p); structDirty = true; if (S.loaded && isAgent(p)) { log(p, 'started'); G.onNewPane(p); } }
-  if (old && (np.workspace_id !== undefined || np.tab_id !== undefined)) structDirty = true;
+  if (topologyChanged) structDirty = true;
+  if (old && !wasAgent && isAgent(p)) G.onNewPane(p);
   noteStatus(p, before);
   schedule(key);
 }
@@ -89,15 +103,23 @@ function removePane(key) {
   const p = S.panes.get(key);
   if (p) log(p, 'closed');
   S.panes.delete(key); S.selected.delete(key); S.queue.delete(key); S.finished.delete(key);
+  S.hist.delete(key); S.alarmAt.delete(key); S.hidden.delete(key); S.pinned.delete(key); S.paneCols.delete(key);
+  delete S.history[key]; if (p?.name) delete S.history[p.name];
+  dirty.delete(key); G.forgetPane(key); P.forgetPane(key); Q.forgetPane(key);
+  LS.set('hiddenPanes', [...S.hidden]); LS.set('pinned', [...S.pinned]); LS.set('history', S.history);
+  const proofs = LS.get('proof', {}); delete proofs[key]; if (p?.name) delete proofs[p.name]; LS.set('proof', proofs);
+  const c = cards.get(key); if (c) { c.closeMenu?.(); paintSet.delete(c.view); c.ac.abort(); c.root.remove(); cards.delete(key); }
+  if (S.current === key) S.current = null;
+  if (S.lastNotified === key) S.lastNotified = null;
   if (S.zoom === key) S.zoom = null;
   schedule();
 }
-function applyState(st) {
+export function applyState(st) {
   S.session = st.session || S.session;
   if (st.herdr) S.herdr = st.herdr;
-  if (st.workspaces) S.workspaces = st.workspaces;
-  if (st.tabs) S.tabs = st.tabs;
-  if (st.layouts) {
+  for (const prop of ['workspaces', 'tabs']) if (st[prop] && !sameValues(S[prop], st[prop])) { S[prop] = st[prop]; structDirty = true; }
+  if (st.layouts && !sameValues(S.layouts, st.layouts)) {
+    structDirty = true;
     S.layouts = st.layouts;
     // Real column count of each pane (Herdr rect width) for fit-to-width; refit only the cards that changed.
     const next = new Map();
@@ -111,12 +133,15 @@ function applyState(st) {
   if (st.read_only != null) setSafe(!!st.read_only, false);
   if (st.error) toast('Backend: ' + st.error, 'error');
   if (st.panes) {
+    S.awaitingState = false; S.restarted = false;
     const seen = new Set();
-    for (const np of st.panes) { mergePane(np); seen.add(np.key || (S.session + '|' + np.pane_id)); }
+    for (const np of st.panes) { mergePane({ ...np, stale: !!np.stale || st.herdr?.running === false }); seen.add(np.key || (S.session + '|' + np.pane_id)); }
     for (const k of [...S.panes.keys()]) if (!seen.has(k)) removePane(k);
   }
   S.loaded = true; S.lastUpdate = Date.now();
-  schedule(); sendVisible();
+  updateWriteState();
+  if (!frame) frame = requestAnimationFrame(flush);
+  sendVisible();
 }
 
 // status transitions: toasts, notifications, inbox, timeline, sparkline, queued prompts
@@ -140,7 +165,7 @@ function noteStatus(p, before) {
   P.inboxNote(p, before, now);
   if (now === 'idle' && S.queue.get(p.key)?.length) {
     const text = S.queue.get(p.key).shift();
-    act('Queued prompt', () => api.prompt(p.key, text), `Queued prompt sent to ${nameOf(p)}`);
+    G.sendGuarded(p.key, text).then((r) => { if (!r && !G.isUncertain(p.key)) S.queue.get(p.key)?.unshift(text); });
   }
 }
 function log(p, what) { S.timeline.push({ t: Date.now(), name: nameOf(p), key: p.key, what }); if (S.timeline.length > 500) S.timeline.shift(); }
@@ -155,21 +180,23 @@ const plainOf = (key) => cards.get(key)?.view.plain ?? '';
 let closeEvents = null, retry = 0;
 function connect() {
   if (closeEvents) return;
-  closeEvents = api.events(['state', 'panes', 'diff', 'herdr', 'error', 'result'], {
-    onOpen() { S.connected = true; retry = 0; schedule(); },
-    onDown(err) { S.connected = false; S.downMsg = err.message; schedule(); },
+  closeEvents = api.events(['hello', 'settings', 'state', 'panes', 'diff', 'herdr', 'error', 'result'], {
+    onOpen() { S.connected = true; S.awaitingState = true; S.downSince = 0; retry = 0; Q.syncJobs(); updateWriteState(); schedule(); },
+    onDown(err) { S.connected = false; S.awaitingState = true; S.downSince ||= Date.now(); S.downMsg = err.message; updateWriteState(); schedule(); },
     onEvent(name, d) {
       S.lastUpdate = Date.now();
       window.__deckPerf?.msg();
-      if (name === 'state') applyState(d);
+      if (name === 'hello') { S.clientId = d.client_id; lastVis = null; sendVisible(); }
+      else if (name === 'settings') setSafe(!!d.read_only, false);
+      else if (name === 'state') applyState(d);
       else if (name === 'panes' || name === 'diff') {
         for (const p of d.panes || []) mergePane(p);
         for (const k of d.removed || []) removePane(k);
         if (d.workspaces || d.tabs || d.layouts) applyState({ workspaces: d.workspaces, tabs: d.tabs, layouts: d.layouts });
-      } else if (name === 'herdr') { S.herdr = d; schedule(); }
+      } else if (name === 'herdr') { S.herdr = d; updateWriteState(); schedule(); }
       else if (name === 'error') toast(d.message || 'Backend error', 'error');
       else if (name === 'result') Q.onResult(d);
-      if (!S.connected) { S.connected = true; schedule(); }
+      if (!S.connected) { S.connected = true; S.downSince = 0; updateWriteState(); schedule(); }
     },
   });
 }
@@ -188,7 +215,7 @@ async function loadState() {
   }
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { lastVis = ''; api.visible([]).catch((e) => console.warn('visible([]) failed', e)); P.pause(); }
+  if (document.hidden) { lastVis = ''; sendVisible(); P.pause(); }
   else { schedule(); sendVisible(); P.resume(); for (const c of cards.values()) c.hash = ''; for (const k of S.panes.keys()) schedule(k); }
 });
 
@@ -197,11 +224,11 @@ let visTimer = 0, lastVis = '';
 function sendVisible() {
   clearTimeout(visTimer);
   visTimer = setTimeout(() => {
-    if (document.hidden) return;
-    const keys = visiblePanes().map((p) => p.key), sig = keys.join(',');
+    if (!S.clientId) return;
+    const keys = document.hidden ? [] : visiblePanes().map((p) => p.key), sig = S.clientId + ':' + keys.join(',');
     if (sig === lastVis) return;
     lastVis = sig;
-    api.visible(keys).catch((e) => { lastVis = ''; toast('Visible-panes update failed: ' + e.message, 'error'); });
+    api.visible(keys, S.clientId).catch((e) => { lastVis = ''; toast('Visible-panes update failed: ' + e.message, 'error'); });
   }, 150);
 }
 
@@ -259,7 +286,7 @@ function layoutTab() {
 
 function renderMain() {
   const grid = $('#grid'), empty = $('#empty');
-  const down = !S.herdr.running;
+  const down = !S.herdr.running && !S.panes.size;
   empty.hidden = !down && !(S.loaded && S.panes.size === 0);
   if (!empty.hidden) P.renderEmpty(empty, down);
   grid.hidden = !empty.hidden;
@@ -272,14 +299,12 @@ function renderMain() {
   for (const b of document.querySelectorAll('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === S.view));
   for (const b of document.querySelectorAll('[data-cols]')) b.setAttribute('aria-pressed', String(+b.dataset.cols === S.cols && S.view === 'grid'));
   const keep = new Set(list.map((p) => p.key));
-  // Every pane gets a card (hidden ones stay out of layout and paint nothing), so row patches
-  // always land on a live view and no second copy of any screen is kept.
-  for (const p of S.panes.values()) if (!cards.has(p.key)) { const c = makeCard(p); cards.set(p.key, c); c.root.hidden = true; grid.append(c.root); updateCard(c, p); }
   for (const [k, c] of cards) c.root.hidden = !keep.has(k);
   let prev = null;
   for (const p of list) {
     let c = cards.get(p.key);
     if (!c) { c = makeCard(p); cards.set(p.key, c); updateCard(c, p); }
+    c.root.hidden = false;
     const want = prev ? prev.nextSibling : grid.firstChild;
     if (want !== c.root) grid.insertBefore(c.root, want);
     prev = c.root;
@@ -306,8 +331,9 @@ function makeCard(p) {
   c.st = el('span', { class: 'st-chip' });
   c.sub = el('div', { class: 'card-sub' });
   c.spark = el('div', { class: 'spark', 'aria-hidden': 'true' });
+  // No spacer: .tt grows, so the name gets all free width before it is cut.
   const head = el('header', { class: 'card-h', draggable: 'true' }, c.sel, c.glyph, el('div', { class: 'tt' }, el('div', { class: 'tt1' }, c.title, c.chips), c.sub),
-    el('span', { class: 'grow' }), c.ring, c.st,
+    c.ring, c.st,
     ibtn('splitR', 'Split right (Ctrl+B V)', () => Q.split(pane(), 'right'), { 'data-w': '1' }),
     ibtn('splitD', 'Split down (Ctrl+B -)', () => Q.split(pane(), 'down'), { 'data-w': '1' }),
     c.zbtn = ibtn('max', 'Zoom (Z)', () => zoom(key)));
@@ -343,9 +369,15 @@ function makeCard(p) {
 function moreMenu(c) {
   const key = c.key, p = () => S.panes.get(key);
   const item = (ic, label, fn, w) => el('button', { type: 'button', role: 'menuitem', 'data-w': w ? '1' : null,
-    onclick: (ev) => { ev.currentTarget.closest('details').open = false; fn(); } }, icon(ic), label);
-  return el('details', { class: 'more' }, el('summary', { 'aria-label': 'More actions', 'data-tip': 'More' }, icon('more')),
-    el('div', { class: 'menu', role: 'menu' },
+    disabled: !!(w && (S.safe || S.writeBlocked || p()?.stale)), onclick: () => { if (!w || !(S.safe || S.writeBlocked || p()?.stale)) fn(); } }, icon(ic), label);
+  const trigger = ibtn('more', 'More actions', () => { c.closeMenu?.(); c.closeMenu = openMenu(trigger, menu()); }, { 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  const menu = () => el('div', { class: 'menu', role: 'menu' },
+      ...KEYS.map(([label, k]) => item('key', 'Send key ' + label, () => act('Key ' + label, () => api.keys(key, [k])), true)),
+      item('splitR', 'Split right', () => Q.split(p(), 'right'), true),
+      item('splitD', 'Split down', () => Q.split(p(), 'down'), true),
+      item('copy', 'Copy screen', () => copyText(c.view.plain)),
+      item('edit', 'Rename pane', () => renamePane(key), true),
+      item('close', 'Close pane', () => closePane(key), true),
       item('stop', 'Stop agent', () => stopAgent(p()), true),
       item('eye', 'Focus in Herdr', () => act('Focus', () => api.paneFocus(key).catch((e) => (p().name ? api.focus(p().name) : api.tabFocus(p().tab_id)))), true),
       item('max', "Herdr's own zoom", () => act('Herdr zoom', () => api.paneZoom(key)), true),
@@ -357,7 +389,8 @@ function moreMenu(c) {
       item('doc', 'Export screen as Markdown', () => P.exportMd(p(), c.view.plain)),
       item('copy', 'Copy as prompt context', () => copyText(P.asContext(p(), c.view.plain))),
       item('pin', 'Pin / unpin', () => toggleSet(S.pinned, key, 'pinned')),
-      item('eye', 'Hide this pane', () => toggleSet(S.hidden, key, 'hiddenPanes'))));
+      item('eye', 'Hide this pane', () => toggleSet(S.hidden, key, 'hiddenPanes')));
+  return trigger;
 }
 function toggleSet(set, key, name) { set.has(key) ? set.delete(key) : set.add(key); LS.set(name, [...set]); schedule(); sendVisible(); }
 function autosize(ta) { ta.style.height = 'auto'; const h = ta.scrollHeight; ta.style.height = Math.min(h, 120) + 'px'; ta.classList.toggle('tall', h > 120); }
@@ -366,13 +399,16 @@ const chip = (text, cls = '') => el('span', { class: 'chip ' + cls, text });
 function updateCard(c, p) {
   if (!p) return;
   // Screen first: the header, failure card and last line read the updated text.
-  if (typeof p.screen === 'string' && p.screen !== c.view.lastText) { c.view.set(p.screen); c.view.sv = p.screen_version; }
+  // A full snapshot sets the version even when its text is unchanged (a resync must repair the version).
+  if (typeof p.screen === 'string') { c.view.set(p.screen); c.view.sv = p.screen_version; }
   if (p.pq) {
-    const q = p.pq; p.pq = null;
+    const q = p.pq; p.pq = null; p.patchBytes = 0;
     for (const pt of q) if (!c.view.patch(pt)) { resync(`screen version ${c.view.sv} != ${pt.from_version} for ${p.pane_id}`); break; }
   }
   p.screen = undefined;   // the view owns the text now; keep no second copy per pane
   if (!S.paneCols.has(p.key)) c.view.fit();   // no layout width: guess from the text (throttled to 2 s)
+  c.root.classList.toggle('stale', !!p.stale || !!S.writeBlocked);
+  for (const n of c.root.querySelectorAll('[data-w]')) { const off = !!(S.safe || S.writeBlocked || p.stale); if (n.disabled !== off) n.disabled = off; }
   const s = statusOf(p), t = tok(p), name = nameOf(p), kind = kindOf(p);
   const hist = S.hist.get(p.key) || [];
   const h = [s, name, kind, JSON.stringify(t), p.cwd, p.title, p.error, S.queue.get(p.key)?.length || 0, S.selected.has(p.key), S.finished.has(p.key), hist.length, S.zoom === p.key, G.isUncertain(p.key)].join('|');
@@ -389,11 +425,14 @@ function updateCard(c, p) {
     const pct = ctxPct(p);
     c.ring.replaceChildren(...(t.ctx || pct != null ? [ring(pct), el('span', { class: 'ctx-t' }, el('b', { text: (t.ctx || '').replace(/^ctx\s*/, '') || (pct + '%') }), t.out ? el('span', { text: 'out ' + t.out }) : '')] : []));
     c.ring.title = [t.ctx, t.in && 'in ' + t.in, t.out && 'out ' + t.out, t.cost].filter(Boolean).join(' · ');
-    c.st.textContent = s; c.st.dataset.s = s;
+    c.st.textContent = s; c.st.dataset.s = s; c.st.title = s;
     c.sub.textContent = [t.path || folder(p.cwd), p.title && p.title !== name ? p.title : '', t.in && 'in ' + t.in, t.cost].filter(Boolean).join('  ·  ');
     c.sub.title = c.sub.textContent;
     c.sel.checked = S.selected.has(p.key);
     c.ta.setAttribute('aria-label', 'Message for ' + name);
+    // A card whose agent exited stays an agent card: its text is refused, never run in the shell left behind.
+    if (isAgent(p)) c.everAgent = true;
+    c.ta.placeholder = c.everAgent && !isAgent(p) ? 'Agent exited · messages are not sent to the shell' : isAgent(p) ? 'Message · Enter sends' : 'Shell command · Enter runs';
     c.screenBox.setAttribute('aria-label', 'Screen of ' + name);
     c.zbtn.replaceChildren(icon(S.zoom === p.key ? 'min' : 'max'));
     Q.spark(c.spark, hist);
@@ -412,12 +451,12 @@ async function sendPrompt(c) {
   if (!text.trim()) return;
   const p = S.panes.get(c.key);
   const hk = p.name || p.key, h = (S.history[hk] ||= []);
-  if (h[h.length - 1] !== text) { h.push(text); if (h.length > 50) h.shift(); LS.set('history', S.history); }
+  if (h[h.length - 1] !== text) { h.push(text.slice(0, 32768)); if (h.length > 50) h.shift(); while (Object.keys(S.history).length > 100) delete S.history[Object.keys(S.history)[0]]; LS.set('history', S.history); }
   // Local-first: the box clears at once and a pending chip shows; a failure puts the text back.
   c.histI = null; c.ta.value = ''; Q.clearChips(c); autosize(c.ta);
-  if (S.safe) { toast('Safe mode is on: writes are disabled', 'warn'); c.ta.value = text; return; }
+  if (S.safe || S.writeBlocked || p.stale) { toast('Writes disabled: pane or connection is stale', 'warn'); c.ta.value = text; return; }
   Q.pending(c, +1);
-  const r = await G.sendGuarded(c.key, text);
+  const r = await G.sendGuarded(c.key, text, !isAgent(p) && !c.everAgent ? 'shell' : 'agent');
   Q.pending(c, -1);
   // A failed send puts the text back; an UNKNOWN delivery does not (the failure card offers Resend).
   if (!r && !G.isUncertain(c.key) && !c.ta.value) { c.ta.value = text; autosize(c.ta); }
@@ -491,7 +530,7 @@ function renderStatus() {
   setText($('#status-text'), parts.filter(Boolean).join('  ·  '));
   const ok = S.connected ? '1' : '0';
   if ($('#statusbar').dataset.ok !== ok) $('#statusbar').dataset.ok = ok;
-  G.transportBanner(S.connected || !S.loaded, S.downMsg);
+  G.transportBanner(!S.writeBlocked && (S.connected || !S.loaded), S.restarted ? 'Deck stopped or restarted - reopen it from the Herdr launcher' : S.herdr.running === false ? 'Herdr offline - panes are stale; writes disabled' : S.downMsg);
 }
 let ageTimer = 0;
 function ageTick() {
@@ -504,12 +543,28 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && !a
 
 function setCols(n) { S.cols = n; S.view = 'grid'; S.zoom = null; LS.set('cols', n); LS.set('view', 'grid'); schedule(); }
 function setView(v) { S.view = v; S.zoom = null; LS.set('view', v); schedule(); sendVisible(); }
-function setSafe(v, push = true) {
+export function setSafe(v, push = true) {
   const was = S.safe;
-  S.safe = v; document.body.classList.toggle('safe', v); $('#safe').checked = v; schedule();
+  if (!push && was === v) return;
+  S.safe = v; if (v) P.clearRaw(); document.body.classList.toggle('safe', v); $('#safe').checked = v; updateWriteState(); schedule();
   if (push && was !== v) api.readOnly(v).then(() => toast(v ? 'Safe mode on: every write is refused' : 'Safe mode off', 'ok'))
     .catch((e) => { S.safe = was; document.body.classList.toggle('safe', was); $('#safe').checked = was; fail('Safe mode')(e); });
 }
+function updateWriteState() {
+  S.writeBlocked = !!S.restarted || !!S.awaitingState || S.herdr.running === false || (S.loaded && !S.connected);
+  document.body.classList.toggle('writes-blocked', S.writeBlocked);
+  if (S.writeBlocked) P.clearRaw();
+  for (const n of document.querySelectorAll('[data-w]')) { const off = !!(S.safe || S.writeBlocked); if (n.disabled !== off) n.disabled = off; }
+  for (const [key, c] of cards) { c.root.classList.toggle('stale', !!S.panes.get(key)?.stale || S.writeBlocked); for (const n of c.root.querySelectorAll('[data-w]')) { const off = !!(S.safe || S.writeBlocked || S.panes.get(key)?.stale); if (n.disabled !== off) n.disabled = off; } }
+}
+let restartProbe = false;
+setInterval(async () => {
+  if (!S.downSince || Date.now() - S.downSince <= 10000 || restartProbe) return;
+  restartProbe = true;
+  try { await api.state(); }
+  catch { S.restarted = true; updateWriteState(); schedule(); }
+  finally { restartProbe = false; }
+}, 2000);
 const broadcastKeys = () => [...S.selected].filter((k) => S.panes.has(k));
 function toggleRail() { S.rail = !S.rail; LS.set('rail', S.rail); schedule(); }
 
@@ -571,6 +626,16 @@ async function boot() {
   try { await initApi(); } catch (e) { toast('Mock failed to load: ' + e.message, 'error'); return; }
   window.addEventListener('error', (e) => toast('Page error: ' + e.message, 'error'));
   window.addEventListener('unhandledrejection', (e) => toast('Page error: ' + (e.reason?.message || e.reason), 'error'));
+  try {
+    const r = await api.prefs();
+    // Include legacy local settings so the next whole-object write preserves them.
+    try { for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); if (key?.startsWith('deck.') && key !== 'deck.mock-prefs') { try { prefs[key.slice(5)] = JSON.parse(localStorage.getItem(key)); } catch { /* invalid legacy preference */ } } } } catch { /* local cache unavailable: backend preferences still apply */ }
+    Object.assign(prefs, r.prefs || {});
+    for (const [k, v] of Object.entries(prefs)) { try { localStorage.setItem('deck.' + k, JSON.stringify(v)); } catch { /* blocked local cache */ } }
+    Object.assign(S, { filter: LS.get('filter', S.filter), cols: LS.get('cols', S.cols), view: LS.get('view', S.view), rail: LS.get('rail', S.rail), history: capHistory(LS.get('history', S.history)), hidden: new Set(LS.get('hiddenPanes', [])), pinned: new Set(LS.get('pinned', [])) });
+    P.applyLook(); prefsReady = true;
+  } catch (e) { toast('Preferences unavailable: ' + e.message, 'warn'); }
+  Q.syncJobs();
   await loadState();
   connect();
   P.resume(); ageTick();

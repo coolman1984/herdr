@@ -12,7 +12,7 @@ self.onmessage = (ev) => {
   if (rx) {
     let re;
     try { re = new RegExp(rx[1], rx[2].includes('i') ? rx[2] : rx[2] + 'i'); } catch (e) { self.postMessage({ seq: d.seq, hits: [{ key: '', name: 'Bad regex', n: 0, line: e.message }] }); return; }
-    test = (l) => re.test(l);
+    test = (l) => { re.lastIndex = 0; return re.test(l); };   // /g and /y keep lastIndex between lines
   } else { const s = q.toLowerCase(); test = (l) => l.toLowerCase().includes(s); }
   outer: for (const [key, doc] of docs) {
     for (let n = doc.lines.length - 1; n >= 0; n--) {   // newest first

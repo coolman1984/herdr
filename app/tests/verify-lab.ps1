@@ -49,19 +49,27 @@ try {
     $deckSSERead=$deckStream.ReadAsync($deckSSEBuffer,0,$deckSSEBuffer.Length)
     if(-not $deckSSERead.Wait(5000)){throw 'No SSE event received'}
     $deckSSECount=$deckSSERead.GetAwaiter().GetResult()
-    [Text.Encoding]::UTF8.GetString($deckSSEBuffer,0,$deckSSECount) | Set-Content -LiteralPath (Join-Path $deckEvidence 'sse-sample.txt')
-    Proof 'SSE state/diff stream received'
-    DeckPost '/api/pane/prompt' @{key=$deckKey;text="Write-Output ('DECK-PROMPT-' + 'OK')"} | Out-Null
+    $deckSSEText=[Text.Encoding]::UTF8.GetString($deckSSEBuffer,0,$deckSSECount)
+    $deckSSEText | Set-Content -LiteralPath (Join-Path $deckEvidence 'sse-sample.txt')
+    if(-not $deckSSEText.StartsWith('event: hello')){throw "SSE does not start with hello (C1): $($deckSSEText.Substring(0,[Math]::Min(80,$deckSSEText.Length)))"}
+    Proof 'SSE stream starts with hello (C1), then state/diff events'
+    DeckPost '/api/pane/raw' @{key=$deckKey;text="Write-Output ('DECK-RAW-' + 'OK')";keys=@('enter')} | Out-Null
+    Lab @('pane','wait-output',$deckFirst,'--match','DECK-RAW-OK','--timeout','6000') | Out-Null
+    Proof 'raw text + Enter in one ordered request executed (C3)'
+    DeckPost '/api/prefs' @{prefs=@{probe='r4'}} | Out-Null
+    if((DeckGet '/api/prefs').prefs.probe -ne 'r4'){throw 'prefs round trip failed (C8)'}
+    $deckCounters=DeckGet '/api/debug/counters'
+    if($deckCounters.sse_clients -lt 1 -or $deckCounters.handles -lt 1){throw "counters missing (C10): $($deckCounters|ConvertTo-Json -Compress)"}
+    Proof "prefs round trip (C8); counters sse_clients=$($deckCounters.sse_clients) handles=$($deckCounters.handles) (C10)"
+    DeckPost '/api/pane/prompt' @{key=$deckKey;text="Write-Output ('DECK-PROMPT-' + 'OK')";expect='shell'} | Out-Null
     Lab @('pane','wait-output',$deckFirst,'--match','DECK-PROMPT-OK','--timeout','6000') | Out-Null
     Proof 'shell prompt executed (computed marker appears in output)'
     DeckPost '/api/pane/text' @{key=$deckKey;text="Write-Output ('DECK-KEYS-' + 'OK')"} | Out-Null
     DeckPost '/api/pane/keys' @{key=$deckKey;keys=@('Enter')} | Out-Null
     Lab @('pane','wait-output',$deckFirst,'--match','DECK-KEYS-OK','--timeout','6000') | Out-Null
     Proof 'literal paste and Enter key executed'
-    $deckGo='C:\Users\mflma\tools\go\go1.26.1\go\bin\go.exe'
-    $env:GOCACHE=Join-Path $PSScriptRoot 'go-cache';$env:GOTMPDIR=Join-Path $PSScriptRoot 'go-tmp'
     $deckStub=Join-Path $PSScriptRoot 'codex.exe'
-    & $deckGo build -o $deckStub (Join-Path $PSScriptRoot 'agentstub\main.go')
+    pwsh -NoProfile -File (Join-Path $PSScriptRoot 'go-locked.ps1') build -o $deckStub ./tests/agentstub
     if($LASTEXITCODE -ne 0){throw 'Transport fixture build failed'}
     Lab @('pane','run',$deckFirst,('& '+"'"+$deckStub.Replace("'","''")+"'")) | Out-Null
     Lab @('pane','wait-output',$deckFirst,'--match','transport fixture','--timeout','6000') | Out-Null
@@ -82,6 +90,27 @@ try {
     Proof 'blocked state + model/context tokens shown; prompt rejected 409; waiting pane left unanswered'
     DeckPost '/api/pane/keys' @{key=$deckKey;keys=@('C-c')} | Out-Null
     Lab @('pane','release-agent',$deckFirst,'--source','deck-test','--agent','codex') | Out-Null
+    # D1 on the second pane: an agent that was there and is gone, its shell left behind.
+    Lab @('pane','report-agent',$deckSecond,'--source','deck-test','--agent','codex','--state','idle') | Out-Null
+    Start-Sleep -Milliseconds 800
+    Lab @('pane','release-agent',$deckSecond,'--source','deck-test','--agent','codex') | Out-Null
+    $deckDeadline=[DateTime]::UtcNow.AddSeconds(8)
+    do { Start-Sleep -Milliseconds 400; $deckGone=-not ((Lab @('agent','list')).result.agents | Where-Object pane_id -eq $deckSecond) } while(-not $deckGone -and [DateTime]::UtcNow -lt $deckDeadline)
+    if(-not $deckGone){throw "the released agent is still listed: $((Lab @('agent','list')).result.agents | Where-Object pane_id -eq $deckSecond | ConvertTo-Json -Compress)"}
+    $deckKey2=$deckState.session+'|'+$deckSecond
+    $deckExited=Invoke-WebRequest -SkipHttpErrorCheck -Method Post -ContentType 'application/json' -Uri "$deckOrigin/api/pane/prompt$deckQuery" -Body (@{key=$deckKey2;text="Write-Output ('DECK-MUST-' + 'NOT-RUN')"}|ConvertTo-Json)
+    if([int]$deckExited.StatusCode -ne 409 -or $deckExited.Content -notmatch 'agent_exited'){throw "exited-agent prompt not refused (D1): $($deckExited.StatusCode) $($deckExited.Content)"}
+    Start-Sleep -Milliseconds 1500
+    if(((& $deckHerdr --session lab pane read $deckSecond --source recent --lines 40 --format text) -join "`n") -match 'DECK-MUST-NOT-RUN'){throw 'exited-agent prompt reached the shell (D1)'}
+    Proof 'prompt to a pane whose agent exited -> 409 agent_exited, nothing ran in the shell (D1)'
+    # Probe (information only): a lingering "done" record on pane 1 while pwsh is in front.
+    $deckLinger=(Lab @('agent','list')).result.agents | Where-Object pane_id -eq $deckFirst
+    if($deckLinger){
+        $deckProbe=Invoke-WebRequest -SkipHttpErrorCheck -Method Post -ContentType 'application/json' -Uri "$deckOrigin/api/pane/prompt$deckQuery" -Body (@{key=$deckKey;text="Write-Output ('DECK-LINGER-' + 'RAN')"}|ConvertTo-Json)
+        Start-Sleep -Milliseconds 1500
+        $deckRan=((& $deckHerdr --session lab pane read $deckFirst --source recent --lines 40 --format text) -join "`n") -match 'DECK-LINGER-RAN'
+        Write-Output "INFO lingering agent record status=$($deckLinger.agent_status): prompt -> $([int]$deckProbe.StatusCode); ran in shell=$deckRan"
+    }
     DeckPost '/api/pane/rename' @{key=$deckKey;label='Deck verified shell'} | Out-Null
     $deckRenamed=Lab @('pane','get',$deckFirst)
     if($deckRenamed.result.pane.label -ne 'Deck verified shell'){throw 'Rename read-back failed'}
@@ -92,7 +121,19 @@ try {
     $deckListed=Lab @('pane','list')
     if($deckNewID -in $deckListed.result.panes.pane_id){throw 'Close read-back failed'}
     Proof 'rename, downward split and close verified by Herdr JSON'
+    $deckStream2=$deckClient.GetStreamAsync("$deckOrigin/api/events$deckQuery").GetAwaiter().GetResult()
+    $deckBuf2=[byte[]]::new(65536)
+    $deckRead2={ param([int]$Ms) $t=$deckStream2.ReadAsync($deckBuf2,0,$deckBuf2.Length); if($t.Wait($Ms)){[Text.Encoding]::UTF8.GetString($deckBuf2,0,$t.GetAwaiter().GetResult())}else{$script:deckPending2=$t;''} }
+    $null=& $deckRead2 3000   # hello + settings + state of the new client
     DeckPost '/api/read-only' @{enabled=$true} | Out-Null
+    $deckSeen=''; $deckDeadline=[DateTime]::UtcNow.AddSeconds(5)
+    while($deckSeen -notmatch 'event: settings\s+data: \{"read_only":true' -and [DateTime]::UtcNow -lt $deckDeadline){
+        if($script:deckPending2){ if($script:deckPending2.Wait(1000)){$deckSeen+=[Text.Encoding]::UTF8.GetString($deckBuf2,0,$script:deckPending2.GetAwaiter().GetResult());$script:deckPending2=$null} }
+        else { $deckSeen+=& $deckRead2 1000 }
+    }
+    $deckStream2.Dispose()
+    if($deckSeen -notmatch 'event: settings\s+data: \{"read_only":true'){throw 'read-only change was not broadcast to another page (C2)'}
+    Proof 'read-only change broadcast as a settings event to another open page (C2)'
     $deckRefused=Invoke-WebRequest -SkipHttpErrorCheck -Method Post -ContentType 'application/json' -Uri "$deckOrigin/api/pane/text$deckQuery" -Body (@{key=$deckKey;text='blocked write'}|ConvertTo-Json)
     if([int]$deckRefused.StatusCode -ne 403){throw 'Read-only mode bypassed'}
     DeckPost '/api/read-only' @{enabled=$false} | Out-Null
@@ -110,6 +151,8 @@ try {
         Lab @('server','stop') | Out-Null
         Start-Sleep -Milliseconds 2400
         $deckOffline=DeckGet '/api/state';if($deckOffline.herdr.running -or -not $deckOffline.error){throw 'Stopped state not visible'}
+        if(@($deckOffline.panes).Count -lt 1 -or @($deckOffline.panes | Where-Object { -not $_.stale }).Count){throw 'Offline state did not keep stale panes (C1)'}
+        Proof "offline keeps $(@($deckOffline.panes).Count) panes marked stale (C1)"
         $deckServerInfo=[Diagnostics.ProcessStartInfo]::new($deckHerdr);$deckServerInfo.UseShellExecute=$false;$deckServerInfo.CreateNoWindow=$true
         foreach($deckArg in @('--session','lab','server')){$deckServerInfo.ArgumentList.Add($deckArg)}
         $deckServerProcess=[Diagnostics.Process]::Start($deckServerInfo)

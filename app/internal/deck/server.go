@@ -25,13 +25,28 @@ type App struct {
 	files                           http.Handler
 	reopen                          func() error
 	startDetached                   func(name string, args ...string) error
+	admissionMu                     sync.Mutex
+	pending                         []*pendingLaunch
+	launchSequence                  uint64
+	rawTails                        map[string]chan struct{}
+	launchFolders                   map[string]bool
+	prefsMu                         sync.Mutex
+	healthMu                        sync.Mutex
+	healthAt                        time.Time
+	healthCache                     map[string]any
+	interests                       map[string]map[string]bool
+	clientIDs                       map[chan []byte]string
+	clientSequence                  uint64
+	counters                        debugCounters
+	readCursor                      int
+	failedReads                     map[string]int
 	mu                              sync.Mutex
 	refreshMu                       sync.Mutex
 	actionMu                        sync.Mutex
 	state                           State
 	clients                         map[chan []byte]bool
 	visible                         map[string]bool
-	active, readOnly, seen          bool
+	readOnly, seen                  bool
 	started, lastClient, metadataAt time.Time
 	jobs                            map[string]*Job
 	lastRead, lastChange            map[string]time.Time
@@ -43,7 +58,7 @@ type App struct {
 
 func newApp(h Herdr, session, token, origin, root string, profiles map[string]Profile) *App {
 	lead := leadIdentity(profiles)
-	return &App{herdr: h, token: token, origin: origin, root: root, profiles: profiles, lead: lead, startDetached: startHiddenProcess, state: State{Session: session, Panes: []Pane{}, Workspaces: []Nav{}, Tabs: []Nav{}, Lead: lead, Root: root}, clients: map[chan []byte]bool{}, visible: map[string]bool{}, active: true, started: time.Now(), lastClient: time.Now(), jobs: map[string]*Job{}}
+	return &App{launchFolders: map[string]bool{}, herdr: h, token: token, origin: origin, root: root, profiles: profiles, lead: lead, startDetached: startHiddenProcess, state: State{Session: session, Panes: []Pane{}, Workspaces: []Nav{}, Tabs: []Nav{}, Lead: lead, Root: root}, clients: map[chan []byte]bool{}, visible: map[string]bool{}, started: time.Now(), lastClient: time.Now(), jobs: map[string]*Job{}}
 }
 func startHiddenProcess(name string, args ...string) error {
 	cmd := hiddenCommand(context.Background(), name, args...)
@@ -80,6 +95,9 @@ type statusError struct {
 func (e *statusError) Error() string { return e.Msg }
 func failHTTP(w http.ResponseWriter, status int, err error) {
 	var detail *statusError
+	if !errors.As(err, &detail) {
+		err = readFailure(err)
+	}
 	if errors.As(err, &detail) {
 		status = detail.Status
 	}
@@ -172,11 +190,10 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.mu.Lock()
-		a.active = v.Active
-		a.visible = map[string]bool{}
-		for _, id := range v.Visible {
-			a.visible[id] = true
+		if !v.Active {
+			v.Visible = nil
 		}
+		a.setVisibleLocked("legacy", v.Visible)
 		a.mu.Unlock()
 		respond(w, 200, map[string]bool{"ok": true})
 	case "/api/read-only":
@@ -190,6 +207,9 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.mu.Lock()
 		a.readOnly = v.Enabled
 		a.state.ReadOnly = v.Enabled
+		for ch := range a.clients {
+			a.queueLocked(ch, event("settings", map[string]bool{"read_only": v.Enabled}))
+		}
 		a.mu.Unlock()
 		a.actionMu.Unlock()
 		respond(w, 200, map[string]bool{"enabled": v.Enabled})
@@ -307,14 +327,33 @@ func (a *App) events(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.clients[ch] = true
+	a.clientSequence++
+	id := fmt.Sprintf("c-%d", a.clientSequence)
+	if a.clientIDs == nil {
+		a.clientIDs = map[chan []byte]string{}
+	}
+	a.clientIDs[ch] = id
 	a.seen = true
 	a.lastClient = time.Now()
-	initial := event("state", a.state)
+	initial := append(event("hello", map[string]string{"client_id": id}), event("settings", map[string]bool{"read_only": a.readOnly})...)
+	initial = append(initial, event("state", a.clientStateLocked(ch, a.state))...)
 	a.mu.Unlock()
-	defer func() { a.mu.Lock(); delete(a.clients, ch); a.lastClient = time.Now(); a.mu.Unlock() }()
+	defer func() {
+		a.mu.Lock()
+		delete(a.clients, ch)
+		delete(a.clientIDs, ch)
+		delete(a.interests, id)
+		if len(a.clients) == 0 {
+			delete(a.interests, "legacy")
+		}
+		a.unionVisibleLocked()
+		a.lastClient = time.Now()
+		a.mu.Unlock()
+	}()
 	if _, err := w.Write(initial); err != nil {
 		return
 	}
+	a.countSSE(initial)
 	f.Flush()
 	go a.refresh(r.Context(), true)
 	ticker := time.NewTicker(15 * time.Second)
@@ -331,6 +370,7 @@ func (a *App) events(w http.ResponseWriter, r *http.Request) {
 			if _, err := w.Write(msg); err != nil {
 				return
 			}
+			a.countSSE(msg)
 			f.Flush()
 		case <-ticker.C:
 			http.NewResponseController(w).SetWriteDeadline(time.Now().Add(3 * time.Second))
@@ -350,7 +390,7 @@ func (a *App) poll(ctx context.Context) {
 			return
 		case <-ticker.C:
 			a.mu.Lock()
-			active := a.active && len(a.clients) > 0
+			active := len(a.clients) > 0
 			a.mu.Unlock()
 			if active {
 				a.refresh(ctx, false)
@@ -363,7 +403,8 @@ func (a *App) refresh(parent context.Context, force bool) {
 		return
 	}
 	defer a.refreshMu.Unlock()
-	ctx, cancel := context.WithTimeout(parent, 7*time.Second)
+	defer a.finishPoll(time.Now())
+	ctx, cancel := context.WithTimeout(context.WithValue(parent, backgroundRPC{}, true), 750*time.Millisecond)
 	defer cancel()
 	a.mu.Lock()
 	old := a.state
@@ -376,40 +417,32 @@ func (a *App) refresh(parent context.Context, force bool) {
 	next := old
 	if meta {
 		raw, err := a.herdr.Call(ctx, "api", "snapshot")
+		if errors.Is(err, errRPCBusy) {
+			return
+		}
 		if err == nil {
 			next, err = parseSnapshot(raw, old.Session)
 		}
 		if err != nil {
-			next = State{Session: old.Session, Panes: []Pane{}, Workspaces: []Nav{}, Tabs: []Nav{}, Error: err.Error()}
+			next = old
+			next.Panes = append([]Pane{}, old.Panes...)
+			for i := range next.Panes {
+				next.Panes[i].Stale = true
+			}
+			next.Error = err.Error()
+			next.Herdr.Running = false
+			a.mu.Lock()
+			a.counters.Errors++
+			a.metadataAt = time.Now()
+			a.mu.Unlock()
 			next.Herdr.Error = err.Error()
 			a.publish(old, next)
 			return
 		}
-		// Snapshot already carries agents; list checks the dedicated surface and catches divergent errors.
-		raw, err = a.herdr.Call(ctx, "agent", "list")
-		if err != nil {
-			next.Error = err.Error()
-		} else {
-			var list struct {
-				Result struct {
-					Agents []Pane `json:"agents"`
-				} `json:"result"`
-			}
-			if err = json.Unmarshal(raw, &list); err != nil {
-				next.Error = "invalid agent list: " + err.Error()
-			} else {
-				for i := range next.Panes {
-					for _, agent := range list.Result.Agents {
-						if agent.ID == next.Panes[i].ID {
-							next.Panes[i].Name = agent.Name
-							next.Panes[i].Status = agent.Status
-						}
-					}
-				}
-			}
-		}
+
 		a.mu.Lock()
 		a.metadataAt = time.Now()
+		a.reconcilePendingLocked(next)
 		a.mu.Unlock()
 	} else {
 		next.Panes = append([]Pane{}, old.Panes...)
@@ -418,56 +451,86 @@ func (a *App) refresh(parent context.Context, force bool) {
 	if a.lastRead == nil {
 		a.lastRead = map[string]time.Time{}
 		a.lastChange = map[string]time.Time{}
+		a.failedReads = map[string]int{}
 	}
 	for _, p := range old.Panes {
 		cache[p.Key] = p
 	}
+	// Copy cached content before the bounded round-robin read pass.
 	for i := range next.Panes {
 		p := &next.Panes[i]
 		previous := cache[p.Key]
 		p.Screen = previous.Screen
 		p.ScreenVersion = previous.ScreenVersion
 		p.Error = previous.Error
-		p.Blocked = p.Status == "blocked" || blockedScreen(p.Screen)
+		p.Blocked = p.SourceStatus == "blocked" || blockedScreen(p.Screen)
 		if p.Blocked {
 			p.Status = "blocked"
+		} else {
+			p.Status = p.SourceStatus
 		}
-		interval := 7 * time.Second
-		if visible[p.ID] {
-			interval = 1400 * time.Millisecond
+	}
+	// At most four reads, each with its own deadline; a slow pane cannot consume the metadata budget.
+	reads := 0
+	n := len(next.Panes)
+	start := 0
+	if n > 0 {
+		start = a.readCursor % n
+	}
+	for offset := 0; offset < n && reads < 4; offset++ {
+		i := (start + offset) % n
+		p := &next.Panes[i]
+		previous := cache[p.Key]
+		if !visible[p.ID] && !visible[p.Key] {
+			continue
 		}
+		interval := 1400 * time.Millisecond
 		if p.Focused && time.Since(a.lastChange[p.Key]) < 2*time.Second {
 			interval = 280 * time.Millisecond
 		}
-		if !force && time.Since(a.lastRead[p.Key]) < interval {
+		if failures := a.failedReads[p.Key]; failures > 0 {
+			interval = time.Duration(1<<min(failures, 5)) * time.Second
+		}
+		if (!force || a.failedReads[p.Key] > 0) && time.Since(a.lastRead[p.Key]) < interval {
 			continue
 		}
-		rows := p.Scroll.Rows
-		if rows < 1 {
-			rows = 40
+		readCtx, readCancel := context.WithTimeout(context.WithValue(parent, backgroundRPC{}, true), 350*time.Millisecond)
+		raw, err := a.herdr.Call(readCtx, "pane", "read", p.ID, "--source", "recent", "--lines", "2000", "--format", "ansi")
+		readCancel()
+		if errors.Is(err, errRPCBusy) {
+			continue
 		}
-		if rows > 500 {
-			rows = 500
-		}
-		raw, err := a.herdr.Call(ctx, "pane", "read", p.ID, "--source", "recent", "--lines", fmt.Sprint(rows+2000), "--format", "ansi")
+		reads++
+		a.readCursor = (i + 1) % n
+		a.lastRead[p.Key] = time.Now()
 		if err == nil {
-			p.Screen, err = parseScreen(raw, rows)
-			if p.Screen != previous.Screen {
-				p.ScreenVersion++
-				a.lastChange[p.Key] = time.Now()
+			var screen string
+			screen, err = parseScreen(raw, p.Scroll.Rows)
+			if err == nil {
+				p.Screen = screen
 			}
-			a.lastRead[p.Key] = time.Now()
 		}
 		if err != nil {
 			p.Error = err.Error()
-		} else {
-			p.Error = ""
-			if blockedScreen(p.Screen) {
-				p.Status = "blocked"
-			}
-			p.Blocked = p.Status == "blocked"
+			a.failedReads[p.Key]++
+			a.mu.Lock()
+			a.counters.Errors++
+			a.mu.Unlock()
+			continue
+		}
+		a.failedReads[p.Key] = 0
+		p.Error = ""
+		if p.Screen != previous.Screen {
+			p.ScreenVersion++
+			a.lastChange[p.Key] = time.Now()
+		}
+		p.Blocked = p.SourceStatus == "blocked" || blockedScreen(p.Screen)
+		p.Status = p.SourceStatus
+		if p.Blocked {
+			p.Status = "blocked"
 		}
 	}
+
 	alive := map[string]bool{}
 	for _, p := range next.Panes {
 		alive[p.Key] = true
@@ -476,6 +539,7 @@ func (a *App) refresh(parent context.Context, force bool) {
 		if !alive[key] {
 			delete(a.lastRead, key)
 			delete(a.lastChange, key)
+			delete(a.failedReads, key)
 		}
 	}
 	a.publish(old, next)
@@ -500,7 +564,17 @@ func (a *App) publish(old, next State) {
 				screen := p.Screen
 				update.Screen = &screen
 			} else if p.Screen != previous.Screen {
-				patches := rowChanges(previous.Screen, p.Screen, previous.ScreenVersion)
+				before, after := strings.Split(previous.Screen, "\n"), strings.Split(p.Screen, "\n")
+				patches := rowChangesRows(before, after, previous.ScreenVersion)
+				if !validPatches(patches, len(before), len(after), previous.ScreenVersion) {
+					screen := p.Screen
+					update.Screen = &screen
+					update.ScreenVersion = previous.ScreenVersion + 1
+					next.Panes[i].ScreenVersion = update.ScreenVersion
+					changed = append(changed, update)
+					delete(prior, p.Key)
+					continue
+				}
 				for j := range patches {
 					item := update
 					item.Patch = &patches[j]
@@ -537,29 +611,28 @@ func (a *App) publish(old, next State) {
 	if reflect.DeepEqual(old, next) {
 		return
 	}
-	msg := event("panes", diff)
-	if !reflect.DeepEqual(old.Workspaces, next.Workspaces) || !reflect.DeepEqual(old.Tabs, next.Tabs) || !reflect.DeepEqual(old.Profiles, next.Profiles) || !reflect.DeepEqual(old.Layouts, next.Layouts) || old.FocusedPane != next.FocusedPane {
-		msg = event("state", next)
-	}
-	if !reflect.DeepEqual(old.Herdr, next.Herdr) {
-		msg = append(msg, event("herdr", next.Herdr)...)
-	}
+	full := !reflect.DeepEqual(old.Workspaces, next.Workspaces) || !reflect.DeepEqual(old.Tabs, next.Tabs) || !reflect.DeepEqual(old.Profiles, next.Profiles) || !reflect.DeepEqual(old.Layouts, next.Layouts) || old.FocusedPane != next.FocusedPane
 	for ch := range a.clients {
-		select {
-		case ch <- msg:
-		default:
-			for len(ch) > 0 {
-				select {
-				case <-ch:
-				default:
-				}
+		filtered := make([]PaneUpdate, 0, len(changed))
+		for _, update := range changed {
+			if !a.interestedLocked(ch, update.Pane) {
+				update.Screen = nil
+				update.Patch = nil
+				update.Pane.Screen = ""
 			}
-			select {
-			case ch <- event("state", next):
-			default:
-			}
+			filtered = append(filtered, update)
 		}
+		diff["panes"] = filtered
+		msg := event("panes", diff)
+		if full {
+			msg = event("state", a.clientStateLocked(ch, next))
+		}
+		if !reflect.DeepEqual(old.Herdr, next.Herdr) {
+			msg = append(msg, event("herdr", next.Herdr)...)
+		}
+		a.queueLocked(ch, msg)
 	}
+
 }
 
 type Action struct {
@@ -575,9 +648,12 @@ type Action struct {
 	Confirm   bool   `json:"confirm"`
 	Direction string `json:"direction"`
 	Worktree  string `json:"worktree"`
+	// Expect is what the sender saw: "shell" for a shell card; anything else means an agent.
+	Expect       string       `json:"expect"`
+	StartRequest *paneRequest `json:"-"`
 }
 
-func (a *App) action(ctx context.Context, v Action) (string, error) {
+func (a *App) action(ctx context.Context, v Action) (result string, resultErr error) {
 	a.mu.Lock()
 	a.lastDispatch = ""
 	a.mu.Unlock()
@@ -635,10 +711,26 @@ func (a *App) action(ctx context.Context, v Action) (string, error) {
 	}
 	if v.Action == "shell" || v.Action == "start" {
 		if v.Action == "start" {
-			if err := a.launchGuard(paneRequest{Profile: v.Profile, Model: v.Model, Effort: v.Effort, Account: v.Account, Cwd: v.Cwd}); err != nil {
-				return "", err
+			req := paneRequest{Profile: v.Profile, Model: v.Model, Effort: v.Effort, Account: v.Account, Cwd: v.Cwd, Worktree: v.Worktree}
+			if v.StartRequest != nil {
+				req = *v.StartRequest
+				req.Profile = v.Profile
+				req.Account = v.Account
 			}
+			if req.Cwd == "" && pane != nil {
+				req.Cwd = pane.Cwd
+			}
+			if req.Cwd == "" {
+				req.Cwd = a.root
+			}
+			v.Cwd = req.Cwd
+			ticket, e := a.admit(ctx, []paneRequest{req})
+			if e != nil {
+				return "", e
+			}
+			defer func() { ticket.finish(result, resultErr) }()
 		}
+
 		if v.Action == "start" && (nextClaude || v.Worktree != "") {
 			params := map[string]string{"Command": "start", "Target": v.Profile}
 			if v.Worktree != "" {
@@ -742,6 +834,12 @@ func (a *App) action(ctx context.Context, v Action) (string, error) {
 		if strings.TrimSpace(v.Text) == "" {
 			return "", fmt.Errorf("prompt is empty")
 		}
+		// The agent has exited and only its shell is left: agent text must never run as a command.
+		// Checked before the screen: an old dialog still on screen is not the reason.
+		noAgent := pane.Agent == "" && pane.Name == ""
+		if noAgent && v.Expect != "shell" {
+			return "", &statusError{Status: 409, Msg: "agent_exited", Fields: map[string]any{"error": "agent_exited", "pane_id": pane.ID, "message": "The agent in " + pane.ID + " has exited; only a shell is left - not sent"}}
+		}
 		screen, err := a.herdr.Call(ctx, "pane", "read", pane.ID, "--source", "visible", "--lines", "60", "--format", "ansi")
 		if err != nil {
 			return "", err
@@ -753,7 +851,7 @@ func (a *App) action(ctx context.Context, v Action) (string, error) {
 			return "", err
 		}
 		args := []string{"agent", "prompt", pane.Name, v.Text}
-		if pane.Agent == "" && pane.Name == "" {
+		if noAgent {
 			args = []string{"pane", "run", pane.ID, v.Text}
 		} else if pane.Name == "" {
 			args[2] = pane.ID

@@ -149,7 +149,11 @@ func (a *App) toolEndpoint(w http.ResponseWriter, r *http.Request) bool {
 				if _, ok := a.profiles[name]; !ok {
 					return nil, fmt.Errorf("team profile unavailable")
 				}
-				agents = append(agents, map[string]string{"name": fmt.Sprintf("deck-%s-%d", name, time.Now().UnixMilli()), "agent": name, "cwd": p.Cwd, "task": p.Text})
+				account := ""
+				if a.profiles[name].Kind == "claude" {
+					account = p.Account
+				}
+				agents = append(agents, map[string]string{"name": fmt.Sprintf("deck-%s-%d", name, time.Now().UnixMilli()), "agent": name, "cwd": p.Cwd, "task": p.Text, "account": account})
 			}
 			path, err := a.tempPlan(map[string]any{"agents": agents})
 			if err != nil {

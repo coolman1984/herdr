@@ -17,20 +17,16 @@ const (
 // inputText returns the text the owner has typed into an agent's input box, or "" when the box is
 // empty or shows only dim suggestion text. tool is the pane's agent kind ("claude", "codex", ...).
 func inputText(screen, tool string) string {
+	region, _ := inputRegion(screen, tool)
+	return typedText(region)
+}
+
+func inputRegion(screen, tool string) (string, bool) {
 	lines := strings.Split(screen, "\n")
-	if len(lines) > 40 {
-		lines = lines[len(lines)-40:]
-	}
 	if tool == "codex" {
-		if region, ok := codexRegion(lines); ok {
-			return typedText(region)
-		}
-		return ""
+		return codexRegion(lines)
 	}
-	if region, ok := claudeRegion(lines); ok {
-		return typedText(region)
-	}
-	return ""
+	return claudeRegion(lines)
 }
 
 // inputNotEmpty refuses a write when the owner has already typed into the agent's input box.
@@ -38,7 +34,15 @@ func inputNotEmpty(screen string, pane Pane) error {
 	if pane.Agent == "" && pane.Name == "" {
 		return nil
 	}
-	typed := inputText(screen, pane.Agent)
+	region, recognized := inputRegion(screen, pane.Agent)
+	if !recognized && (pane.Agent == "claude" || pane.Agent == "codex") {
+		name := pane.Name
+		if name == "" {
+			name = pane.ID
+		}
+		return &statusError{Status: 409, Msg: "input_unknown", Fields: map[string]any{"message": name + ": cannot see its input box - not sent"}}
+	}
+	typed := typedText(region)
 	if typed == "" {
 		return nil
 	}
@@ -77,7 +81,7 @@ func claudeRegion(lines []string) (string, bool) {
 		if at < 0 || !ruleAbove(lines, i) {
 			continue
 		}
-		lower := ruleBelow(lines, i, 12)
+		lower := ruleBelow(lines, i, len(lines))
 		if lower < 0 {
 			continue
 		}
@@ -91,26 +95,29 @@ func claudeRegion(lines []string) (string, bool) {
 		if lower > i+1 {
 			region += "\n" + strings.Join(lines[i+1:lower], "\n")
 		}
-		return region, true
+		return inputStylePrefix(lines, i, at) + region, true
 	}
 	return "", false
 }
 
-// codexRegion is the text after the last "> " prompt line in the last ten lines.
+// codexRegion reads the last composer marker through its multiline region and footer.
 func codexRegion(lines []string) (string, bool) {
-	tail := lines
-	if len(tail) > 10 {
-		tail = tail[len(tail)-10:]
-	}
-	for i := len(tail) - 1; i >= 0; i-- {
-		if !strings.HasPrefix(strings.TrimLeft(stripANSI(tail[i]), " "), codexGlyph) {
+	for i := len(lines) - 1; i >= 0; i-- {
+		if !strings.HasPrefix(strings.TrimLeft(stripANSI(lines[i]), " "), codexGlyph) {
 			continue
 		}
-		at := strings.Index(tail[i], codexGlyph)
-		if at < 0 {
-			continue
+		at := strings.Index(lines[i], codexGlyph)
+		region := strings.TrimPrefix(lines[i][at+len(codexGlyph):], " ")
+		// Empty rows may be part of a multiline draft. Only a recognized footer
+		// ends the region; keep every continuation, including blank rows.
+		for j := i + 1; j < len(lines); j++ {
+			clean := strings.TrimSpace(stripANSI(lines[j]))
+			if ruleLine(lines[j]) || strings.HasPrefix(clean, "? for shortcuts") || (strings.Contains(clean, "Context") && (strings.HasPrefix(clean, "GPT-") || strings.HasPrefix(clean, "Codex"))) {
+				break
+			}
+			region += "\n" + lines[j]
 		}
-		return strings.TrimPrefix(tail[i][at+len(codexGlyph):], " "), true
+		return inputStylePrefix(lines, i, at) + region, true
 	}
 	return "", false
 }
@@ -241,4 +248,10 @@ func sgrAt(text string, at int) (int, []string, bool) {
 		params = []string{""}
 	}
 	return i, params, true
+}
+
+// Preserve the active SGR state at the prompt marker without retaining preceding text.
+func inputStylePrefix(lines []string, line, at int) string {
+	prefix := strings.Join(lines[:line], "\n") + "\n" + lines[line][:at]
+	return strings.Join(ansiPattern.FindAllString(prefix, -1), "")
 }

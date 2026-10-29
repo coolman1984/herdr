@@ -5,7 +5,7 @@ const TOKEN = q.get('t') || '';
 
 export const ROUTES = {
   state: '/api/state', events: '/api/events', visible: '/api/visible',
-  prompt: '/api/pane/prompt', keys: '/api/pane/keys', text: '/api/pane/text',
+  raw: '/api/pane/raw', prefs: '/api/prefs', scopeBaseline: '/api/scope/baseline', scopeCheck: '/api/scope/check', prompt: '/api/pane/prompt', keys: '/api/pane/keys', text: '/api/pane/text',
   rename: '/api/pane/rename', close: '/api/pane/close', split: '/api/pane/split', shell: '/api/shell',
   start: '/api/agent/start', stop: '/api/agent/stop', focus: '/api/agent/focus', tabFocus: '/api/tab/focus',
   herdrStart: '/api/herdr/start', reload: '/api/herdr/reload-config',
@@ -30,7 +30,8 @@ export const why = (e) => (missing(e) ? 'Not available: the backend has no endpo
 const withToken =(path) => path + (path.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(TOKEN);
 
 async function readJson(res) {
-  const text = await res.text();
+  let text;
+  try { text = await res.text(); } catch (e) { e.responseReadFailed = true; throw e; }
   let body = null;
   try { body = text ? JSON.parse(text) : {}; } catch { body = null; }
   if (!res.ok) {
@@ -47,15 +48,19 @@ async function readJson(res) {
 }
 
 const real = {
-  async get(path) {
-    return readJson(await fetch(withToken(path), { headers: { 'X-Deck-Token': TOKEN }, cache: 'no-store' }));
+  async get(path, options = {}) {
+    return readJson(await fetch(withToken(path), { headers: { 'X-Deck-Token': TOKEN }, cache: 'no-store', ...options }));
   },
   async post(path, data) {
-    return readJson(await fetch(withToken(path), {
+    let res;
+    try { res = await fetch(withToken(path), {
       method: 'POST', cache: 'no-store',
       headers: { 'Content-Type': 'application/json', 'X-Deck-Token': TOKEN },
       body: JSON.stringify(data || {}),
-    }));
+    });
+    } catch (e) { e.promptSent = path === ROUTES.prompt; throw e; }
+    try { return await readJson(res); }
+    catch (e) { if (e.responseReadFailed) e.promptSent = path === ROUTES.prompt; throw e; }
   },
   // handlers: {onEvent(name, data), onOpen(), onDown(err)}. Returns a close function.
   events(names, h) {
@@ -76,15 +81,21 @@ export async function initApi() {
   if (MOCK) impl = (await import('./mock.js')).createMock(ROUTES);
 }
 
-const get = (p) => impl.get(p);
+const get = (p, options) => impl.get(p, options);
 const post = (p, d) => impl.post(p, d);
 const qs = (o) => '?' + new URLSearchParams(o).toString();
 
 export const api = {
   state: () => get(ROUTES.state),
   events: (names, h) => impl.events(names, h),
-  visible: (keys) => post(ROUTES.visible, { keys }),
-  prompt: (key, text) => post(ROUTES.prompt, { key, text }),
+  visible: (keys, client_id) => post(ROUTES.visible, { client_id, keys }),
+  raw: (key, text, keys = []) => post(ROUTES.raw, { key, text, keys }),
+  prefs: (options) => get(ROUTES.prefs, options),
+  savePrefs: (prefs) => post(ROUTES.prefs, { prefs }),
+  scopeBaseline: (id, repo, allowed) => post(ROUTES.scopeBaseline, { id, repo, allowed }),
+  scopeCheck: (id, options) => get(ROUTES.scopeCheck + qs({ id }), options),
+  // expect: 'agent' (default) or 'shell'; the backend refuses agent text when only a shell is left.
+  prompt: (key, text, expect = 'agent') => post(ROUTES.prompt, { key, text, expect }),
   keys: (key, keys) => post(ROUTES.keys, { key, keys }),
   text: (key, text) => post(ROUTES.text, { key, text }),
   rename: (key, label) => post(ROUTES.rename, { key, label }),
@@ -97,21 +108,21 @@ export const api = {
   tabFocus: (tab_id) => post(ROUTES.tabFocus, { tab_id }),
   herdrStart: () => post(ROUTES.herdrStart, {}),
   reload: () => post(ROUTES.reload, {}),
-  tasks: () => get(ROUTES.tasks),
+  tasks: (options) => get(ROUTES.tasks, options),
   taskRead: (file) => get(ROUTES.taskRead + qs({ file })),
-  usage: () => get(ROUTES.usage),
+  usage: (options) => get(ROUTES.usage, options),
   health: () => get(ROUTES.health),
   closeFinished: (keys) => post(ROUTES.closeFinished, { keys }),
-  signin: () => get(ROUTES.signin),
+  signin: (options) => get(ROUTES.signin, options),
   signinOpen: (tool, account) => post(ROUTES.signinOpen, { tool, account }),
-  git: (key) => get(ROUTES.git + qs({ key })),
-  runs: () => get(ROUTES.runs),
+  git: (key, options) => get(ROUTES.git + qs({ key }), options),
+  runs: (options) => get(ROUTES.runs, options),
   runRead: (file) => get(ROUTES.runRead + qs({ file })),
-  docs: (name) => get(ROUTES.docs + qs({ name })),
+  docs: (name, options) => get(ROUTES.docs + qs({ name }), options),
   lesson: (text) => post(ROUTES.lesson, { text }),
   check: () => post(ROUTES.check, {}),
   readOnly: (enabled) => post(ROUTES.readOnly, { enabled }),
-  accounts: () => get(ROUTES.accounts),
+  accounts: (options) => get(ROUTES.accounts, options),
   paneFocus: (key) => post(ROUTES.paneFocus, { key }),
   paneZoom: (key) => post(ROUTES.paneZoom, { key }),
   splitDir: (key, direction, cwd) => post(ROUTES.split, { key, direction, cwd }),
@@ -140,8 +151,8 @@ export const api = {
   headless: (profile, text) => post(ROUTES.headless, { profile, text }),
   syncSkills: () => post(ROUTES.syncSkills, {}),
   reservations: () => get(ROUTES.reservations),
-  reserve: (task, owner, paths) => post(ROUTES.reservations, { task, owner, paths }),
+  reserve: (task, owner, paths, overlap = false) => post(ROUTES.reservations, { task, owner, paths, overlap }),
   release: (id) => post(ROUTES.release, { id }),
   headlessRoutes: () => get(ROUTES.headlessRoutes),
-  jobs: () => get(ROUTES.jobs),
+  jobs: (options) => get(ROUTES.jobs, options),
 };

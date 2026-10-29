@@ -22,6 +22,8 @@ type Pane struct {
 		Rows int `json:"viewport_rows"`
 	} `json:"scroll"`
 	Screen        string `json:"screen"`
+	Stale         bool   `json:"stale"`
+	SourceStatus  string `json:"-"`
 	Error         string `json:"error"`
 	Blocked       bool   `json:"blocked"`
 	Revision      uint64 `json:"revision"`
@@ -105,6 +107,9 @@ func parseSnapshot(raw []byte, session string) (State, error) {
 			}
 		}
 	}
+	for i := range s.Panes {
+		s.Panes[i].SourceStatus = s.Panes[i].Status
+	}
 	return s, nil
 }
 func parseScreen(raw []byte, rows int) (string, error) {
@@ -131,8 +136,8 @@ func parseScreen(raw []byte, rows int) (string, error) {
 		rows = 500
 	}
 	lines := strings.Split(strings.TrimRight(text, "\r\n"), "\n")
-	if len(lines) > rows+2000 {
-		lines = lines[len(lines)-rows-2000:]
+	if len(lines) > 2000 {
+		lines = lines[len(lines)-2000:]
 	}
 	return strings.Join(lines, "\n"), nil
 }

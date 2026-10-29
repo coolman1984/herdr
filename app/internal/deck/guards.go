@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 )
 
 type Reservation struct {
+	Shared  bool      `json:"shared"`
 	ID      string    `json:"id"`
 	Task    string    `json:"task"`
 	Owner   string    `json:"owner"`
@@ -233,7 +235,7 @@ func recovery(message string) (string, string) {
 	if strings.Contains(lower, "blocked") || strings.Contains(lower, "sign in") || strings.Contains(lower, "trust this") {
 		return "owner_required", "Open the pane, read the question, and decide yourself."
 	}
-	if strings.Contains(lower, "delivery unknown") || strings.Contains(lower, "timed out") || strings.Contains(lower, "stalled") {
+	if strings.Contains(lower, "delivery unknown") {
 		return "delivery_unknown", "Inspect the pane and delivery record before choosing an explicit resend."
 	}
 	if strings.Contains(lower, "server_not_running") || strings.Contains(lower, "socket") || strings.Contains(lower, "access is denied") {
@@ -245,11 +247,18 @@ func recovery(message string) (string, string) {
 	return "agent_or_request_error", "Read the exact error and pane output; the cause is not verified."
 }
 func (a *App) deliver(ctx context.Context, key, pane, text string, args ...string) (string, string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", "", notSent(err)
+	}
 	id := fmt.Sprintf("dispatch-%d", time.Now().UnixNano())
 	sum := sha256.Sum256([]byte(text))
 	record := Delivery{ID: id, Dispatch: id, Key: key, Pane: pane, TextSHA: hex.EncodeToString(sum[:]), State: "sent", At: time.Now()}
 	out, err := a.herdr.Call(ctx, args...)
 	if err != nil {
+		var command *commandError
+		if errors.As(err, &command) && !command.Started {
+			return "", "", notSent(err)
+		}
 		record.State = "unknown"
 		record.Error = err.Error()
 		for _, code := range []string{"exit status 2", "agent_not_ready", "agent_blocked", "invalid_request"} {
@@ -298,18 +307,15 @@ func (a *App) launchGuard(p paneRequest) error {
 	a.mu.Lock()
 	a.initGuardsLocked()
 	policy := a.guards.Policy
-	panes := append([]Pane{}, a.state.Panes...)
 	a.mu.Unlock()
-	active := 0
-	for _, pane := range panes {
-		if pane.Agent != "" {
-			active++
+	launchFolder := a.launchFolder(p)
+	folders := []string{launchFolder, a.root}
+	if p.Floor != nil {
+		for drive := range p.Floor.DiskFreeGB {
+			folders = append(folders, drive+`\`)
 		}
 	}
-	if active >= policy.MaxActive {
-		return &statusError{Status: 409, Msg: fmt.Sprintf("held: %d active agents reach the chosen limit %d", active, policy.MaxActive)}
-	}
-	health, err := systemHealth()
+	health, err := systemHealthVolumes(folders)
 	if err != nil {
 		return fmt.Errorf("launch resource check: %w", err)
 	}
@@ -317,23 +323,29 @@ func (a *App) launchGuard(p paneRequest) error {
 	if available < policy.MinRAMMB {
 		return &statusError{Status: 409, Msg: fmt.Sprintf("held: free RAM %.0f MB is below %.0f MB floor", available, policy.MinRAMMB)}
 	}
-	drive := strings.ToUpper(filepath.VolumeName(p.Cwd))
+	drive := strings.ToUpper(filepath.VolumeName(launchFolder))
 	if drive == "" {
 		drive = strings.ToUpper(filepath.VolumeName(a.root))
 	}
+	knownDisks := map[string]float64{}
 	if disks, ok := health["disks"].([]map[string]any); ok {
 		for _, disk := range disks {
-			if disk["drive"] == drive {
-				free, known := disk["free_gb"].(float64)
-				if !known {
-					return &statusError{Status: 409, Msg: "held: free disk space unavailable"}
-				}
-				if free < policy.MinDiskGB {
-					return &statusError{Status: 409, Msg: fmt.Sprintf("held: disk free %.2f GB is below %.2f GB floor", free, policy.MinDiskGB)}
-				}
+			name, _ := disk["drive"].(string)
+			if free, ok := disk["free_gb"].(float64); ok {
+				knownDisks[strings.ToUpper(name)] = free
 			}
 		}
 	}
+	if policy.MinDiskGB > 0 {
+		free, known := knownDisks[drive]
+		if !known {
+			return &statusError{Status: 409, Msg: "disk_unknown", Fields: map[string]any{"drive": drive, "message": "launch folder volume capacity is unknown"}}
+		}
+		if free < policy.MinDiskGB {
+			return &statusError{Status: 409, Msg: fmt.Sprintf("held: disk free %.2f GB is below %.2f GB floor", free, policy.MinDiskGB)}
+		}
+	}
+
 	if p.Floor != nil {
 		short := p.Floor.RAMFreeMB > 0 && available < p.Floor.RAMFreeMB
 		free := map[string]float64{}
@@ -349,7 +361,9 @@ func (a *App) launchGuard(p paneRequest) error {
 		for name, want := range p.Floor.DiskFreeGB {
 			value, ok := known[strings.ToUpper(name)]
 			if !ok {
-				short = true
+				if want > 0 {
+					return &statusError{Status: 409, Msg: "disk_unknown", Fields: map[string]any{"drive": strings.ToUpper(name), "message": "requested volume capacity is unknown"}}
+				}
 				continue
 			}
 			free[strings.ToUpper(name)] = value
@@ -483,9 +497,7 @@ func (a *App) guardEndpoint(w http.ResponseWriter, r *http.Request) bool {
 			}
 			request := entry.Request
 			a.mu.Unlock()
-			if err := a.launchGuard(request); err != nil {
-				return nil, err
-			}
+
 			id := ""
 			if request.Key != "" {
 				var err error
@@ -494,7 +506,7 @@ func (a *App) guardEndpoint(w http.ResponseWriter, r *http.Request) bool {
 					return nil, err
 				}
 			}
-			out, err := a.action(r.Context(), Action{Action: "start", Pane: id, Profile: request.Profile, Model: request.Model, Effort: request.Effort, Account: request.Account, Cwd: request.Cwd})
+			out, err := a.action(r.Context(), Action{Action: "start", Pane: id, Profile: request.Profile, Model: request.Model, Effort: request.Effort, Account: request.Account, Cwd: request.Cwd, StartRequest: &request})
 			a.mu.Lock()
 			entry.Status = "started"
 			entry.Reason = out
@@ -508,9 +520,10 @@ func (a *App) guardEndpoint(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	case "/api/reservations":
 		var p struct {
-			Task  string   `json:"task"`
-			Owner string   `json:"owner"`
-			Paths []string `json:"paths"`
+			Task    string   `json:"task"`
+			Owner   string   `json:"owner"`
+			Paths   []string `json:"paths"`
+			Overlap bool     `json:"overlap"`
 		}
 		if !readBody(w, r, &p) {
 			return true
@@ -536,11 +549,14 @@ func (a *App) guardEndpoint(w http.ResponseWriter, r *http.Request) bool {
 			a.mu.Lock()
 			defer a.mu.Unlock()
 			a.initGuardsLocked()
+			if a.guards.LoadError != "" {
+				return nil, &statusError{Status: 503, Msg: "ledger_unavailable", Fields: map[string]any{"message": a.guards.LoadError}}
+			}
 			conflicts := []map[string]string{}
 			kept := []Reservation{}
 			for _, old := range a.guards.Reservations {
-				if old.Task == p.Task {
-					continue
+				if old.Task == p.Task && old.Owner == p.Owner {
+					return map[string]any{"ok": true, "id": old.ID, "reservations": a.guards.Reservations}, nil
 				}
 				for _, x := range normalized {
 					for _, y := range old.Paths {
@@ -551,13 +567,13 @@ func (a *App) guardEndpoint(w http.ResponseWriter, r *http.Request) bool {
 				}
 				kept = append(kept, old)
 			}
-			if len(conflicts) > 0 {
+			if len(conflicts) > 0 && !p.Overlap {
 				return nil, &statusError{Status: 409, Msg: "reservation conflict", Fields: map[string]any{"conflicts": conflicts}}
 			}
 			if len(kept) >= 200 {
 				return nil, &statusError{Status: 409, Msg: "reservation limit reached"}
 			}
-			entry := Reservation{ID: fmt.Sprintf("res-%d", time.Now().UnixNano()), Task: p.Task, Owner: p.Owner, Paths: normalized, Created: time.Now()}
+			entry := Reservation{Shared: p.Overlap, ID: fmt.Sprintf("res-%d", time.Now().UnixNano()), Task: p.Task, Owner: p.Owner, Paths: normalized, Created: time.Now()}
 			kept = append(kept, entry)
 			data, _ := json.Marshal(kept)
 			if err := atomicWrite(reservationPath(), data); err != nil {
@@ -578,6 +594,9 @@ func (a *App) guardEndpoint(w http.ResponseWriter, r *http.Request) bool {
 			a.mu.Lock()
 			defer a.mu.Unlock()
 			a.initGuardsLocked()
+			if a.guards.LoadError != "" {
+				return nil, &statusError{Status: 503, Msg: "ledger_unavailable", Fields: map[string]any{"message": a.guards.LoadError}}
+			}
 			kept := []Reservation{}
 			found := false
 			for _, old := range a.guards.Reservations {

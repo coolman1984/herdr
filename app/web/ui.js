@@ -6,6 +6,7 @@ export function el(tag, attrs, ...kids) {
     if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
     else if (k === 'text') n.textContent = v;
     else if (k === 'class') n.className = v;
+    else if (k === 'value' && 'value' in n) n.value = v;   // a textarea's text is its property, not an attribute
     else if (k in n && typeof v !== 'string') n[k] = v;
     else n.setAttribute(k, v === true ? '' : v);
   }
@@ -83,3 +84,92 @@ export const ago = (t) => {
   const s = Math.round((Date.now() - t) / 1000);
   return s < 60 ? s + ' s' : s < 3600 ? Math.round(s / 60) + ' min' : Math.round(s / 3600) + ' h';
 };
+
+// Shared bounded state and scheduling primitives; kept independent of DOM for regression tests.
+export const deliveryUnknown = (e) => (e.status === 504 && !!e.dispatch_id) || (!e.status && e.promptSent === true);
+export const knownNumber = (v, digits = 1) => v == null ? 'unknown' : Number(v).toFixed(digits);
+export const sameValues = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+export function queuePatch(p, patch) {
+  if (p.needsResync) return false;
+  const bytes = JSON.stringify(patch).length * 2;
+  if ((p.pq?.length || 0) >= 64 || (p.patchBytes || 0) + bytes > 262144) {
+    p.pq = null; p.patchBytes = 0; p.needsResync = true; return false;
+  }
+  (p.pq ||= []).push(patch); p.patchBytes = (p.patchBytes || 0) + bytes; return true;
+}
+export function upsertJob(jobs, d) {
+  if (!d.id) return;
+  const old = jobs.get(d.id);
+  const finished = d.done === true || (d.status ? ['done', 'failed', 'completed'].includes(d.status) : typeof d.ok === 'boolean');
+  if (old?.done && !finished) return old;
+  const job = { label: d.label || d.kind || d.id, t: d.started ? Date.parse(d.started) : Date.now(), ...old, ...d, done: !!(old?.done || finished) };
+  if (job.output) job.output = job.output.slice(-32768);
+  if (job.message) job.message = job.message.slice(-32768);
+  jobs.set(d.id, job);
+  while (jobs.size > 100) { const k = [...jobs].find(([, j]) => j.done)?.[0] || jobs.keys().next().value; jobs.delete(k); }
+  return job;
+}
+export class OrderedQueue {
+  constructor(send, allowed = () => true) { this.send = send; this.allowed = allowed; this.tails = new Map(); this.tokens = new Map(); this.epoch = 0; }
+  push(key, text, keys = []) {
+    const epoch = this.epoch, token = this.tokens.get(key) || { cancelled: false };
+    this.tokens.set(key, token);
+    const next = (this.tails.get(key) || Promise.resolve()).then(() => {
+      if (epoch !== this.epoch || token.cancelled || !this.allowed(key)) return;
+      return this.send(key, text, keys);
+    });
+    this.tails.set(key, next);
+    next.finally(() => { if (this.tails.get(key) === next) { this.tails.delete(key); this.tokens.delete(key); } }).catch(() => {});
+    return next;
+  }
+  drain(key) { return this.tails.get(key) || Promise.resolve(); }
+  clear() { this.epoch++; }
+  forget(key) { const token = this.tokens.get(key); if (token) token.cancelled = true; this.tokens.delete(key); this.tails.delete(key); }
+}
+export function menuPosition(rect, size, viewport) {
+  const pad = 8;
+  return { left: Math.max(pad, Math.min(rect.right - size.width, viewport.width - size.width - pad)),
+    top: Math.max(pad, rect.top - size.height >= pad ? rect.top - size.height : Math.min(rect.bottom, viewport.height - size.height - pad)) };
+}
+let activeMenuClose = null;
+export function openMenu(trigger, menu) {
+  activeMenuClose?.();
+  const ac = new AbortController(), opts = { signal: ac.signal };
+  const close = () => { if (activeMenuClose === close) activeMenuClose = null; ac.abort(); menu.remove(); trigger.setAttribute('aria-expanded', 'false'); if (trigger.isConnected) trigger.focus(); };
+  activeMenuClose = close;
+  document.body.append(menu);
+  menu.classList.add('card-popover');
+  const r = menuPosition(trigger.getBoundingClientRect(), menu.getBoundingClientRect(), { width: innerWidth, height: innerHeight });
+  menu.style.left = r.left + 'px'; menu.style.top = r.top + 'px';
+  trigger.setAttribute('aria-expanded', 'true');
+  document.addEventListener('pointerdown', (ev) => { if (!menu.contains(ev.target) && !trigger.contains(ev.target)) close(); }, opts);
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); close(); } }, { ...opts, capture: true });
+  window.addEventListener('resize', close, opts);
+  window.addEventListener('scroll', (ev) => { if (!menu.contains(ev.target)) close(); }, { ...opts, capture: true });
+  menu.addEventListener('click', (ev) => { if (ev.target.closest('button')) close(); }, opts);
+  menu.querySelector('button')?.focus();
+  return close;
+}
+// Patch text/attributes in place. Form controls keep their node, focus and unsaved value.
+export function patchContent(target, source) {
+  const old = [...target.childNodes], fresh = [...source.childNodes], used = new Set();
+  const key = (n) => n.nodeType === 1 ? (n.getAttribute('data-drawer-key') || n.getAttribute('id') || n.getAttribute('aria-label')) : null;
+  for (let i = 0; i < fresh.length; i++) {
+    const b = fresh[i], id = key(b), current = target.childNodes[i];
+    const a = id ? old.find((n) => !used.has(n) && key(n) === id && n.nodeName === b.nodeName)
+      : current && !used.has(current) && !key(current) ? current : null;
+    if (!a || a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) {
+      target.insertBefore(b, current || null); used.add(b); continue;
+    }
+    used.add(a);
+    if (a !== current) target.insertBefore(a, current || null);
+    if (a.nodeType === 3) { if (a.textContent !== b.textContent) a.textContent = b.textContent; continue; }
+    if (a.matches('input,textarea,select')) continue;
+    // Keep handlers that close over the retained controls. A different action gets a fresh node.
+    if (a.matches('button') && a.textContent !== b.textContent) { a.replaceWith(b); used.delete(a); used.add(b); continue; }
+    for (const attr of [...a.attributes]) if (!b.hasAttribute(attr.name)) a.removeAttribute(attr.name);
+    for (const attr of b.attributes) if (a.getAttribute(attr.name) !== attr.value) a.setAttribute(attr.name, attr.value);
+    patchContent(a, b);
+  }
+  for (const a of old) if (!used.has(a)) a.remove();
+}

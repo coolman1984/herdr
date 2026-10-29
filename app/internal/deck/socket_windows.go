@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -16,16 +17,49 @@ import (
 // Herdr's public API is NDJSON on \\.\pipe\<socket marker path> on Windows.
 // Protocol 22 closes ordinary RPC connections after one response. Reuse the client,
 // serialize bounded connections, and never spawn polling child processes.
+type backgroundRPC struct{}
+
+var errRPCBusy = fmt.Errorf("background RPC deferred for an active request")
+
 type Socket struct {
 	Path        string
-	mu          sync.Mutex
+	once        sync.Once
+	gate        chan struct{}
+	waiting     atomic.Int64
 	file        *os.File
 	reader      *bufio.Reader
 	sequence    uint64
 	Connections uint64
 }
 
-func (s *Socket) Close() { s.mu.Lock(); defer s.mu.Unlock(); s.drop() }
+func (s *Socket) Close() { _ = s.acquire(context.Background()); defer s.release(); s.drop() }
+func (s *Socket) acquire(ctx context.Context) error {
+	s.once.Do(func() { s.gate = make(chan struct{}, 1) })
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if background, _ := ctx.Value(backgroundRPC{}).(bool); background {
+		select {
+		case s.gate <- struct{}{}:
+			return nil
+		default:
+			return errRPCBusy
+		}
+	}
+	s.waiting.Add(1)
+	defer s.waiting.Add(-1)
+	select {
+	case s.gate <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			s.release()
+			return err
+		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+func (s *Socket) release() { <-s.gate }
 func (s *Socket) drop() {
 	if s.file != nil {
 		s.file.Close()
@@ -34,10 +68,12 @@ func (s *Socket) drop() {
 	}
 }
 func (s *Socket) request(parent context.Context, method string, params any) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	ctx, cancel := context.WithTimeout(parent, 6*time.Second)
 	defer cancel()
+	if err := s.acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer s.release()
 	if s.file == nil {
 		name, err := syscall.UTF16PtrFromString(`\\.\pipe\` + s.Path)
 		if err != nil {
@@ -57,7 +93,16 @@ func (s *Socket) request(parent context.Context, method string, params any) ([]b
 		s.drop()
 		return nil, fmt.Errorf("Herdr socket deadlines unavailable: %w", err)
 	}
-	// Deadlines cancel I/O in the Go poller; no per-request goroutines are needed.
+	// Cancellation also interrupts an in-flight read before its deadline. Capture the file
+	// and join the callback before dropping it or admitting the next request.
+	file := s.file
+	stopped := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() { file.SetDeadline(time.Now()); close(stopped) })
+	defer func() {
+		if !stop() {
+			<-stopped
+		}
+	}()
 	s.sequence++
 	id := fmt.Sprintf("deck-%d", s.sequence)
 	data, err := json.Marshal(map[string]any{"id": id, "method": method, "params": params})

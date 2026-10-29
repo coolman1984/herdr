@@ -413,3 +413,26 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     file existed, yet seconds later `herdr agent list` showed the agent `working` on the task. A DONE whose
     "recent output" is just the prompt is not a result: check `agent list` / `read -Visible`, then wait
     with `collect -Agents <name>` instead of resending.
+
+88. **`app/build.ps1` runs `go fmt`, which rewrites every Go file from CRLF to LF:** `git status` then
+    lists files nobody edited (content diff empty; git warns "LF will be replaced by CRLF"). Check
+    `git diff --quiet -- <file>` per file and restore only those with no content change, or the commit
+    carries noise and delegates report "unexpected changes" (2026-10-29, 11 files after one build).
+
+89. **A PowerShell script with a `param()` block is an "advanced script": a forwarded `-o` becomes
+    ambiguous with `-OutVariable`/`-OutBuffer`** (2026-10-29, `go-locked.ps1 build -o x` failed). A
+    pass-through wrapper takes `$args` and has no `param()` block. Also: inside a function that returns an
+    object, `Write-Output` text becomes part of the return value (the lock came back as `[string, FileStream]`);
+    use `Write-Host` for messages there.
+
+90. **A child process started with `UseShellExecute=$false` and no redirection inherits the caller's
+    output handles:** a Herdr server started that way (verify-lab's restart step leaves it running) kept
+    the tool's output pipe open, and the calling command hung past 10 minutes after the script had ended.
+    Stop every server you start (`herdr --session lab server stop`) before the command returns, or start it
+    with redirected/closed handles.
+
+91. **Herdr keeps an agent record with status `done` after the agent process exited** when the agent was
+    reported by hand (`pane report-agent`) and HUD metadata with a TTL is still alive: `agent list` still
+    showed `codex` / `done` while the pane's title was `pwsh.exe` (2026-10-29, lab). Tests of "agent gone"
+    must wait until `agent list` no longer has the pane. In the owner's real case (2026-10-28) the exited
+    agent showed as `unknown` with no agent, which the Deck now refuses with `agent_exited`.

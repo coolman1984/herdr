@@ -1,6 +1,10 @@
 [CmdletBinding()]
-param()
+# -Output: where the exe goes (default app\HerdrDeck.exe); agents build to their own path.
+param([string]$Output)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'tests\go-lock.ps1')
+if (-not $Output) { $Output = Join-Path $PSScriptRoot 'HerdrDeck.exe' }
+$Output = [IO.Path]::GetFullPath($Output)
 $deckCandidates = @()
 if ($env:DECK_GO) { $deckCandidates += $env:DECK_GO }
 $deckCandidates += 'C:\Users\mflma\tools\go\go1.26.1\go\bin\go.exe'
@@ -23,6 +27,7 @@ $deckOldTemp = $env:GOTMPDIR
 $deckOldProxy = $env:GOPROXY
 $deckOldSum = $env:GOSUMDB
 $deckOldToolchain = $env:GOTOOLCHAIN
+$deckLock = Enter-GoLock
 try {
     Set-Location -LiteralPath $PSScriptRoot
     $env:GOCACHE = Join-Path $PSScriptRoot 'tests\go-cache'
@@ -37,15 +42,16 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Go vet failed.' }
     & $deckGo test ./... -count=1
     if ($LASTEXITCODE -ne 0) { throw 'Go tests failed.' }
-    & $deckGo build -trimpath -ldflags '-H=windowsgui -s -w' -o (Join-Path $PSScriptRoot 'HerdrDeck.exe') .
+    & $deckGo build -trimpath -ldflags '-H=windowsgui -s -w' -o $Output .
     if ($LASTEXITCODE -ne 0) { throw 'Go build failed.' }
-    $deckExe = Get-Item -LiteralPath (Join-Path $PSScriptRoot 'HerdrDeck.exe')
+    $deckExe = Get-Item -LiteralPath $Output
     if ($deckExe.Length -ge 12MB) { throw "Deck is too large: $($deckExe.Length) bytes." }
     $deckHash = (Get-FileHash -LiteralPath $deckExe.FullName -Algorithm SHA256).Hash
     Write-Output "Built: $($deckExe.FullName)"
     Write-Output "Size: $($deckExe.Length) bytes ($([Math]::Round($deckExe.Length / 1MB, 2)) MiB)"
     Write-Output "SHA256: $deckHash"
 } finally {
+    Exit-GoLock $deckLock
     Set-Location -LiteralPath $deckOldLocation
     $env:GOCACHE = $deckOldCache
     $env:GOTMPDIR = $deckOldTemp

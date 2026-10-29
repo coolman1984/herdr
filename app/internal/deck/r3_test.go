@@ -135,11 +135,11 @@ func TestReservationLifecycleConflictsAndReload(t *testing.T) {
 	}
 	w = request(a, "POST", "/api/reservations", `{"task":"tasks/a.md","owner":"codex-1","paths":["app/web/index.html"]}`, "test-token", "")
 	if w.Code != 200 {
-		t.Fatalf("same-task replace failed: %d %s", w.Code, w.Body.String())
+		t.Fatalf("same-owner idempotency failed: %d %s", w.Code, w.Body.String())
 	}
 	body = decodeBody(t, w)
 	if kept, _ := body["reservations"].([]any); len(kept) != 1 {
-		t.Fatalf("same task did not replace: %v", body)
+		t.Fatalf("same ownership produced duplicate records: %v", body)
 	}
 	id, _ = body["id"].(string)
 	b := testApp(&fakeHerdr{})
@@ -345,7 +345,7 @@ func deliveryApp(f *deliveryHerdr) *App {
 
 func TestPromptDispatchIDAndDispatchLedger(t *testing.T) {
 	t.Setenv("APPDATA", t.TempDir())
-	f := &deliveryHerdr{}
+	f := &deliveryHerdr{fakeHerdr: fakeHerdr{screen: "› "}}
 	a := deliveryApp(f)
 	w := request(a, "POST", "/api/pane/prompt", `{"key":"lab|w1:p1","text":"do it"}`, "test-token", "")
 	if w.Code != 200 {
@@ -383,7 +383,7 @@ func TestUncertainDeliveryIs504AndRejectedDeliveryIs502(t *testing.T) {
 		{fmt.Errorf("agent_not_ready: nothing to prompt"), 502, "failed"},
 	} {
 		t.Setenv("APPDATA", t.TempDir())
-		f := &deliveryHerdr{fail: v.fail}
+		f := &deliveryHerdr{fakeHerdr: fakeHerdr{screen: "› "}, fail: v.fail}
 		a := deliveryApp(f)
 		w := request(a, "POST", "/api/pane/prompt", `{"key":"lab|w1:p1","text":"do it"}`, "test-token", "")
 		if w.Code != v.want {

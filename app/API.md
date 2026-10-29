@@ -372,6 +372,15 @@ Test: TestHeadlessRoutesStayEmptyAndResearchIsRefused.
 Tests: TestPromptDispatchIDAndDispatchLedger, TestUncertainDeliveryIs504AndRejectedDeliveryIs502,
 TestUncertainDeliveryIsRecordedWithoutReplay.
 
+### R25 - prompt intent: agent text never runs in a shell
+`POST /api/pane/prompt` takes `"expect": "agent" | "shell"` (missing = `agent`). When the fresh snapshot
+shows no agent in the pane (it exited; only its shell is left) and `expect` is not `shell` -> 409
+`{"error":"agent_exited","pane_id":...,"message":"The agent in <pane> has exited; only a shell is left - not sent"}`,
+nothing written. `expect: "shell"` runs the text with `pane run` (a card that never had an agent).
+The page sends `shell` only from a card that never showed an agent; a card whose agent exited keeps
+sending `agent` and its box says "Agent exited · messages are not sent to the shell".
+Test: TestPromptToExitedAgentNeverRunsInTheShell.
+
 ### R24 - git root and paths
 `GET /api/git?key=` keeps `status`, `stat` and `text` and adds:
 - `root`: `git -C <cwd> rev-parse --show-toplevel` with forward slashes.
@@ -400,4 +409,138 @@ Order: `$env:DECK_GO` (when set and present), `C:\Users\mflma\tools\go\go1.26.1\
 `D:\tools\go\go1.26.10\go\bin\go.exe`, then `go.exe` on PATH. Nothing found fails with
 `Go not found: set DECK_GO to go.exe (tried: ...)`. The script prints `Go: <path>` once, then formats,
 vets, tests and builds as before.
+
+## Round 4 — R26–R35 (supersedes conflicting earlier descriptions)
+
+Backend unit tests use fake Herdr responses; live integration remains the lead's check.
+
+### R26 — C1: per-client visibility, recovery and retained screens
+
+`GET /api/events` sends `hello {"client_id":"c-<n>"}`, then
+`settings {"read_only":false|true}`, then `state`, in that order.
+`POST /api/visible {"client_id":"c-3","keys":["session|w1:p1"]}` replaces only that
+client's interest. Missing `client_id` means `legacy`. Disconnect removes the client's
+set. Screen reads use the union; each stream receives screen content/patches only for
+its own keys. Metadata/status still reach all clients. Updating visibility supplies a
+filtered state snapshot so re-shown panes have the right screen version.
+
+While any SSE client exists, metadata/recovery remains due every 2 seconds, including
+when all sets are empty. Offline snapshots retain panes with `stale:true`, set
+`herdr.running:false` and report `error`. A successful snapshot clears stale state.
+The current screen recomputes the text-derived blocked flag; negative screen evidence
+clears it while authoritative blocked metadata remains respected (D8).
+
+Screens retain the last **2000** rows before diffing (D10). Patch coordinates and versions
+are checked against the evolving retained array; invalid bounds use a full screen update.
+One diff pass uses pre-split rows, prefix/suffix fast paths and a bounded shift search;
+repeated-row tail edits remain a single patch (P3).
+
+Polling uses a round-robin cursor, at most four screen reads per pass, 350 ms per screen,
+a 750 ms metadata budget, and exponential failed-read backoff (2–32 s). Failed reads
+preserve cached screen text. Snapshot agents replace the redundant agent-list RPC.
+Background socket requests defer to active/queued requests; queue waits and in-flight
+I/O respond to cancellation. Health sampling is shared/cached for 10 s, with one sampler
+and a 1.5 s total pane-memory budget, 350 ms per pane (P2).
+
+Tests: `TestR4VisibilityIndependent`, `TestR4ClientScreensAndDisconnect`,
+`TestR4HiddenClientMetadataHeartbeat`, `TestR4OfflineRetainsStalePanes`,
+`TestR4BlockedClearsOnFreshScreen`, `TestR4RetainedRowsAndPatchBounds`,
+`TestR4DiffTailUsesSinglePatch`, `TestR4PollFairnessAndBackoff`,
+`TestR4HealthSingleSample`, `TestR4SocketCancelledBeforeAdmission`,
+`TestR4FailedScreenRetainsLastGoodRows`.
+
+### R27 — C2: settings events
+
+Every read-only change broadcasts `event: settings` with `{"read_only":true|false}`
+immediately. Overflow resynchronization includes current settings and filtered state.
+Test: `TestR4SettingsBroadcast` (initial ordering also covered by R26 stream tests).
+
+### R28 — C3: ordered raw typing
+
+`POST /api/pane/raw {"key":"session|w1:p1","text":"abc","keys":["enter"]}` writes
+text with send-text, then each key with send-keys, in order; returns `{"ok":true}`.
+Either field may be empty, but not both. Key aliases/allow-list match `/api/pane/keys`;
+the whole key list is validated before writing. Per-pane FIFO tickets serialize incoming
+requests; the browser remains responsible for preserving order across network transit.
+The input-box guard is bypassed for this deliberate owner input, including blocked panes.
+Read-only mode returns 403. Test: `TestR4RawOrderedAndReadOnly`.
+
+### R29 — C4: reservation ownership and unavailable ledgers
+
+`POST /api/reservations` keeps `task`, `owner`, `paths` and accepts `overlap:true`.
+Same owner plus same task returns the existing id without replacing its record. A different
+owner never replaces/drops a record. Conflicts remain 409; explicit overlap appends a
+record with `shared:true`. Unreadable/invalid ledgers keep GET `load_error`; mutation returns
+503 `{"error":"ledger_unavailable","message":"..."}` without overwriting the ledger.
+Reserve before dispatch; release the new id after a definite dispatch failure, retaining
+it when delivery is unknown. Tests: `TestR4ReservationOwnershipAndOverlap`,
+`TestR4UnreadableReservationLedger`.
+
+### R30 — C5: one launch admission and confirmed identity
+
+Direct/action starts, queue release, workspace-open, layouts, columns, team, headless and
+trial script adapters pass one admission service. Plans expand before execution; shell-only
+columns reserve zero agent slots. Each agent passes account/resource checks; live plus
+pending agents cannot exceed policy. Pending slots are reserved atomically, released on
+failure or after 120 s, and consumed by new agents observed in a successful snapshot.
+Capacity refusal is 409 `{"error":"capacity","message":"..."}`; existing account/floor
+refusals retain their codes.
+
+`/api/agent/start` adds `pane_id` and `name` only when a helper line contains
+`STARTED name=<n> ... pane=<id>`. Otherwise both fields are absent; no identity is guessed.
+This is the backend D12 fix. D17 recovery uses existing `GET /api/jobs` records keyed by
+the returned `job_id`/`id`; clients reconcile those records after reconnect/response races.
+If SSE overflow would discard a result, only that stream closes to trigger reconciliation;
+completed job records remain available. Test: `TestR4ResultOverflowReconnectsForLedger`.
+
+Tests: `TestR4LaunchPendingAndIdentity`, `TestR4EveryLaunchRouteUsesAdmission`,
+`TestR4LaunchFailureReleasesPending`, `TestR4TeamReservesExpandedPlan`,
+`TestR4LayoutChecksEveryAccount`, `TestR4SnapshotConfirmsPendingLaunch`,
+`TestR4PendingLaunchExpiresAt120Seconds` (virtual clock, no two-minute sleep).
+
+### R31 — C6: typed delivery failures
+
+A prompt whose write process started but has no known acknowledgement returns 504
+`{"error":"delivery unknown","dispatch_id":"..."}`. Read timeouts return 504
+`{"error":"read_timeout","message":"..."}` without a dispatch id. Cancelled-before-start
+or process-start failures return 502 `{"error":"not_sent","message":"..."}` without one.
+Explicit server rejection remains 502. There is no automatic replay.
+Tests: `TestR4ReadTimeoutIsNotDelivery`, `TestR4CancelledWriteNeverStarts`,
+`TestR4MissingExecutableNotSent`, existing `TestUncertainDeliveryIs504AndRejectedDeliveryIs502`.
+
+### R32 — C7: recognized, empty and occupied input regions
+
+For Claude/Codex, prompt/paste/ask/fanout with an unrecognized input box returns 409
+`{"error":"input_unknown","message":"<name>: cannot see its input box - not sent"}`.
+Recognized empty boxes permit writes; occupied boxes retain `input_not_empty`. Other
+agent kinds retain their earlier behavior. Claude reads the entire bounded box, including
+boxes taller than twelve lines. Codex reads continuation/blank rows through the footer.
+SGR state preceding the marker is preserved; existing dim-placeholder rules remain.
+Tests: `TestR4UnknownInputAndMultiline`, `TestR4CodexTallDraftWithBlankLines`,
+`TestR4InheritedInputStyle`, existing input fixture/send-guard tests.
+
+### R33 — C8: durable preferences
+
+`GET /api/prefs` returns `{"prefs":{...}}`; missing files mean `{}`. POST
+`{"prefs":{...}}` atomically replaces `%APPDATA%\herdr\deck-prefs.json` and returns
+`{"ok":true}`. JSON bodies over 64 KiB return 413. Read/write errors are surfaced;
+preferences are allowed while read-only mode is enabled. Test: `TestR4PrefsPersistAndLimit`.
+
+### R34 — C9: launch/worktree volumes and unknown disk values
+
+`/api/health` includes D:, pane folders and admitted launch/worktree volumes. Unknown
+`free_gb` and pane-memory `mb` values are explicit `null`, never fabricated zeroes.
+Launch policy checks the launch folder's volume; worktrees use the user-profile worktree
+volume. Unknown space with a nonzero floor returns 409
+`{"error":"disk_unknown","drive":"...","message":"..."}`.
+Tests: `TestR4HealthIncludesDAndNullUnknown`, `TestR4HealthIncludesPaneVolume`,
+`TestR4UnknownLaunchVolumeRefused`, `TestR4WorktreeVolumeFloor`.
+
+### R35 — C10: inexpensive debug counters
+
+Token-protected `GET /api/debug/counters` is always available and returns
+`goroutines`, `handles`, `rss_mb`, `sse_clients`, `sse_events`, `sse_bytes`, `polls`,
+`poll_errors`, `poll_ms_last`, `poll_ms_max`, `rpc_waiting`, `resyncs`, `jobs_live`.
+SSE counters measure successful event writes; poll durations use milliseconds; unavailable
+RSS is `null`. Test: `TestR4Counters`.
 

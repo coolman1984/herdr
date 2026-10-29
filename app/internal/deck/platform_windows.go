@@ -116,7 +116,8 @@ func openWindow(edge, url, profile string) error {
 	go cmd.Wait()
 	return nil
 }
-func systemHealth() (map[string]any, error) {
+func systemHealth() (map[string]any, error) { return systemHealthVolumes(nil) }
+func systemHealthVolumes(folders []string) (map[string]any, error) {
 	type memoryStatus struct {
 		Length, Load                                                                          uint32
 		TotalPhys, AvailPhys, TotalPage, AvailPage, TotalVirtual, AvailVirtual, AvailExtended uint64
@@ -128,11 +129,22 @@ func systemHealth() (map[string]any, error) {
 		return nil, fmt.Errorf("memory status: %w", err)
 	}
 	disks := []map[string]any{}
-	for _, drive := range []string{"C:", "G:", "I:"} {
+	volumes := []string{"C:", "D:", "G:", "I:"}
+	seen := map[string]bool{}
+	for _, folder := range folders {
+		if drive := strings.ToUpper(filepath.VolumeName(folder)); drive != "" {
+			volumes = append(volumes, drive)
+		}
+	}
+	for _, drive := range volumes {
+		if seen[drive] {
+			continue
+		}
+		seen[drive] = true
 		ptr, _ := syscall.UTF16PtrFromString(drive + `\`)
 		var free, total, available uint64
 		ok, _, e := kernel32.NewProc("GetDiskFreeSpaceExW").Call(uintptr(unsafe.Pointer(ptr)), uintptr(unsafe.Pointer(&available)), uintptr(unsafe.Pointer(&total)), uintptr(unsafe.Pointer(&free)))
-		row := map[string]any{"drive": drive}
+		row := map[string]any{"drive": drive, "free_gb": nil}
 		if ok == 0 {
 			row["error"] = e.Error()
 		} else {
