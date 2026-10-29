@@ -504,3 +504,8 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     a "Queued messages ... Enter with empty input to steer first" box, and nothing happens until an empty
     `enter` is sent. Check the screen for "Queued messages" before judging an idle Cline as stalled. Both
     models also end turns after long plans; DeepSeek still made real commits when nudged step by step.
+
+101. **Headless Edge `--screenshot` resizes the page before it captures** (2026-10-29, Deck round 6):
+    anything that closes on `resize` (Deck menus) is gone in the shot even when the page opened it.
+    Shoot open menus over DevTools instead: `Emulation.setDeviceMetricsOverride` once, navigate, run
+    the click with `Runtime.evaluate`, then `Page.captureScreenshot`.

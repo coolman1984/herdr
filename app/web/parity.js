@@ -232,7 +232,7 @@ function detach() {
 }
 export async function settings() {
   const L = X.LS;
-  const theme = el('select', { 'aria-label': 'Theme' }, ['dark', 'light', 'hc'].map((t) => el('option', { value: t, text: { dark: 'Dark', light: 'Light', hc: 'High contrast' }[t], selected: L.get('theme', 'dark') === t })));
+  const theme = el('select', { 'aria-label': 'Theme' }, P.THEMES.map((t) => el('option', { value: t, text: P.THEME_NAMES[t], selected: L.get('theme', 'system') === t })));
   const density = el('select', { 'aria-label': 'Density' }, ['normal', 'compact'].map((t) => el('option', { value: t, text: t, selected: L.get('density', 'normal') === t })));
   const font = el('input', { type: 'number', min: 10, max: 22, value: L.get('font', 13), 'aria-label': 'Screen font size' });
   const v = await dialog({ title: 'Settings', body: el('div', { class: 'form2' }, field('Theme', theme), field('Density', density), field('Screen font (px)', font)),

@@ -340,9 +340,9 @@ function makeCard(p) {
   // No spacer: .tt grows, so the name gets all free width before it is cut.
   const head = el('header', { class: 'card-h', draggable: 'true' }, c.sel, c.glyph, el('div', { class: 'tt' }, el('div', { class: 'tt1' }, c.title, c.chips), c.sub),
     c.ring, c.st,
-    ibtn('splitR', 'Split right (Ctrl+B V)', () => Q.split(pane(), 'right'), { 'data-w': '1' }),
-    ibtn('splitD', 'Split down (Ctrl+B -)', () => Q.split(pane(), 'down'), { 'data-w': '1' }),
-    c.zbtn = ibtn('max', 'Zoom (Z)', () => zoom(key)));
+    ibtn('splitR', 'Split right (Ctrl+B V)', () => Q.split(pane(), 'right'), { 'data-w': '1', class: 'icon hv' }),
+    ibtn('splitD', 'Split down (Ctrl+B -)', () => Q.split(pane(), 'down'), { 'data-w': '1', class: 'icon hv' }),
+    c.zbtn = ibtn('max', 'Zoom (Z)', () => zoom(key)), moreMenu(c));
   head.addEventListener('dblclick', (ev) => { if (!ev.target.closest('button,input')) zoom(key); });
   Q.dragSwap(head, key);
   const scr = el('div', { class: 'screen', tabindex: '0', role: 'log', 'aria-live': 'off' });
@@ -366,8 +366,7 @@ function makeCard(p) {
     el('span', { class: 'grow' }),
     ibtn('copy', 'Copy screen (Ctrl+Shift+C)', () => copyText(c.view.plain)),
     ibtn('edit', 'Rename (Ctrl+B Shift+P)', () => renamePane(key), { 'data-w': '1' }),
-    ibtn('close', 'Close pane (Ctrl+B X)', () => closePane(key), { 'data-w': '1', class: 'icon danger-t' }),
-    moreMenu(c));
+    ibtn('close', 'Close pane (Ctrl+B X)', () => closePane(key), { 'data-w': '1', class: 'icon danger-t' }));
   c.root = el('article', { class: 'card', 'data-key': key, onfocusin: () => { S.current = key; }, onmousedown: () => { S.current = key; } },
     head, c.spark, scr, c.err, c.done, c.form, keys);
   return c;
@@ -617,7 +616,7 @@ function bindTop() {
   on('#btn-layout', () => Q.layoutBuilder()); on('#btn-board', () => Q.board()); on('#btn-team', () => P.team());
   on('#btn-usage', () => P.usage()); on('#btn-inbox', () => P.inbox()); on('#btn-palette', () => P.palette());
   on('#btn-help', () => Q.help()); on('#btn-search', () => Q.search()); on('#btn-agents', () => Q.agentsHub()); on('#btn-tools', () => Q.tools());
-  on('#btn-rail', toggleRail);
+  on('#btn-rail', toggleRail); on('#btn-theme', () => P.cycleTheme());
   on('#btn-spaces', () => Q.spaces()); on('#btn-settings', () => Q.settings()); on('#btn-stopall', () => Q.stopAll());
   bindMenu($('#btn-more'), $('#more-menu'));
   $('#safe').onchange = (ev) => setSafe(ev.target.checked);

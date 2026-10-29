@@ -1396,3 +1396,30 @@ fail on the phase-1 commit). `verify-ui.ps1` 38 PASS / 8 FAIL; all 8 also fail o
 Claude. `herdr-headless.ps1` stays for one-shot runs. Agents are started with `herdr pane run`
 because `herdr-agents start/team` still fails with `agent_pane_busy` (#60, #89).
 **Lesson:** #89.
+
+## Phase 55 - Deck round 6: calm restyle, light + dark theme that follows Windows (2026-10-29)
+
+**Owner's request:** "the user interface is ... not professional and ugly; make it simple. I want this
+design and style and font, light and dark theme" (reference screenshot 2026-10-29 17 26 39: charcoal
+cards, hairline borders, round coloured icons on a thin timeline, kebab menus).
+**Symptom (round-5 shots):** lime-green (#D4FF3A) buttons, accent borders and underlines on every
+pressed control, loud amber "NEEDS YOU" block, mono-font chips, two rows of key and icon buttons on
+every card, a custom display font (Alexandria).
+**Fix (`app/web`):** new tokens on `:root` only (dark #141416 page / #1F1F22 cards / #2C2C30 lines,
+light #F5F5F7 / white / #E4E4E8), 12 px card radius, one calm blue (#3B82F6 / #2563EB) for Agent and
+Send only; system font (Segoe UI Variable), mono only in the terminal; ANSI palettes tuned per theme.
+Top-bar buttons are ghost buttons, the view switch is a segmented track. Cards: round agent icons
+(the only colour in a header), quiet chips, status = dot + text, "Needs you" a soft amber pill; split
+buttons and the broadcast box show on hover/focus; the `...` card menu moved into the header; the key
+row (Esc, Ctrl+C, ...) and copy/rename/close show only while the card has focus (all also in `...`).
+Rail = a timeline: every status dot in one column on a thin line. Theme: `system` (default, follows
+`prefers-color-scheme` live) / light / dark / high contrast; a top-bar button cycles System -> Light ->
+Dark (saved with `LS`); Settings and Ctrl+K have "Theme: system".
+**Bug fixed on the way:** a card's `...` menu closed whenever ANY element scrolled (window scroll
+listener in capture mode), so a streaming pane closed it at once; now only a scroll that moves the
+trigger closes it (`ui.js openMenu`).
+**Proof:** `build.ps1 -Output app\HerdrDeck.r6.exe` exit 0 (go test ok); `node --test` 38/38.
+Shots `tasks/deck-r6-shots/r6-{dark,light}-{2,4}cards-{1900x1030,1280x720}.png`, `*-more-menu-*`,
+`*-card-menu-*` (mock page; menus shot over DevTools because `--screenshot` resizes the window and a
+resize closes menus). `verify-ui.ps1` not run for this phase.
+**Lesson:** #101.
