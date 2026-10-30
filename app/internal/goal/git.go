@@ -6,20 +6,31 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
+	"regexp"
 	"strings"
 	"time"
 )
 
+func init() {
+	os.Setenv("GIT_TERMINAL_PROMPT", "0") // git never waits for a password prompt
+	os.Setenv("GIT_EDITOR", "true")
+}
+
+// gitTimeout bounds every git call: a hung git (lock, prompt, network) must not hang the runner.
+var gitTimeout = 3 * time.Minute
+
 func git(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true")
-	hideWindow(cmd)
-	out, err := cmd.CombinedOutput()
-	s := strings.TrimSpace(string(out))
+	return gitCtx(context.Background(), dir, args...)
+}
+
+func gitCtx(ctx context.Context, dir string, args ...string) (string, error) {
+	full := append([]string{"-c", "core.quotepath=false"}, args...)
+	out, err, timedOut := runBounded(ctx, dir, gitTimeout, 256<<10, "git", full...)
+	s := strings.TrimSpace(out)
+	if timedOut {
+		return s, fmt.Errorf("git %s: timed out after %s", strings.Join(args, " "), gitTimeout)
+	}
 	if err != nil {
 		return s, fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, oneLine(s, 300))
 	}
@@ -108,17 +119,44 @@ func (w Workspace) TaskWorktree(g *Goal, t *Task) error {
 	return err
 }
 
-// SaveWork commits anything an agent left uncommitted, so no work is lost when it dies or forgets.
+// autosaveSkip are untracked paths never auto-committed: caches, dependencies, builds, logs and
+// anything that looks like a secret. An agent that wants them committed commits them itself.
+var autosaveSkip = regexp.MustCompile(`(?i)(^|/)(__pycache__|node_modules|\.venv|venv|\.pytest_cache|\.mypy_cache|\.gradle|target|bin|obj|dist|build|\.next|\.cache|coverage)(/|$)|\.(pyc|pyo|class|o|obj|exe|dll|so|dylib|log|tmp|swp|pem|key|pfx|p12|kdbx)$|(^|/)(\.env(\..*)?|id_rsa.*|id_ed25519.*|credentials.*|secrets?\..*|auth\.json|\.netrc|\.npmrc|\.pypirc)$`)
+
+const autosaveMaxBytes = 5 << 20
+
+// SaveWork commits what an agent left behind, selectively: changes to tracked files, plus new files
+// that are not caches, dependencies, builds, secrets or larger than 5 MB. It reports what it skipped.
 func (w Workspace) SaveWork(t *Task, who string) (bool, error) {
 	if t.Worktree == "" {
 		return false, nil
 	}
-	st, err := git(t.Worktree, "status", "--porcelain")
-	if err != nil || st == "" {
+	if _, err := git(t.Worktree, "add", "-u"); err != nil {
 		return false, err
 	}
-	if _, err := git(t.Worktree, "add", "-A"); err != nil {
+	untracked, err := git(t.Worktree, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
 		return false, err
+	}
+	var add []string
+	for _, f := range strings.Split(untracked, "\x00") {
+		if f == "" || autosaveSkip.MatchString(f) {
+			continue
+		}
+		if st, err := os.Stat(filepath.Join(t.Worktree, f)); err != nil || st.Size() > autosaveMaxBytes {
+			continue
+		}
+		add = append(add, f)
+	}
+	for len(add) > 0 {
+		n := min(len(add), 100)
+		if _, err := git(t.Worktree, append([]string{"add", "--"}, add[:n]...)...); err != nil {
+			return false, err
+		}
+		add = add[n:]
+	}
+	if staged, _ := git(t.Worktree, "diff", "--cached", "--name-only"); staged == "" {
+		return false, nil
 	}
 	_, err = git(t.Worktree, "-c", "user.name=herdr-goal", "-c", "user.email=herdr-goal@localhost",
 		"commit", "-q", "--no-verify", "-m", fmt.Sprintf("herdr-goal: save uncommitted work of %s (%s)", who, t.ID))
@@ -159,32 +197,80 @@ var ErrConflict = errors.New("merge conflict")
 // Merge merges the task branch into the goal branch and runs the project's full tests there. Any
 // failure puts the goal branch back where it was, so a bad change never stays and good ones are kept.
 func (w Workspace) Merge(g *Goal, t *Task, timeout time.Duration) (sha, output string, err error) {
+	return w.MergeCtx(context.Background(), g, t, timeout)
+}
+
+// MergeCtx: the integration worktree may hold untracked files from test runs (caches, an offline
+// node_modules or venv the project needs). They are kept. Only the untracked files that the incoming
+// commit would overwrite - which git refuses to touch - are removed, and only when git names them.
+func (w Workspace) MergeCtx(ctx context.Context, g *Goal, t *Task, timeout time.Duration) (sha, output string, err error) {
 	dir := w.MainDir()
 	pre, err := w.Head()
 	if err != nil {
 		return "", "", err
 	}
-	// The integration worktree is the engine's own: test runs leave files there (caches, builds) that
-	// would block a merge. Start every merge from a clean tree.
-	git(dir, "reset", "-q", "--hard")
-	git(dir, "clean", "-q", "-fdx")
-	if out, err := git(dir, "-c", "user.name=herdr-goal", "-c", "user.email=herdr-goal@localhost",
-		"merge", "--no-ff", "--no-edit", "-m", fmt.Sprintf("herdr-goal %s: merge %s %s", g.ID, t.ID, t.Title), mergeTarget(t)); err != nil {
-		files, _ := git(dir, "diff", "--name-only", "--diff-filter=U")
+	gitCtx(ctx, dir, "reset", "-q", "--hard") // tracked files back to the goal branch; untracked kept
+	merge := func() (string, error) {
+		return gitCtx(ctx, dir, "-c", "user.name=herdr-goal", "-c", "user.email=herdr-goal@localhost",
+			"merge", "--no-ff", "--no-edit", "-m", fmt.Sprintf("herdr-goal %s: merge %s %s", g.ID, t.ID, t.Title), mergeTarget(t))
+	}
+	out, err := merge()
+	if err != nil {
+		if blocking := untrackedBlockers(out); len(blocking) > 0 {
+			for _, f := range blocking {
+				if p, ok := insideDir(dir, f); ok {
+					os.Remove(p)
+				}
+			}
+			out, err = merge()
+		}
+	}
+	if err != nil {
+		files, _ := gitCtx(ctx, dir, "diff", "--name-only", "--diff-filter=U")
 		git(dir, "merge", "--abort")
-		git(dir, "reset", "--hard", pre)
+		git(dir, "reset", "-q", "--hard", pre)
 		if files != "" {
 			return "", out, fmt.Errorf("%w in %s", ErrConflict, strings.ReplaceAll(files, "\n", ", "))
 		}
 		return "", out, err
 	}
-	ok, out := RunChecks(dir, g.Tests, timeout)
-	if !ok {
-		git(dir, "reset", "--hard", pre)
+	ok, out := RunChecksCtx(ctx, dir, g.Tests, timeout)
+	if !ok || ctx.Err() != nil {
+		git(dir, "reset", "-q", "--hard", pre)
+		if ctx.Err() != nil {
+			return "", out, fmt.Errorf("merge of %s cancelled; goal branch reset to %s", t.ID, short(pre))
+		}
 		return "", out, fmt.Errorf("the project's tests failed after merging %s; goal branch reset to %s", t.ID, short(pre))
 	}
 	sha, err = w.Head()
 	return sha, out, err
+}
+
+// untrackedBlockers reads git's "untracked working tree files would be overwritten" list.
+func untrackedBlockers(out string) []string {
+	var files []string
+	in := false
+	for _, l := range strings.Split(out, "\n") {
+		switch {
+		case strings.Contains(l, "untracked working tree files would be overwritten"):
+			in = true
+		case in && strings.HasPrefix(l, "\t"):
+			files = append(files, strings.TrimSpace(l))
+		case in:
+			in = false
+		}
+	}
+	return files
+}
+
+// insideDir resolves rel under dir and refuses anything that escapes it.
+func insideDir(dir, rel string) (string, bool) {
+	p := filepath.Join(dir, filepath.FromSlash(rel))
+	r, err := filepath.Rel(dir, p)
+	if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return p, true
 }
 
 // mergeTarget is the exact commit the reviewer approved, so later pushes to the branch are not merged
@@ -198,6 +284,7 @@ func mergeTarget(t *Task) string {
 
 // Revert undoes one merged task on the goal branch with a new commit; later good merges stay.
 func (w Workspace) Revert(t *Task) error {
+	git(w.MainDir(), "reset", "-q", "--hard")
 	if t.Merge == "" {
 		return fmt.Errorf("task %s was never merged", t.ID)
 	}
@@ -214,23 +301,23 @@ func (w Workspace) RemoveTask(t *Task) {
 
 // RunChecks runs commands in dir, stops at the first failure, returns the combined output tail.
 func RunChecks(dir string, cmds []string, timeout time.Duration) (bool, string) {
+	return RunChecksCtx(context.Background(), dir, cmds, timeout)
+}
+
+// RunChecksCtx runs commands in dir, stops at the first failure or on cancel, kills the whole process
+// tree on timeout or cancel, and keeps bounded output.
+func RunChecksCtx(ctx context.Context, dir string, cmds []string, timeout time.Duration) (bool, string) {
 	var out strings.Builder
 	for _, c := range cmds {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		var cmd *exec.Cmd
-		if runtime.GOOS == "windows" {
-			cmd = exec.CommandContext(ctx, "pwsh", "-NoProfile", "-Command", c)
-		} else {
-			cmd = exec.CommandContext(ctx, "sh", "-c", c)
-		}
-		cmd.Dir = dir
-		hideWindow(cmd)
-		b, err := cmd.CombinedOutput()
-		timedOut := ctx.Err() == context.DeadlineExceeded
-		cancel()
+		name, args := shellArgv(c)
+		b, err, timedOut := runBounded(ctx, dir, timeout, 64<<10, name, args...)
 		fmt.Fprintf(&out, "$ %s\n%s", c, b)
 		if timedOut {
-			fmt.Fprintf(&out, "TIMEOUT after %s\n", timeout)
+			fmt.Fprintf(&out, "TIMEOUT after %s (process tree killed)\n", timeout)
+			return false, tailString(out.String(), 4000)
+		}
+		if ctx.Err() != nil {
+			fmt.Fprintf(&out, "CANCELLED (process tree killed)\n")
 			return false, tailString(out.String(), 4000)
 		}
 		if err != nil {

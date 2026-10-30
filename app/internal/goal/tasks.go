@@ -1,6 +1,7 @@
 package goal
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -14,6 +15,7 @@ import (
 // schedule moves tasks forward: start writers and reviewers, run checks and merges.
 func (e *Engine) schedule() {
 	g := e.G
+	e.runReverts()
 	merging := false
 	for _, t := range g.Tasks {
 		switch t.State {
@@ -276,6 +278,7 @@ func (e *Engine) startAgent(role, task, profile, account string, retries map[str
 	home, _ := os.UserHomeDir()
 	env := map[string]string{"HERDR_GOAL": e.L.Dir, "HERDR_GOAL_ROLE": role, "HERDR_GOAL_AGENT": name}
 	if role == "lead" {
+		g.LeadNews = ""   // a new lead has been told nothing yet
 		tok := newToken() // this lead's own capability; replaced leads lose theirs
 		for h, r := range g.Tokens {
 			if r == "lead" {
@@ -443,8 +446,14 @@ func (e *Engine) taskAttemptFailed(a *AgentRun, why string) {
 		return
 	}
 	t.Attempts++
+	t.Total++
 	g.score(a.Profile).Failed++
 	t.Feedback = why
+	if t.Total >= 3*g.Limits.MaxAttempts {
+		e.failTask(t, fmt.Sprintf("failure budget used up (%d attempts across re-plans): %s", t.Total, why))
+		t.Note = "BUDGET: " + t.Note
+		return
+	}
 	if t.Attempts >= g.Limits.MaxAttempts {
 		e.failTask(t, why)
 		return
@@ -465,19 +474,31 @@ func (e *Engine) failTask(t *Task, why string) {
 	e.event("task-failed", "", t.ID, why)
 }
 
-func (e *Engine) startJob(key string, fn func(j *job)) *job {
+// startJob runs fn once per key in the background (inline in tests) and returns the finished job,
+// or nil while it runs. main jobs own the integration worktree: only one runs at a time (merge, verify,
+// revert). Every job has a cancel; cancelling kills its process tree.
+func (e *Engine) startJob(key string, main bool, fn func(ctx context.Context, j *job)) *job {
 	e.mu.Lock()
 	j := e.jobs[key]
 	if j == nil {
-		j = &job{}
+		if main {
+			for k, o := range e.jobs {
+				if o.main && !o.done && k != key {
+					e.mu.Unlock()
+					return nil // the integration worktree is busy; try on a later tick
+				}
+			}
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		j = &job{cancel: cancel, main: main}
 		e.jobs[key] = j
 		e.mu.Unlock()
 		if e.Sync {
-			fn(j)
+			fn(ctx, j)
 			j.done = true
 		} else {
 			go func() {
-				fn(j)
+				fn(ctx, j)
 				e.mu.Lock()
 				j.done = true
 				e.mu.Unlock()
@@ -490,17 +511,41 @@ func (e *Engine) startJob(key string, fn func(j *job)) *job {
 		return nil
 	}
 	delete(e.jobs, key)
+	j.cancel()
 	return j
 }
 
+// cancelJobs cancels running jobs whose key contains match ("" = all) and forgets them: a result that
+// arrives later is never applied.
+func (e *Engine) cancelJobs(match string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for k, j := range e.jobs {
+		if match == "" || strings.Contains(k, match) {
+			j.cancel()
+			delete(e.jobs, k)
+		}
+	}
+}
+
+func jobKey(kind string, t *Task) string { return fmt.Sprintf("%s:%s:%d", kind, t.ID, t.Gen) }
+
 func (e *Engine) runCheck(t *Task) {
 	dir, cmds, to := t.Worktree, t.Accept, e.G.Limits.VerifyTimeout.D()
-	j := e.startJob("check:"+t.ID, func(j *job) { j.ok, j.out = RunChecks(dir, cmds, to) })
+	head := e.W.BranchHead(t)
+	j := e.startJob(jobKey("check", t), false, func(ctx context.Context, j *job) {
+		j.ok, j.out = RunChecksCtx(ctx, dir, cmds, to)
+		j.sha = head
+	})
 	if j == nil {
 		return
 	}
+	if now := e.W.BranchHead(t); now != j.sha {
+		e.event("stale-result", "", t.ID, "checks ran on "+short(j.sha)+" but the branch is at "+short(now)+"; checking again")
+		return
+	}
 	if j.ok {
-		t.Proof = append(t.Proof, "task checks green: "+strings.Join(t.Accept, "; "))
+		t.Proof = append(t.Proof, "task checks green on "+short(j.sha)+": "+strings.Join(t.Accept, "; "))
 		t.State = TaskReview
 		e.event("task-review", "", t.ID, "checks green; to review")
 		return
@@ -514,13 +559,13 @@ func (e *Engine) runMerge(t *Task) {
 	g := e.G
 	w, to := e.W, g.Limits.VerifyTimeout.D()
 	tc := *t
-	j := e.startJob("merge:"+t.ID, func(j *job) { j.sha, j.out, j.err = w.Merge(g, &tc, to) })
+	j := e.startJob(jobKey("merge", t), true, func(ctx context.Context, j *job) { j.sha, j.out, j.err = w.MergeCtx(ctx, g, &tc, to) })
 	if j == nil {
 		return
 	}
 	if j.err == nil {
 		t.Merge, t.State = j.sha, TaskDone
-		t.Proof = append(t.Proof, "merged as "+short(j.sha)+"; project tests green")
+		t.Proof = append(t.Proof, "merged "+short(tc.ReviewHead)+" as "+short(j.sha)+"; project tests green")
 		g.score(t.Writer).Done++
 		e.unlock(t)
 		e.event("task-done", "", t.ID, "merged "+short(j.sha))
@@ -531,6 +576,33 @@ func (e *Engine) runMerge(t *Task) {
 	t.Reviews = 0
 	a := &AgentRun{Role: "write", Task: t.ID, Profile: t.Writer, Ended: true}
 	e.taskAttemptFailed(a, fmt.Sprintf("Merging your branch into %s failed: %v\nMerge %s into your branch, fix it, commit, then finish again.\n%s", g.Branch, j.err, g.Branch, j.out))
+}
+
+// runReverts applies queued reverts when the integration worktree is free.
+func (e *Engine) runReverts() {
+	g := e.G
+	if len(g.Reverts) == 0 {
+		return
+	}
+	t := g.Task(g.Reverts[0])
+	if t == nil || t.State != TaskDone || t.Reverted {
+		g.Reverts = g.Reverts[1:]
+		return
+	}
+	w := e.W
+	tc := *t
+	j := e.startJob("revert:"+t.ID, true, func(ctx context.Context, j *job) { j.err = w.Revert(&tc) })
+	if j == nil {
+		return
+	}
+	g.Reverts = g.Reverts[1:]
+	if j.err != nil {
+		e.event("revert-failed", "", t.ID, j.err.Error())
+		return
+	}
+	t.Reverted, t.State = true, TaskCancelled
+	g.Verify = nil
+	e.event("reverted", "", t.ID, "merge "+short(t.Merge)+" reverted; later merges kept")
 }
 
 // verify is the gate to done: the Supervisor runs the goal's acceptance itself on the goal branch.
@@ -580,7 +652,7 @@ func (e *Engine) verify() {
 	if g.Verify == nil || g.Verify.Head != head {
 		g.Verify = &VerifyRun{Head: head, Started: T(e.Now())}
 	}
-	j := e.startJob("verify", func(j *job) { j.ok, j.out = RunChecks(dir, cmds, to) })
+	j := e.startJob("verify:"+head, true, func(ctx context.Context, j *job) { j.ok, j.out = RunChecksCtx(ctx, dir, cmds, to) })
 	if j == nil {
 		return
 	}

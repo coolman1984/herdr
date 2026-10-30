@@ -1,6 +1,7 @@
 package goal
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +36,7 @@ type Engine struct {
 	Probe   Probes
 	Decide  Decider
 	Sync    bool // run checks and merges inside the tick (tests); else in the background
+	Gen     int  // this runner's generation; a newer one on disk means this runner must stop writing
 	G       *Goal
 	Log     func(string)
 	mu      sync.Mutex
@@ -43,11 +45,13 @@ type Engine struct {
 }
 
 type job struct {
-	done bool
-	ok   bool
-	out  string
-	sha  string
-	err  error
+	cancel context.CancelFunc
+	main   bool
+	done   bool
+	ok     bool
+	out    string
+	sha    string
+	err    error
 }
 
 func Open(dir string, b Backend) (*Engine, error) {
@@ -71,7 +75,7 @@ func (e *Engine) event(kind, agent, task, detail string, screen ...string) {
 		ev.Screen = tailText(screen[0], 25)
 	}
 	e.pending = append(e.pending, ev)
-	if kind != "nudge-skip" {
+	if progressKinds[kind] {
 		e.G.LastEvent = T(e.Now())
 	}
 	if e.Log != nil {
@@ -79,8 +83,25 @@ func (e *Engine) event(kind, agent, task, detail string, screen ...string) {
 	}
 }
 
+// progressKinds are the events that move the product forward. Restarts, nudges, deaths and retries
+// are activity, not progress: a goal stuck in a restart loop must still hit the no-progress limit.
+var progressKinds = map[string]bool{
+	"goal-created": true, "task-added": true, "result": true, "task-checking": true, "task-review": true,
+	"task-approved": true, "task-done": true, "acceptance-passed": true, "reverted": true, "command": true,
+	"goal-running": true, "runner-start": false,
+}
+
+// ErrSuperseded: a newer runner generation owns the ledger; this one must stop.
+var ErrSuperseded = errors.New("a newer runner owns this goal; stopping")
+
 // flush writes events first, then the state: an event can at worst be duplicated, never lost.
 func (e *Engine) flush() error {
+	if e.Gen > 0 {
+		if disk, err := e.L.Load(); err == nil && disk.RunnerGen > e.Gen {
+			e.pending = nil
+			return ErrSuperseded
+		}
+	}
 	if err := e.L.Append(e.pending...); err != nil {
 		return err
 	}

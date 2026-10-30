@@ -49,7 +49,7 @@ type Limits struct {
 	MaxAgents       int      `json:"max_agents"`        // agents alive at once (lead excluded)
 	MinFreeRAMMB    int      `json:"min_free_ram_mb"`   // no new agent below this
 	MinFreeDiskMB   int      `json:"min_free_disk_mb"`  // no new agent below this
-	NoProgress      Duration `json:"no_progress"`       // no ledger event for this long: stop and report
+	NoProgress      Duration `json:"no_progress"`       // no progress event (result, merge, re-plan ...) this long: stop and report
 	StartTimeout    Duration `json:"start_timeout"`     // agent must show it began (ack/working/output)
 	AckTimeout      Duration `json:"ack_timeout"`       // message must be acknowledged
 	StallAfter      Duration `json:"stall_after"`       // unchanged normalized screen while working
@@ -93,7 +93,8 @@ type Task struct {
 	Reviewer   string   `json:"reviewer,omitempty"`
 	State      string   `json:"state"`
 	Attempts   int      `json:"attempts"`
-	Gen        int      `json:"gen"` // bumped on every change by the lead/owner; stale job results are dropped
+	Total      int      `json:"total_attempts"` // across re-plans; a budget the lead cannot reset
+	Gen        int      `json:"gen"`            // bumped on every change by the lead/owner; stale job results are dropped
 	Reviews    int      `json:"reviews"`
 	Branch     string   `json:"branch,omitempty"`
 	ReviewHead string   `json:"review_head,omitempty"` // the commit the reviewer was given; merged exactly
@@ -192,9 +193,11 @@ type Goal struct {
 	Verify      *VerifyRun           `json:"verify,omitempty"`
 	LastEvent   Time                 `json:"last_event"`
 	Waiting     Time                 `json:"waiting_until"`
-	Tokens      map[string]string    `json:"tokens"`       // token hash -> role (owner, lead)
-	InboxOff    int64                `json:"inbox_offset"` // commands applied from inbox.jsonl
-	LeadSeen    int                  `json:"lead_seen"`    // event seq the lead was last nudged at
+	Reverts     []string             `json:"reverts,omitempty"` // queued; run when the integration worktree is free
+	RunnerGen   int                  `json:"runner_gen"`        // bumped by each runner that takes over
+	Tokens      map[string]string    `json:"tokens"`            // token hash -> role (owner, lead)
+	InboxOff    int64                `json:"inbox_offset"`      // commands applied from inbox.jsonl
+	LeadSeen    int                  `json:"lead_seen"`         // event seq the lead was last nudged at
 	LeadStarts  int                  `json:"lead_starts"`
 	LeadNews    string               `json:"lead_news"` // what the lead was last told about
 	Decider     []string             `json:"decider,omitempty"`

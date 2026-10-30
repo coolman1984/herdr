@@ -552,3 +552,9 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     written by hand; the watchdog never typed into a dead pane, but `perform` would have. Every gate
     (role, agent alive and owned, review status, dependency success, path ownership, validation before
     effect) now sits where the action happens, with a test that writes the bad input directly there.
+111. **Activity is not progress** (2026-10-30, soak round 5): every restart, nudge and death wrote an event,
+    and events reset the no-progress timer, so a goal looping for 15 minutes looked alive. Count only
+    events that move the product (results, checks, reviews, merges, re-plans). Likewise a replacement
+    lead starts knowing nothing: tell it the open problems again.
+112. **`kill(pid, 0)` succeeds for a zombie** (2026-10-30): in a container whose init does not reap,
+    a killed child stays a zombie and looked alive; read the state letter in `/proc/<pid>/stat`.

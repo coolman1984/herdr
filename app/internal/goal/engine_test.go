@@ -614,6 +614,7 @@ func TestMergeConflictGoesBackToWriterAndRevertKeepsOthers(t *testing.T) {
 	if err := r.e.apply(Command{Cmd: "revert", By: "lead", Args: json.RawMessage(`{"id":"T1"}`)}); err != nil {
 		t.Fatal(err)
 	}
+	r.tick() // reverts run when the integration worktree is free
 	main := r.e.W.MainDir()
 	if _, err := os.Stat(filepath.Join(main, "T1.txt")); err == nil {
 		t.Fatal("T1 still on the goal branch after revert")

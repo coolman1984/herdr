@@ -1,7 +1,9 @@
 package goal
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -121,3 +123,263 @@ func TestReviewBoundToTheReviewedCommit(t *testing.T) {
 }
 
 var _ = time.Second
+
+// Audit #1: one runner by OS lock, a newer generation fences an old writer.
+func TestRunnerLockIsExclusiveAndReleased(t *testing.T) {
+	dir := t.TempDir()
+	_, release, err := takeLock(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !runnerAlive(dir) {
+		t.Fatal("held lock not seen")
+	}
+	if _, _, err := takeLock(dir); err == nil {
+		t.Fatal("two runners took the same goal")
+	}
+	release()
+	if runnerAlive(dir) {
+		t.Fatal("released lock still seen as a live runner")
+	}
+	_, release2, err := takeLock(dir)
+	if err != nil {
+		t.Fatalf("lock not reusable after release: %v", err)
+	}
+	release2()
+}
+
+func TestOldRunnerGenerationCannotWrite(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.e.Gen = 1
+	r.e.G.RunnerGen = 1
+	r.tick()
+	newer, _ := r.e.L.Load()
+	newer.RunnerGen = 2
+	r.e.L.Save(newer)
+	r.e.G.Tasks[0].Title = "written by the old runner"
+	if err := r.e.Tick(); err != ErrSuperseded {
+		t.Fatalf("old runner kept writing: %v", err)
+	}
+	if g, _ := r.e.L.Load(); g.Tasks[0].Title == "written by the old runner" {
+		t.Fatal("old runner's state reached disk")
+	}
+}
+
+func pidAlive(t *testing.T, pidFile string) bool {
+	t.Helper()
+	b, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("no pid file: %v", err)
+	}
+	var pid int
+	fmt.Sscan(strings.TrimSpace(string(b)), &pid)
+	return processAlive(pid)
+}
+
+// Audit #5/#10: cancel and timeout kill the whole process tree, not only the shell.
+func TestCancelAndTimeoutKillTheProcessTree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh fixture")
+	}
+	dir := t.TempDir()
+	cmd := "sleep 60 & echo $! > child.pid; wait"
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { time.Sleep(700 * time.Millisecond); cancel() }()
+	start := time.Now()
+	ok, out := RunChecksCtx(ctx, dir, []string{cmd}, time.Minute)
+	if ok || time.Since(start) > 15*time.Second || !strings.Contains(out, "CANCELLED") {
+		t.Fatalf("cancel: ok=%v after %s: %s", ok, time.Since(start), out)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if pidAlive(t, filepath.Join(dir, "child.pid")) {
+		t.Fatal("cancelled check left its child running")
+	}
+	os.Remove(filepath.Join(dir, "child.pid"))
+	ok, out = RunChecksCtx(context.Background(), dir, []string{cmd}, 700*time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
+	if ok || !strings.Contains(out, "TIMEOUT") || pidAlive(t, filepath.Join(dir, "child.pid")) {
+		t.Fatalf("timeout did not kill the tree: %s", out)
+	}
+}
+
+func TestCheckOutputIsBounded(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh fixture")
+	}
+	out, _, _ := runBounded(context.Background(), t.TempDir(), time.Minute, 64<<10, "sh", "-c", "head -c 20000000 /dev/zero | tr '\\0' x")
+	if len(out) > 70<<10 || !strings.Contains(out, "earlier bytes dropped") {
+		t.Fatalf("output not bounded: %d bytes", len(out))
+	}
+}
+
+// Audit #5: a check result for an older task generation is never applied.
+func TestStaleCheckResultIsDropped(t *testing.T) {
+	r := newRig(t, Task{ID: "T1", Title: "t", Spec: "s", Accept: []string{"sleep 2"}})
+	r.e.Sync = false
+	r.tick()
+	r.finish("T1", Answer{Status: "done"})
+	r.tick() // checks start in the background
+	if r.e.G.Task("T1").State != TaskChecking {
+		t.Fatalf("state %s", r.e.G.Task("T1").State)
+	}
+	if err := r.e.apply(Command{Cmd: "task-update", By: "lead", Args: json.RawMessage(`{"id":"T1","spec":"new spec"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(3 * time.Second)
+	r.tick()
+	if len(r.events("task-review")) != 0 || r.e.G.Task("T1").State == TaskReview {
+		t.Fatal("a check of the old spec moved the changed task to review")
+	}
+}
+
+// Audit #4: one job at a time owns the integration worktree.
+func TestIntegrationWorktreeHasOneOwner(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.e.Sync = false
+	release := make(chan struct{})
+	if j := r.e.startJob("merge:A:0", true, func(ctx context.Context, j *job) { <-release }); j != nil {
+		t.Fatal("job finished early")
+	}
+	ran := false
+	if j := r.e.startJob("revert:B", true, func(ctx context.Context, j *job) { ran = true }); j != nil || ran {
+		t.Fatal("a second job touched the integration worktree while a merge held it")
+	}
+	close(release)
+	time.Sleep(100 * time.Millisecond)
+	r.e.startJob("merge:A:0", true, nil)
+	time.Sleep(50 * time.Millisecond)
+	for i := 0; i < 20 && !ran; i++ {
+		r.e.startJob("revert:B", true, func(ctx context.Context, j *job) { ran = true })
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !ran {
+		t.Fatal("worktree never freed")
+	}
+}
+
+// Audit #10: offline dependencies in the integration worktree survive a merge; only files git names as
+// blocking are removed.
+func TestMergeKeepsUntrackedDependencies(t *testing.T) {
+	r := newRig(t, task("T1"))
+	main := r.e.W.MainDir()
+	os.MkdirAll(filepath.Join(main, "node_modules", "lib"), 0o755)
+	os.WriteFile(filepath.Join(main, "node_modules", "lib", "index.js"), []byte("offline\n"), 0o644)
+	os.WriteFile(filepath.Join(main, "T1.txt"), []byte("left by a test run\n"), 0o644) // T1 adds a tracked T1.txt
+	r.tick()
+	r.finish("T1", Answer{Status: "done"})
+	r.tick()
+	r.tick()
+	r.finish("T1", Answer{Status: "done", Verdict: "pass"})
+	r.tick()
+	if r.e.G.Task("T1").State != TaskDone {
+		t.Fatalf("merge blocked by an untracked file: %s %v", r.e.G.Task("T1").State, r.events("merge-failed"))
+	}
+	if _, err := os.Stat(filepath.Join(main, "node_modules", "lib", "index.js")); err != nil {
+		t.Fatal("merge deleted untracked offline dependencies")
+	}
+}
+
+// Soak round 5: a restart loop is activity, not progress; the no-progress limit still fires.
+func TestRestartLoopIsNotProgress(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.tick()
+	for i := 0; i < 50 && r.e.G.State == GoalRunning; i++ {
+		r.advance(time.Minute)
+		if a := r.agentOf("T1"); a != nil {
+			a.Begun = true
+			r.b.agents[a.Name].exists = false // dies every minute after working a while
+		}
+		r.tick()
+	}
+	if r.e.G.State != GoalStopped {
+		t.Fatalf("restart loop kept the goal alive: %s", r.e.G.State)
+	}
+}
+
+// Soak round 5: a replacement lead is told about the open problems again.
+func TestNewLeadIsToldAboutOpenProblems(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.e.G.Lead = "alpha"
+	r.e.G.Profiles[0].Roles = append(r.e.G.Profiles[0].Roles, "lead")
+	r.e.G.Limits.MaxAgents = 3
+	r.e.G.Task("T1").State = TaskFailed
+	nudged := func() int {
+		n := 0
+		for _, a := range r.e.G.Agents {
+			if a.Role == "lead" {
+				for _, s := range r.b.agents[a.Name].sent {
+					if strings.Contains(s, "Next step needed") {
+						n++
+					}
+				}
+			}
+		}
+		return n
+	}
+	idle := func() {
+		for _, a := range r.e.G.Agents {
+			if a.Role == "lead" && !a.Ended {
+				a.Begun = true
+				f := r.b.agents[a.Name]
+				f.status, f.screen = StatusIdle, "> "+a.Name
+			}
+		}
+	}
+	r.tick()
+	idle()
+	r.tick()
+	if nudged() != 1 {
+		t.Fatalf("first lead nudges %d", nudged())
+	}
+	for _, a := range r.e.G.Agents {
+		if a.Role == "lead" && !a.Ended {
+			r.b.agents[a.Name].exists = false
+		}
+	}
+	r.tick()
+	idle()
+	r.tick()
+	if nudged() != 2 {
+		t.Fatalf("replacement lead was never told about the failed task (nudges %d)", nudged())
+	}
+}
+
+func TestAutosaveSkipsCachesSecretsAndHugeFiles(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.tick()
+	wt := r.agentOf("T1").Cwd
+	files := map[string]int{"src/app.py": 10, "__pycache__/app.cpython-313.pyc": 10, ".env": 10, "keys/server.pem": 10, "node_modules/x/i.js": 10, "big.bin": 6 << 20}
+	for f, n := range files {
+		os.MkdirAll(filepath.Dir(filepath.Join(wt, f)), 0o755)
+		os.WriteFile(filepath.Join(wt, f), []byte(strings.Repeat("x", n)), 0o644)
+	}
+	if ok, err := r.e.W.SaveWork(r.e.G.Task("T1"), "w"); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	got, _ := git(wt, "show", "--name-only", "--format=", "HEAD")
+	if got != "src/app.py" {
+		t.Fatalf("autosave committed %q, want only src/app.py", got)
+	}
+}
+
+func TestFailureBudgetSurvivesReplans(t *testing.T) {
+	r := newRig(t, task("T1"))
+	for i := 0; i < 20; i++ {
+		tt := r.e.G.Task("T1")
+		if strings.HasPrefix(tt.Note, "BUDGET:") {
+			break
+		}
+		if tt.State == TaskFailed {
+			if err := r.e.apply(Command{Cmd: "task-retry", By: "lead", Args: json.RawMessage(`{"id":"T1"}`)}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		r.e.taskAttemptFailed(&AgentRun{Role: "write", Task: "T1", Profile: "alpha", Ended: true}, "boom")
+	}
+	if !strings.HasPrefix(r.e.G.Task("T1").Note, "BUDGET:") {
+		t.Fatal("lead retries reset the failure budget for ever")
+	}
+	if err := r.e.apply(Command{Cmd: "task-retry", By: "lead", Args: json.RawMessage(`{"id":"T1"}`)}); err == nil {
+		t.Fatal("lead retried past the budget")
+	}
+}

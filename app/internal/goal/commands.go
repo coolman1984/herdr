@@ -223,6 +223,9 @@ func (e *Engine) apply(c Command) error {
 		if t.State == TaskDone || t.State == TaskMerging {
 			return fmt.Errorf("task %s is %s; add a new task instead", t.ID, t.State)
 		}
+		if c.Cmd == "task-retry" && strings.HasPrefix(t.Note, "BUDGET:") && c.By != "owner" {
+			return fmt.Errorf("task %s used its whole failure budget; split it into new tasks instead", t.ID)
+		}
 		if a.Writer != "" && g.Profile(a.Writer) == nil {
 			return fmt.Errorf("unknown profile %s", a.Writer)
 		}
@@ -240,6 +243,7 @@ func (e *Engine) apply(c Command) error {
 			e.endAgent(g.Agents[t.Agent], c.Cmd+" by "+c.By)
 		}
 		t.Agent = ""
+		e.cancelJobs(":" + t.ID + ":")
 		t.Gen++ // results of checks or reviews started before this change are now stale
 		switch c.Cmd {
 		case "task-cancel":
@@ -318,6 +322,7 @@ func (e *Engine) apply(c Command) error {
 	case "pause", "resume", "stop":
 		switch c.Cmd {
 		case "pause":
+			e.cancelJobs("")
 			e.stopAll("paused by " + c.By)
 			for _, t := range g.Tasks {
 				if t.State == TaskRunning || t.State == TaskReview {
@@ -332,6 +337,7 @@ func (e *Engine) apply(c Command) error {
 			g.LastEvent = T(e.Now())
 			e.setState(GoalRunning, "resumed by "+c.By)
 		case "stop":
+			e.cancelJobs("")
 			e.stopAll("stopped by " + c.By)
 			e.setState(GoalStopped, "stopped by "+c.By)
 		}
@@ -344,12 +350,15 @@ func (e *Engine) apply(c Command) error {
 		if t == nil || t.State != TaskDone || t.Reverted {
 			return fmt.Errorf("task %s is not a merged task", a.ID)
 		}
-		if err := e.W.Revert(t); err != nil {
-			return err
+		for _, q := range g.Reverts {
+			if q == t.ID {
+				return fmt.Errorf("revert of %s already queued", t.ID)
+			}
 		}
-		t.Reverted, t.State = true, TaskCancelled
-		g.Verify = nil
-		e.event("reverted", c.By, t.ID, "merge "+short(t.Merge)+" reverted; later merges kept")
+		g.Reverts = append(g.Reverts, t.ID) // applied by the scheduler when no merge or check holds the worktree
+		if g.State == GoalDone || g.State == GoalVerifying {
+			e.setState(GoalRunning, "revert of "+t.ID+" requested; acceptance runs again after it")
+		}
 	default:
 		return fmt.Errorf("unknown command %q", c.Cmd)
 	}

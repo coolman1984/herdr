@@ -1515,4 +1515,14 @@ valid worker. All six failed on Linux and Windows CI on cd84667 and again here o
 **Cause:** missing checks at the point of effect (send, review, deps, locks, command consumer).
 **Fix (part 1):** see the commit "fix the six audit regressions"; the findings table with status per row
 is in `docs/audits/goal-engine-response-20261030.md`.
+**Fix (part 2):** OS lock on `runner.lck` (flock / LockFileEx) held for the runner's life + a runner
+generation that fences an older writer (#1); one owner of the integration worktree for merge, verify and
+queued reverts (#4); background jobs with cancel, process-tree kill (process group / taskkill /T),
+bounded output, task generation and reviewed-commit checks so late results are dropped (#5); git calls
+time out; `clean -fdx` removed - only files git names as blocking a merge are removed, offline
+dependencies stay (#10); selective autosave (no caches, dependencies, builds, secrets, files > 5 MB);
+progress counted only from product events, a failure budget across re-plans the lead cannot reset, and a
+replacement lead is told the open problems again (#14; found by soak round 5: a lead killed every
+30-60 s kept a failed task un-replanned for 15 min and the no-progress limit never fired). On Linux a
+zombie counts as dead (`/proc/<pid>/stat`). Each fix has a test that fails on the previous commit.
 **Lesson:** #110.

@@ -20,6 +20,9 @@ func detach(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow | 0x00000200 | 0x00000008}
 }
 
+// newGroup: taskkill /T follows the child tree on Windows; nothing to set.
+func newGroup(cmd *exec.Cmd) {}
+
 func killTree(pid int) {
 	cmd := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(pid))
 	hideWindow(cmd)

@@ -266,24 +266,28 @@ type runnerLock struct {
 	Beat string `json:"beat"`
 }
 
-// takeLock makes the runner single: a live runner with a fresh heartbeat keeps the goal; a dead one's
-// lock is taken over (that is how a killed runner is replaced).
-func takeLock(dir string) (func(), error) {
-	p := filepath.Join(dir, "runner.lock")
-	if b, err := os.ReadFile(p); err == nil {
-		var l runnerLock
-		json.Unmarshal(b, &l)
-		t, _ := time.Parse(time.RFC3339, l.Beat)
-		if l.Pid != os.Getpid() && processAlive(l.Pid) && time.Since(t) < time.Minute {
-			return nil, fmt.Errorf("runner %d is already running this goal", l.Pid)
-		}
+// takeLock makes the runner single with an OS lock on runner.lck held for the runner's whole life:
+// no read-then-write race, no expiry while a busy runner lives, and released by the OS when it dies.
+// runner.lock keeps pid + heartbeat for people and `status` only.
+func takeLock(dir string) (func(), func(), error) {
+	f, err := os.OpenFile(filepath.Join(dir, "runner.lck"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, nil, err
 	}
+	if err := lockFile(f); err != nil {
+		f.Close()
+		if errors.Is(err, errLocked) {
+			return nil, nil, errors.New("another runner holds this goal (runner.lck is locked)")
+		}
+		return nil, nil, err
+	}
+	p := filepath.Join(dir, "runner.lock")
 	beat := func() {
 		b, _ := json.Marshal(runnerLock{Pid: os.Getpid(), Beat: time.Now().Format(time.RFC3339)})
 		writeAtomic(p, b)
 	}
 	beat()
-	return beat, nil
+	return beat, func() { f.Close() }, nil
 }
 
 func cmdRun(args []string) int {
@@ -301,10 +305,11 @@ func cmdRun(args []string) int {
 		return 2
 	}
 	dir, _ = filepath.Abs(dir)
-	beat, err := takeLock(dir)
+	beat, release, err := takeLock(dir)
 	if err != nil {
 		return fail(err)
 	}
+	defer release()
 	var b Backend
 	switch *backend {
 	case "herdr":
@@ -328,6 +333,8 @@ func cmdRun(args []string) int {
 	if len(e.G.Decider) > 0 {
 		e.Decide = CommandDecider(e.G.Decider)
 	}
+	e.G.RunnerGen++
+	e.Gen = e.G.RunnerGen
 	if err := e.Recover(); err != nil {
 		return fail(err)
 	}
@@ -338,6 +345,9 @@ func cmdRun(args []string) int {
 		beat()
 		if err := e.Tick(); err != nil {
 			fmt.Fprintln(os.Stderr, "tick:", err)
+			if errors.Is(err, ErrSuperseded) {
+				return 1
+			}
 		}
 		switch e.G.State {
 		case GoalDone, GoalFailed, GoalStopped, GoalNeedsOwner:
@@ -363,16 +373,14 @@ func cmdRun(args []string) int {
 	}
 }
 
-// runnerAlive reports whether a runner holds the goal (live pid, heartbeat under a minute old).
+// runnerAlive reports whether a runner holds the goal's OS lock (pid reuse cannot fool it).
 func runnerAlive(dir string) bool {
-	b, err := os.ReadFile(filepath.Join(dir, "runner.lock"))
+	f, err := os.OpenFile(filepath.Join(dir, "runner.lck"), os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return false
 	}
-	var l runnerLock
-	json.Unmarshal(b, &l)
-	t, _ := time.Parse(time.RFC3339, l.Beat)
-	return processAlive(l.Pid) && time.Since(t) < time.Minute
+	defer f.Close()
+	return errors.Is(lockFile(f), errLocked)
 }
 
 func terminal(state string) bool {
