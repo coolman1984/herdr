@@ -16,3 +16,6 @@ Selection pipeline:
 
 Known adaptation: webapp-testing recommends networkidle; long-lived SSE/websocket apps must instead wait on explicit app-ready signals/assertions, with bounded timeouts.
 Keep original vendor source and license. Document adaptations separately. Do not call these imported candidates proven on this project until their evals pass.
+
+
+Mandatory project override: before selecting any candidate, apply docs/COMPANY-ENVIRONMENT-POLICY.md and skills/herdr-environment-preflight/SKILL.md. Filter on measured environment, authorized NASCA/COM access, PowerShell-first capability, dependency policy, live resource budget, and per-provider account quota headroom. Research precedes the execution plan. No generic skill may silently install packages, parse encrypted corporate files directly, or assume unavailable resources.
