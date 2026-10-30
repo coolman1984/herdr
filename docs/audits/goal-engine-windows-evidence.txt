@@ -1,0 +1,50 @@
+2026-10-30T16:07:58.8766545Z     backend_test.go:27: shell fake
+2026-10-30T16:07:58.8767582Z --- SKIP: TestHerdrBackendCommandsAndPaneMemory (0.00s)
+2026-10-30T16:07:58.8768875Z --- PASS: TestProcBackendScreenIsOutputSinceLastInput (0.00s)
+2026-10-30T16:07:58.8770450Z --- PASS: TestTrustNeedsMenuFooter (0.01s)
+2026-10-30T16:07:58.8772422Z --- PASS: TestTrustKeysPickYesWhenNoIsHighlighted (0.01s)
+2026-10-30T16:07:58.8774012Z --- PASS: TestSecretQuestionButNotPasswordTalk (0.01s)
+2026-10-30T16:07:58.8775089Z --- PASS: TestParseReset (0.04s)
+2026-10-30T16:07:58.8776201Z --- PASS: TestProgressHashIgnoresTimerAndSpinner (0.00s)
+2026-10-30T16:07:58.8777018Z --- PASS: TestTrustInsideProjectIsAnswered (1.02s)
+2026-10-30T16:07:58.8777811Z --- PASS: TestTrustOutsideProjectGoesToOwner (0.82s)
+2026-10-30T16:07:58.8778595Z --- PASS: TestNothingIsTypedIntoASecretScreen (0.97s)
+2026-10-30T16:07:58.8779360Z --- PASS: TestDeadAgentRestartsAndKeepsWork (1.21s)
+2026-10-30T16:07:58.8780046Z --- PASS: TestBackendErrorIsNotDeath (1.04s)
+2026-10-30T16:07:58.8780778Z --- PASS: TestIdleWithoutResultIsNotDone (1.24s)
+2026-10-30T16:07:58.8781445Z --- PASS: TestStalledAgentIsNudged (1.44s)
+2026-10-30T16:07:58.8782088Z --- PASS: TestNotStartedResendsBrief (0.90s)
+2026-10-30T16:07:58.8783162Z --- PASS: TestCapacityContinuesThenSwitchesModel (1.12s)
+2026-10-30T16:07:58.8784260Z --- PASS: TestAccountLimitsRotateThenWaitThenResume (1.16s)
+2026-10-30T16:07:58.8785130Z --- PASS: TestRecoverNeitherLosesNorDoublesAStart (0.74s)
+2026-10-30T16:07:58.8785848Z --- PASS: TestLedgerSurvivesTornWrites (0.79s)
+2026-10-30T16:07:58.8786555Z --- PASS: TestMaxAgentsAndFreeMemoryGate (1.03s)
+2026-10-30T16:07:58.8787301Z --- PASS: TestFileReservationsSerializeTasks (0.80s)
+2026-10-30T16:07:58.8788166Z --- PASS: TestDependenciesAndIndependentReviewToDone (4.34s)
+2026-10-30T16:07:58.8791489Z --- PASS: TestDoneOnlyAfterTheSupervisorsOwnAcceptance (2.18s)
+2026-10-30T16:07:58.8793224Z --- PASS: TestDoneWithoutCommitIsRejected (0.98s)
+2026-10-30T16:07:58.8795533Z --- PASS: TestMergeConflictGoesBackToWriterAndRevertKeepsOthers (4.86s)
+2026-10-30T16:07:58.8797150Z --- PASS: TestFailingProjectTestsUndoTheMerge (2.18s)
+2026-10-30T16:07:58.8798385Z --- PASS: TestLeadCannotStopTheGoal (0.60s)
+2026-10-30T16:07:58.8800036Z --- PASS: TestCreateRefusesNonGitFolderAndCostlessProfiles (0.04s)
+2026-10-30T16:07:58.8801207Z --- PASS: TestNoProgressStops (0.86s)
+2026-10-30T16:07:58.8803188Z --- PASS: TestOnlySecretBlockedTasksLeftMeansNeedsOwnerEvenWithALead (2.14s)
+2026-10-30T16:07:58.8804310Z --- PASS: TestLeadHandsOffWhenContextIsLow (2.33s)
+2026-10-30T16:07:58.8805199Z --- PASS: TestMenuGoesToDeciderAndOnlyItsValidPick (0.94s)
+2026-10-30T16:07:58.8806092Z --- PASS: TestAgentsThatCannotStartAreCapped (3.03s)
+2026-10-30T16:07:58.8806642Z ok  	herdrdeck/internal/goal	39.883s
+2026-10-30T16:08:04.7253108Z     independent_audit_test.go:15: exited agent accepted input; shell must never receive agent instructions
+2026-10-30T16:08:04.7254384Z --- FAIL: TestIndependentAuditExitedAgentGetsNoInput (0.89s)
+2026-10-30T16:08:04.7256272Z     independent_audit_test.go:23: non-done review approved work
+2026-10-30T16:08:04.7258633Z --- FAIL: TestIndependentAuditBlockedReviewCannotApprove (0.66s)
+2026-10-30T16:08:04.7261788Z     independent_audit_test.go:28: cancelled prerequisite unlocked dependent work
+2026-10-30T16:08:04.7264206Z --- FAIL: TestIndependentAuditCancelledPrerequisiteIsNotSuccess (0.63s)
+2026-10-30T16:08:04.7267840Z     independent_audit_test.go:33: child path bypassed directory ownership
+2026-10-30T16:08:04.7268910Z --- FAIL: TestIndependentAuditDirectoryOwnershipIncludesChildren (0.60s)
+2026-10-30T16:08:04.7271465Z     independent_audit_test.go:38: inbox consumer accepted a delegate's owner-only command
+2026-10-30T16:08:04.7272568Z --- FAIL: TestIndependentAuditConsumerRejectsDelegateStop (0.59s)
+2026-10-30T16:08:04.7274743Z     independent_audit_test.go:45: rejected update stopped a valid running worker
+2026-10-30T16:08:04.7275809Z --- FAIL: TestIndependentAuditInvalidUpdateLeavesWorkerRunning (0.84s)
+2026-10-30T16:08:14.8252939Z ℹ tests 42
+2026-10-30T16:08:14.8253645Z ℹ pass 42
+2026-10-30T16:08:14.8254434Z ℹ fail 0

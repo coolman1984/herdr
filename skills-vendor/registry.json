@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "auto_activate": false,
+  "selection_policy": "POLICY.md",
+  "entries": [
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/condition-based-waiting-example.ts",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "703a06b653160d060bbf46ab5c6e0cd7446bd592",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/CREATION-LOG.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "9aa03092809feaf93c9bfa985252f6f1c9624692",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/find-polluter.sh",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "985f5d08ccf8a3f2d40739cfcaf4413bb24bf1cb",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/condition-based-waiting.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "70994f777c586f7d4c43033aac34c7cf0da6688b",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/test-driven-development/writing-good-tests.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "d3c4482fd30b4f9084bb61545fe73939a7502c28",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/test-pressure-2.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "2d2315ec8a24ca872bc80d2f4056468ba051462a",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/test-academic.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "23a6ed7a2044e0c44d74c3101406140f4851aa41",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "anthropics/skills",
+      "path": "skills/frontend-design/SKILL.md",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "blob": "a5333457c414d20d625f307df945842c0952ecc3",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "anthropics/skills",
+      "path": "skills/webapp-testing/LICENSE.txt",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "blob": "4f881c52d1f72f4cfb720e339e2d35c3058d01a9",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "anthropics/skills",
+      "path": "skills/webapp-testing/examples/static_html_automation.py",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "blob": "90bbedcc08cdb345c74fb938ebad02c0baf56603",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "anthropics/skills",
+      "path": "skills/webapp-testing/examples/console_logging.py",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "blob": "9329b5e232ed53d944bfe95e750070117d31b9ab",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/defense-in-depth.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "e2483354dc2b62478a2624e34ca18bc0efe887b2",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/verification-before-completion/SKILL.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "7d45333cc4a49c57a80df6c1fe2fa777a207afbc",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/SKILL.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "62fc752aaef59a8bbed5d305f4cadc60f8ae07ed",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/test-driven-development/SKILL.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "46838cc9e893c06259e3bdad0fc2425b36242f15",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "anthropics/skills",
+      "path": "skills/webapp-testing/examples/element_discovery.py",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "blob": "917ba72f52421a1b324f93ae8e38af72010a87b9",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/test-pressure-3.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "89734b86fdc756488df315d53e5c3ac2d3752cd8",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/test-pressure-1.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "8d13b467e4a98abfffd12161cbc3c418021d6023",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "obra/superpowers",
+      "path": "skills/systematic-debugging/root-cause-tracing.md",
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "blob": "0e72e8f9566b7ef85e814633d1feacad9d0c5868",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "anthropics/skills",
+      "path": "skills/webapp-testing/SKILL.md",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "blob": "4726215301db64a0cc4d41fc3219c61f37a30f4a",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "anthropics/skills",
+      "path": "skills/webapp-testing/scripts/with_server.py",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "blob": "431f2eba16b268b7f3e2ae4daae9db41c0289b6d",
+      "state": "candidate-not-evaluated"
+    },
+    {
+      "repository": "anthropics/skills",
+      "path": "skills/frontend-design/LICENSE.txt",
+      "commit": "ca45fc496a3436251f191354091d557da31c15b5",
+      "blob": "f433b1a53f5b830a205fd2df78e2b34974656c7b",
+      "state": "candidate-not-evaluated"
+    }
+  ]
+}

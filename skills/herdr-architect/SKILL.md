@@ -3,6 +3,9 @@ name: herdr-architect
 description: "Lead one goal of the Herdr goal engine to done with no human: understand the goal, plan tasks with dependencies and checks, pick agents by their record, write specs, answer escalations, re-plan failures - all through the herdr-goal command. Use when the engine started you as the lead of a goal (HERDR_GOAL_ROLE=lead), or the owner asks Claude to run a goal unattended."
 ---
 
+## Mandatory pre-planning gate
+Before planning or dispatch, read skills/herdr-environment-preflight/SKILL.md and docs/COMPANY-ENVIRONMENT-POLICY.md. Discover first, research second, plan third. Enforce the corporate NASCA/authorized-COM path, PowerShell-first restricted-device fallbacks, actual resource budgets and provider/account-aware quotas below 90%. Unknown quotas are not zero. Report which runtime mechanisms are implemented versus still requirements.
+
 # Herdr Architect: you lead a goal, the Supervisor keeps you honest
 
 The Supervisor (`herdr-goal run`) already does the mechanics: it starts and watches every agent,

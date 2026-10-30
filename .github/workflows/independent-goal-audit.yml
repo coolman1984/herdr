@@ -1,0 +1,65 @@
+name: Independent goal engine audit
+on:
+  push:
+    branches: [codex/goal-audit-20261030]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Original goal tests
+        id: original
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd app
+          result=0
+          go test -race -timeout 4m -count=1 -v ./internal/goal -skip IndependentAudit > original-tests.txt 2>&1 || result=$?
+          cat original-tests.txt
+          exit $result
+      - name: New behavioral regressions
+        id: regressions
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd app
+          result=0
+          go test -race -timeout 4m -count=1 -v ./internal/goal -run IndependentAudit > audit-tests.txt 2>&1 || result=$?
+          cat audit-tests.txt
+          exit $result
+      - name: Build real goal executable
+        shell: bash
+        run: |
+          cd app
+          go build ./cmd/herdr-goal
+      - name: Web behavioral tests
+        id: web
+        continue-on-error: true
+        shell: bash
+        run: node --test app/tests/web/*.test.mjs
+      - name: Keep evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-${{ matrix.os }}
+          path: app/*tests.txt
+      - name: Fail the audit when any behavioral suite fails
+        if: always() && (steps.original.outcome != 'success' || steps.regressions.outcome != 'success' || steps.web.outcome != 'success')
+        shell: bash
+        run: |
+          echo "A behavioral suite failed. Read the evidence artifacts; this is not a passing product certification."
+          exit 1
