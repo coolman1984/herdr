@@ -3,7 +3,9 @@ package goal
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -16,6 +18,13 @@ func (e *Engine) schedule() {
 	for _, t := range g.Tasks {
 		switch t.State {
 		case TaskPending:
+			if b := e.brokenDep(t); b != "" {
+				if note := "waiting for a re-plan: dependency " + b; t.Note != note {
+					t.Note = note
+					e.event("dependency-broken", "", t.ID, note)
+				}
+				continue
+			}
 			if !e.depsDone(t) || !e.locksFree(t) {
 				continue
 			}
@@ -66,7 +75,8 @@ func (e *Engine) schedule() {
 				continue
 			}
 			t.Reviewer = r
-			e.event("choose", "", t.ID, "reviewer "+r+" for writer "+t.Writer)
+			t.ReviewHead = e.W.BranchHead(t)
+			e.event("choose", "", t.ID, "reviewer "+r+" for writer "+t.Writer+" on "+short(t.ReviewHead))
 			e.startAgent("review", t.ID, r, "", nil, "")
 		case TaskChecking:
 			e.runCheck(t)
@@ -79,20 +89,57 @@ func (e *Engine) schedule() {
 	}
 }
 
+// depsDone: only a merged prerequisite counts. A cancelled or failed one is not success; brokenDep
+// names it so the lead can re-plan (task-update --deps).
 func (e *Engine) depsDone(t *Task) bool {
 	for _, d := range t.Deps {
 		dt := e.G.Task(d)
-		if dt == nil || dt.State != TaskDone && dt.State != TaskCancelled {
+		if dt == nil || dt.State != TaskDone {
 			return false
 		}
 	}
 	return true
 }
 
+func (e *Engine) brokenDep(t *Task) string {
+	for _, d := range t.Deps {
+		dt := e.G.Task(d)
+		if dt == nil {
+			return d + " (missing)"
+		}
+		if dt.State == TaskCancelled || dt.State == TaskFailed || dt.State == TaskBlocked {
+			return d + " (" + dt.State + ")"
+		}
+		if b := e.brokenDep(dt); b != "" {
+			return b
+		}
+	}
+	return ""
+}
+
+// normPath makes reservations comparable: forward slashes, no ./ or trailing slash, and on Windows
+// case-insensitive.
+func normPath(p string) string {
+	p = strings.ReplaceAll(strings.TrimSpace(p), "\\", "/")
+	p = path.Clean("/" + p)[1:]
+	if runtime.GOOS == "windows" {
+		p = strings.ToLower(p)
+	}
+	return p
+}
+
+// pathsOverlap: the same path, or one is a folder holding the other.
+func pathsOverlap(a, b string) bool {
+	a, b = normPath(a), normPath(b)
+	return a == b || a == "" || b == "" || strings.HasPrefix(b, a+"/") || strings.HasPrefix(a, b+"/")
+}
+
 func (e *Engine) locksFree(t *Task) bool {
 	for _, f := range t.Files {
-		if owner := e.G.Locks[f]; owner != "" && owner != t.ID {
-			return false
+		for held, owner := range e.G.Locks {
+			if owner != t.ID && pathsOverlap(f, held) {
+				return false
+			}
 		}
 	}
 	return true
@@ -228,6 +275,16 @@ func (e *Engine) startAgent(role, task, profile, account string, retries map[str
 	}
 	home, _ := os.UserHomeDir()
 	env := map[string]string{"HERDR_GOAL": e.L.Dir, "HERDR_GOAL_ROLE": role, "HERDR_GOAL_AGENT": name}
+	if role == "lead" {
+		tok := newToken() // this lead's own capability; replaced leads lose theirs
+		for h, r := range g.Tokens {
+			if r == "lead" {
+				delete(g.Tokens, h)
+			}
+		}
+		g.Tokens[tokenHash(tok)] = "lead"
+		env["HERDR_GOAL_TOKEN"] = tok
+	}
 	for k, v := range p.Env {
 		env[k] = strings.NewReplacer("{account}", account, "{home}", home).Replace(v)
 	}
@@ -334,6 +391,17 @@ func (e *Engine) finished(a *AgentRun, ans *Answer) {
 			e.taskAttemptFailed(a, "agent reports failure: "+ans.Summary+" "+ans.Notes)
 		}
 	case "review":
+		if ans.Status != "done" || ans.Verdict != "pass" && ans.Verdict != "fail" {
+			// blocked/failed/unclear: not a verdict on the work. Another reviewer looks at it.
+			e.event("review-invalid", a.Name, t.ID, fmt.Sprintf("status %q verdict %q is not a review result", ans.Status, ans.Verdict))
+			e.taskAttemptFailed(a, "reviewer gave no valid verdict: "+ans.Summary)
+			return
+		}
+		if head := e.W.BranchHead(t); t.ReviewHead != "" && head != t.ReviewHead {
+			e.event("review-stale", a.Name, t.ID, "branch moved from "+short(t.ReviewHead)+" to "+short(head)+" after review began; reviewing again")
+			t.ReviewHead, t.Reviewer = "", ""
+			return
+		}
 		if ans.Verdict == "pass" {
 			t.Proof = append(t.Proof, fmt.Sprintf("review pass by %s (%s): %s", a.Profile, e.kindOf(a.Profile), oneLine(ans.Summary, 200)))
 			t.State = TaskMerging
@@ -479,6 +547,12 @@ func (e *Engine) verify() {
 			failed++
 		case TaskBlocked:
 			blocked++
+		case TaskPending:
+			if e.brokenDep(t) != "" {
+				failed++ // cannot run until the lead re-plans it
+			} else {
+				open++
+			}
 		default:
 			open++
 		}

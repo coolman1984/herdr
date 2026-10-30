@@ -3,6 +3,9 @@ package goal
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +25,35 @@ type Command struct {
 	By   string          `json:"by"`
 	At   Time            `json:"at"`
 	Args json.RawMessage `json:"args,omitempty"`
+	// Token proves the sender's role; By is only what the sender claims and is replaced at the consumer.
+	Token string `json:"token,omitempty"`
+}
+
+// newToken makes a random capability token.
+func newToken() string {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}
+
+func tokenHash(t string) string {
+	h := sha256.Sum256([]byte("herdr-goal:" + t))
+	return hex.EncodeToString(h[:])
+}
+
+// senderToken is the token this process may present: the agent's own (HERDR_GOAL_TOKEN, given only to
+// the lead), else the owner key file. Delegates have none.
+func senderToken(dir string) string {
+	if t := os.Getenv("HERDR_GOAL_TOKEN"); t != "" {
+		return t
+	}
+	if r := os.Getenv("HERDR_GOAL_ROLE"); r != "" {
+		return ""
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "keys", "owner"))
+	return strings.TrimSpace(string(b))
 }
 
 // Enqueue appends a command. Safe while a runner works: appends of one short line are atomic enough on
@@ -35,7 +67,7 @@ func Enqueue(dir, cmd, by string, args any) (string, error) {
 		return "", err
 	}
 	id := fmt.Sprintf("c%d", time.Now().UnixNano())
-	line, _ := json.Marshal(Command{ID: id, Cmd: cmd, By: by, At: T(time.Now()), Args: raw})
+	line, _ := json.Marshal(Command{ID: id, Cmd: cmd, By: by, At: T(time.Now()), Args: raw, Token: senderToken(dir)})
 	f, err := os.OpenFile(filepath.Join(dir, "inbox.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return "", err
@@ -71,6 +103,13 @@ func (e *Engine) applyInbox() error {
 			e.event("command-rejected", "", "", "unreadable inbox line: "+jerr.Error())
 			continue
 		}
+		claimed := c.By
+		c.By = e.G.Tokens[tokenHash(c.Token)] // the role the token proves; "" when none
+		c.Token = ""
+		if c.By == "" {
+			e.event("command-rejected", "", "", fmt.Sprintf("%s %s claimed by %q: no valid token", c.ID, c.Cmd, claimed))
+			continue
+		}
 		if err := e.apply(c); err != nil {
 			e.event("command-rejected", "", "", fmt.Sprintf("%s %s by %s: %v", c.ID, c.Cmd, c.By, err))
 		} else {
@@ -81,8 +120,58 @@ func (e *Engine) applyInbox() error {
 
 var idRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$`)
 
+// allowed is the command authority at the consumer: who may do what, whatever the sender wrote.
+var allowed = map[string][]string{
+	"owner": {"*"},
+	"plan":  {"task-add"},
+	"lead":  {"task-add", "task-update", "task-retry", "task-cancel", "assume", "decide", "answer", "revert"},
+}
+
+func authorized(by, cmd string) bool {
+	for _, c := range allowed[by] {
+		if c == "*" || c == cmd {
+			return true
+		}
+	}
+	return false
+}
+
+// cycleWith reports a cycle if task id took deps.
+func (e *Engine) cycleWith(id string, deps []string) string {
+	seen := map[string]bool{}
+	var walk func(n string, trail []string) string
+	walk = func(n string, trail []string) string {
+		if n == id {
+			return strings.Join(append(trail, n), " -> ")
+		}
+		if seen[n] {
+			return ""
+		}
+		seen[n] = true
+		t := e.G.Task(n)
+		if t == nil {
+			return ""
+		}
+		for _, d := range t.Deps {
+			if c := walk(d, append(trail, n)); c != "" {
+				return c
+			}
+		}
+		return ""
+	}
+	for _, d := range deps {
+		if c := walk(d, []string{id}); c != "" {
+			return c
+		}
+	}
+	return ""
+}
+
 func (e *Engine) apply(c Command) error {
 	g := e.G
+	if !authorized(c.By, c.Cmd) {
+		return fmt.Errorf("%q may not run %s", c.By, c.Cmd)
+	}
 	switch c.Cmd {
 	case "task-add":
 		var t Task
@@ -116,15 +205,17 @@ func (e *Engine) apply(c Command) error {
 		g.Tasks = append(g.Tasks, &t)
 	case "task-cancel", "task-retry", "task-update":
 		var a struct {
-			ID       string   `json:"id"`
-			Feedback string   `json:"feedback"`
-			Spec     string   `json:"spec"`
-			Writer   string   `json:"writer"`
-			Accept   []string `json:"accept"`
+			ID       string    `json:"id"`
+			Feedback string    `json:"feedback"`
+			Spec     string    `json:"spec"`
+			Writer   string    `json:"writer"`
+			Accept   []string  `json:"accept"`
+			Deps     *[]string `json:"deps"`
 		}
 		if err := json.Unmarshal(c.Args, &a); err != nil {
 			return err
 		}
+		// Validate everything first: a rejected command has no effect at all.
 		t := g.Task(a.ID)
 		if t == nil {
 			return fmt.Errorf("no task %s", a.ID)
@@ -132,10 +223,24 @@ func (e *Engine) apply(c Command) error {
 		if t.State == TaskDone || t.State == TaskMerging {
 			return fmt.Errorf("task %s is %s; add a new task instead", t.ID, t.State)
 		}
+		if a.Writer != "" && g.Profile(a.Writer) == nil {
+			return fmt.Errorf("unknown profile %s", a.Writer)
+		}
+		if a.Deps != nil {
+			for _, d := range *a.Deps {
+				if g.Task(d) == nil {
+					return fmt.Errorf("unknown dependency %s", d)
+				}
+			}
+			if cyc := e.cycleWith(t.ID, *a.Deps); cyc != "" {
+				return fmt.Errorf("dependency cycle: %s", cyc)
+			}
+		}
 		if t.Agent != "" && g.Agents[t.Agent] != nil && !g.Agents[t.Agent].Ended {
 			e.endAgent(g.Agents[t.Agent], c.Cmd+" by "+c.By)
-			t.Agent = ""
 		}
+		t.Agent = ""
+		t.Gen++ // results of checks or reviews started before this change are now stale
 		switch c.Cmd {
 		case "task-cancel":
 			t.State = TaskCancelled
@@ -145,19 +250,22 @@ func (e *Engine) apply(c Command) error {
 				t.Spec = a.Spec
 			}
 			if a.Writer != "" {
-				if g.Profile(a.Writer) == nil {
-					return fmt.Errorf("unknown profile %s", a.Writer)
-				}
 				t.Writer = a.Writer
 			}
 			if a.Accept != nil {
 				t.Accept = a.Accept
 			}
+			if a.Deps != nil {
+				t.Deps = *a.Deps
+			}
 			if a.Feedback != "" {
 				t.Feedback = a.Feedback
 			}
-			if c.Cmd == "task-retry" || t.State == TaskFailed || t.State == TaskBlocked {
+			t.ReviewHead = ""
+			if c.Cmd == "task-retry" || t.State == TaskFailed || t.State == TaskBlocked || t.State == TaskCancelled {
 				t.State, t.Attempts, t.Reviews, t.Note = TaskPending, 0, 0, ""
+			} else if t.State == TaskChecking || t.State == TaskReview {
+				t.State = TaskRunning // changed work is checked and reviewed again
 			}
 		}
 		t.Updated = T(e.Now())
@@ -208,9 +316,6 @@ func (e *Engine) apply(c Command) error {
 			}
 		}
 	case "pause", "resume", "stop":
-		if c.By == "lead" {
-			return errors.New("the lead cannot pause, resume or stop the goal")
-		}
 		switch c.Cmd {
 		case "pause":
 			e.stopAll("paused by " + c.By)
@@ -295,7 +400,15 @@ func Create(n NewGoal, probe Probes, now time.Time) (*Goal, Ledger, error) {
 		Agents: map[string]*AgentRun{}, Accounts: map[string]*Account{}, Locks: map[string]string{},
 		Record: map[string]*Score{}, Decider: n.Decider}
 	l := Ledger{Dir: LedgerDir(top, n.ID)}
+	owner := newToken()
+	g.Tokens = map[string]string{tokenHash(owner): "owner"}
 	if err := l.Init(g); err != nil {
+		return nil, l, err
+	}
+	// The owner key is readable by the owner's account only. Agents run as the same user could still
+	// read it: real isolation needs agents under another OS account (docs/GOAL-ENGINE.md).
+	os.MkdirAll(filepath.Join(l.Dir, "keys"), 0o700)
+	if err := os.WriteFile(filepath.Join(l.Dir, "keys", "owner"), []byte(owner), 0o600); err != nil {
 		return nil, l, err
 	}
 	w := Workspace{Project: top, Ledger: l}

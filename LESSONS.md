@@ -547,3 +547,8 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     lead that worked 30-60 s between four chaos kills used up a lifetime cap of 3 restarts and the goal
     stopped at needs-owner - a human pulled in by a normal event. Count restarts only while the agent dies
     before it has begun and lasted `start_timeout`; that still stops a crash loop.
+110. **Check authority and liveness at the point of effect, not where the request is made** (2026-10-30,
+    audit PR #16): the CLI refused a delegate's `stop`, but the inbox consumer accepted the same line
+    written by hand; the watchdog never typed into a dead pane, but `perform` would have. Every gate
+    (role, agent alive and owned, review status, dependency success, path ownership, validation before
+    effect) now sits where the action happens, with a test that writes the bad input directly there.

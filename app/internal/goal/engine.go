@@ -124,9 +124,16 @@ func (e *Engine) perform(a Action) error {
 	case "stop":
 		return e.B.Stop(a.Agent)
 	case "send", "keys":
+		if ag := e.G.Agents[a.Agent]; ag == nil || ag.Ended {
+			return fmt.Errorf("refused to type into %s: no live agent run of this goal owns it", a.Agent)
+		}
 		o := e.B.Observe(a.Agent)
 		if o.Err != nil {
 			return o.Err
+		}
+		if !o.Exists || o.Status == StatusExited {
+			// The CLI is gone; whatever is left (a shell) must never get agent text as commands.
+			return fmt.Errorf("refused to type into %s: the agent has exited", a.Agent)
 		}
 		if s := e.P.Classify(o.Screen, e.Now()); s.Kind == "secret" {
 			return fmt.Errorf("refused to type into %s: it shows a secret request (%q)", a.Agent, s.Line)

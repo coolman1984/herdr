@@ -1504,3 +1504,15 @@ second runner refused, trust/crash/idle/limit/capacity/review-reject/merge-confl
 DONE in 51 s, acceptance re-run green by the script, 0 agents left. Soak: see below.
 **Not proven:** real CLIs and real Herdr panes (#108), Windows run, `check.ps1`.
 **Lesson:** #103-#108.
+
+## Phase 58 - Goal engine hardening after the independent audit (PR #16) (2026-10-30)
+
+**Symptom:** the independent audit (`docs/audits/goal-engine-independent-20261030.md`, 18 findings) and
+six regression tests (`app/internal/goal/independent_audit_test.go`) showed: text sent to an exited agent,
+a blocked review accepted as pass, a cancelled prerequisite counted as success, a child path bypassing a
+folder reservation, a delegate's stop accepted by the inbox consumer, and a rejected update stopping a
+valid worker. All six failed on Linux and Windows CI on cd84667 and again here on 3b6d8b1 (run before any fix).
+**Cause:** missing checks at the point of effect (send, review, deps, locks, command consumer).
+**Fix (part 1):** see the commit "fix the six audit regressions"; the findings table with status per row
+is in `docs/audits/goal-engine-response-20261030.md`.
+**Lesson:** #110.

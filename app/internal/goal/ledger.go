@@ -83,27 +83,29 @@ type Profile struct {
 }
 
 type Task struct {
-	ID       string   `json:"id"`
-	Title    string   `json:"title"`
-	Spec     string   `json:"spec"`
-	Deps     []string `json:"deps,omitempty"`
-	Accept   []string `json:"accept,omitempty"` // task acceptance, run by the Supervisor in the worktree
-	Files    []string `json:"files,omitempty"`  // reserved while the task runs
-	Writer   string   `json:"writer,omitempty"` // profile; empty = chosen by record
-	Reviewer string   `json:"reviewer,omitempty"`
-	State    string   `json:"state"`
-	Attempts int      `json:"attempts"`
-	Reviews  int      `json:"reviews"`
-	Branch   string   `json:"branch,omitempty"`
-	Worktree string   `json:"worktree,omitempty"`
-	Agent    string   `json:"agent,omitempty"` // current agent run name
-	Feedback string   `json:"feedback,omitempty"`
-	Result   string   `json:"result,omitempty"`
-	Merge    string   `json:"merge,omitempty"`    // merge commit on the goal branch
-	Reverted bool     `json:"reverted,omitempty"` // merge reverted by `revert`
-	Note     string   `json:"note,omitempty"`     // why failed/blocked
-	Proof    []string `json:"proof,omitempty"`    // evidence lines
-	Updated  Time     `json:"updated"`
+	ID         string   `json:"id"`
+	Title      string   `json:"title"`
+	Spec       string   `json:"spec"`
+	Deps       []string `json:"deps,omitempty"`
+	Accept     []string `json:"accept,omitempty"` // task acceptance, run by the Supervisor in the worktree
+	Files      []string `json:"files,omitempty"`  // reserved while the task runs
+	Writer     string   `json:"writer,omitempty"` // profile; empty = chosen by record
+	Reviewer   string   `json:"reviewer,omitempty"`
+	State      string   `json:"state"`
+	Attempts   int      `json:"attempts"`
+	Gen        int      `json:"gen"` // bumped on every change by the lead/owner; stale job results are dropped
+	Reviews    int      `json:"reviews"`
+	Branch     string   `json:"branch,omitempty"`
+	ReviewHead string   `json:"review_head,omitempty"` // the commit the reviewer was given; merged exactly
+	Worktree   string   `json:"worktree,omitempty"`
+	Agent      string   `json:"agent,omitempty"` // current agent run name
+	Feedback   string   `json:"feedback,omitempty"`
+	Result     string   `json:"result,omitempty"`
+	Merge      string   `json:"merge,omitempty"`    // merge commit on the goal branch
+	Reverted   bool     `json:"reverted,omitempty"` // merge reverted by `revert`
+	Note       string   `json:"note,omitempty"`     // why failed/blocked
+	Proof      []string `json:"proof,omitempty"`    // evidence lines
+	Updated    Time     `json:"updated"`
 }
 
 // AgentRun is one live (or finished) agent the Supervisor watches.
@@ -190,6 +192,7 @@ type Goal struct {
 	Verify      *VerifyRun           `json:"verify,omitempty"`
 	LastEvent   Time                 `json:"last_event"`
 	Waiting     Time                 `json:"waiting_until"`
+	Tokens      map[string]string    `json:"tokens"`       // token hash -> role (owner, lead)
 	InboxOff    int64                `json:"inbox_offset"` // commands applied from inbox.jsonl
 	LeadSeen    int                  `json:"lead_seen"`    // event seq the lead was last nudged at
 	LeadStarts  int                  `json:"lead_starts"`
@@ -296,6 +299,9 @@ func (l Ledger) Load() (*Goal, error) {
 	}
 	if g.Record == nil {
 		g.Record = map[string]*Score{}
+	}
+	if g.Tokens == nil {
+		g.Tokens = map[string]string{}
 	}
 	return g, nil
 }

@@ -125,6 +125,18 @@ func (w Workspace) SaveWork(t *Task, who string) (bool, error) {
 	return err == nil, err
 }
 
+// BranchHead is the task branch's current commit ("" when unknown).
+func (w Workspace) BranchHead(t *Task) string {
+	if t.Branch == "" {
+		return ""
+	}
+	out, err := git(w.Project, "rev-parse", "--verify", t.Branch)
+	if err != nil {
+		return ""
+	}
+	return out
+}
+
 // Ahead counts the task branch's commits that are not on the goal branch yet.
 func (w Workspace) Ahead(g *Goal, t *Task) int {
 	out, err := git(w.Project, "rev-list", "--count", g.Branch+".."+t.Branch)
@@ -157,7 +169,7 @@ func (w Workspace) Merge(g *Goal, t *Task, timeout time.Duration) (sha, output s
 	git(dir, "reset", "-q", "--hard")
 	git(dir, "clean", "-q", "-fdx")
 	if out, err := git(dir, "-c", "user.name=herdr-goal", "-c", "user.email=herdr-goal@localhost",
-		"merge", "--no-ff", "--no-edit", "-m", fmt.Sprintf("herdr-goal %s: merge %s %s", g.ID, t.ID, t.Title), t.Branch); err != nil {
+		"merge", "--no-ff", "--no-edit", "-m", fmt.Sprintf("herdr-goal %s: merge %s %s", g.ID, t.ID, t.Title), mergeTarget(t)); err != nil {
 		files, _ := git(dir, "diff", "--name-only", "--diff-filter=U")
 		git(dir, "merge", "--abort")
 		git(dir, "reset", "--hard", pre)
@@ -173,6 +185,15 @@ func (w Workspace) Merge(g *Goal, t *Task, timeout time.Duration) (sha, output s
 	}
 	sha, err = w.Head()
 	return sha, out, err
+}
+
+// mergeTarget is the exact commit the reviewer approved, so later pushes to the branch are not merged
+// unreviewed.
+func mergeTarget(t *Task) string {
+	if t.ReviewHead != "" {
+		return t.ReviewHead
+	}
+	return t.Branch
 }
 
 // Revert undoes one merged task on the goal branch with a new commit; later good merges stay.
