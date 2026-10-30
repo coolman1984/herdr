@@ -24,13 +24,17 @@ def main(argv=None):
     r.add_argument("--reference", action="append", default=[])
     r.add_argument("--title", default="docpipe report")
     r.add_argument("--lang", default="ar")
-    r.add_argument("--batch", type=int, default=2000)
+    r.add_argument("--batch", type=int, default=int(os.environ.get("DOCPIPE_BATCH_ROWS", "2000")))
+    r.add_argument("--export-approved", action="store_true",
+                   help="company_nasca: reading is not permission to export; set only when export of these values is approved")
     c = sub.add_parser("check")
     c.add_argument("--db", required=True)
     w = sub.add_parser("serve")
     w.add_argument("--db", required=True)
     w.add_argument("--host", default="127.0.0.1")
     w.add_argument("--port", type=int, default=8765)
+    w.add_argument("--allow-remote", action="store_true")
+    w.add_argument("--no-export", action="store_true")
     b = sub.add_parser("backup")
     b.add_argument("--db", required=True)
     b.add_argument("--to", required=True)
@@ -41,7 +45,7 @@ def main(argv=None):
         return 0 if res == "ok" else 1
     if a.cmd == "serve":
         from . import web
-        web.serve(a.db, a.host, a.port)
+        web.serve(a.db, a.host, a.port, a.allow_remote, not a.no_export)
         return 0
     if a.cmd == "backup":
         store.backup(store.connect(a.db), a.to)
@@ -63,7 +67,17 @@ def main(argv=None):
     for ref in a.reference:
         k, v = ref.rsplit("=", 1)
         refs[k.strip()] = v.strip()
-    res = report.build(db, os.path.join(a.out, "report.html"), os.path.join(a.out, "records.csv"), a.title, a.field, refs, a.lang)
+    if a.profile == "company_nasca" and not a.export_approved:
+        # Company policy: totals and checks only; no report, CSV or dashboard values leave the database.
+        res = {"cards": [], "checks": [], "quality": [], "issues": 0, "export": "not approved under company_nasca"}
+        for f in a.field:
+            for cur, t in pipeline.totals(db, f).items():
+                res["cards"].append((f + ("" if cur == "-" else f" ({cur})"), "withheld", t["count"]))
+                if (f if cur == "-" else f"{f} ({cur})") in refs:
+                    key = f if cur == "-" else f"{f} ({cur})"
+                    res["checks"].append((key, "withheld", "withheld", str(t["total"]) == str(__import__("decimal").Decimal(refs[key]))))
+    else:
+        res = report.build(db, os.path.join(a.out, "report.html"), os.path.join(a.out, "records.csv"), a.title, a.field, refs, a.lang)
     with open(os.path.join(a.out, "summary.json"), "w", encoding="utf-8") as f:
         json.dump({"files": statuses, **res}, f, ensure_ascii=False, indent=1, default=str)
     print(json.dumps(res, ensure_ascii=False, default=str))

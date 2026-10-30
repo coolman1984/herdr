@@ -1652,3 +1652,41 @@ lead's key is deleted.
 **Proof:** the 6 round-2 Go tests pass; new tests: every release path with a stop that never confirms, result
 handled only after the confirmed stop, cancelled job owned until joined, signature/forgery/replay, a walk of the
 whole ledger finding no key outside `keys/`. Fixture fix: the fake quota source now uses the test clock.
+
+## Phase 65 - docpipe after round 2: company policy before any read, no lost values, bounded and crash-safe (2026-10-30)
+
+**D1-D2 (P0):** under `company_nasca` the route is chosen from the file NAME before any byte is read: no
+hash, magic-byte sniff, ZIP listing or safety scan. Office types and CSV/TSV/TXT/PRN go to the authorized
+application (Excel/Word/PowerPoint over COM); PDF and unknown types are `needs-authorized-app` with the reason
+recorded - never a raw-parser fallback. Company identity is metadata-only (path, size, mtime, profile, parser
+version); personal identity = content hash + profile + parser version, so a policy or parser change never
+reuses an old import.
+**D3:** headers: duplicates become `Amount#2`, line breaks are normalised, a value under no header becomes
+`column N`, each with an issue; every file gets a count reconciliation (cells / values under headers /
+records) and a mismatch makes it `partial`.
+**D4:** CSV is decoded incrementally to choose the encoding, then streamed with `newline=""` (quoted line
+breaks kept; memory bounded: 500,000 rows at 25 MB peak).
+**D5:** totals run at 200 digits with `Inexact` trapped: exact or an error, never rounded.
+**D6-D7:** the 1904 date system flows from the workbook and the COM worker; Excel's fake 1900-02-29 (serial
+60) is refused and serials 1-59 are corrected; fractional serials keep the time; ISO `t="d"` cells are dates;
+an unknown cell type is kept as text with an issue - no non-empty value disappears.
+**Also fixed:** currency from the cell's number format; formula caches flagged stale when the workbook asks
+for recalculation on load; Word/PowerPoint table cells carry table/row/col identity; Word paragraphs inside
+tables are not counted twice (COM worker); limits before allocation (huge merges not expanded, shared-string
+and XML-part caps, row cap); import lease (one importer per file), monotonic checkpoints, migrations re-check
+the version inside the write lock, a source changed during import keeps nothing (`source-changed`), a full
+disk ends `disk-full` with a sound database that resumes; databases on network shares refused, new database
+files 0600.
+**Company output policy:** COM output goes to a 0700 work folder and is deleted on success and on failure;
+on a timeout only the Office process the worker itself created is killed (PID file; an instance that was
+already running - e.g. the owner's PowerPoint - is never quit); no `-ExecutionPolicy Bypass` (a blocking
+policy is reported as a capability fact); `run --profile company_nasca` writes counts and reference checks
+only, no values, unless `--export-approved`; the web server refuses non-loopback hosts without
+`--allow-remote`, can disable export, closes every connection, streams CSV.
+**CSV safety:** text starting with = + - @ is prefixed with ' in every human-facing CSV.
+**PowerShell-only path:** `tools/docpipe/docpipe.ps1` (COM worker -> `[decimal]` totals, header/duplicate
+handling, reconciliation, reference checks, export gate) for a PC with Office but no Python;
+`tests/ps/run-docpipe-ps.ps1` runs it on recorded worker output in Windows PowerShell 5.1 and 7 in CI.
+**Proof:** the 7 independent docpipe regressions pass; 19 new tests (`tests/test_round2_fixes.py`), all
+earlier tests, the 8 browser journeys; bench 300,000 xlsx rows 54 MB peak, totals exact.
+**Not proven:** Office/NASCA itself (no Office on CI or here: the PowerShell run uses recorded records).

@@ -72,11 +72,16 @@ jobs:
         shell: pwsh
         run: |
           $bad = 0
-          foreach ($f in @('tools/docpipe/com-extract.ps1')) {
+          foreach ($f in @('tools/docpipe/com-extract.ps1', 'tools/docpipe/docpipe.ps1', 'tools/docpipe/tests/ps/run-docpipe-ps.ps1')) {
             $errs = $null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errs)
             if ($errs) { Write-Output "PARSE ERROR $f : $($errs[0].Message)"; $bad++ } else { Write-Output "parses (pwsh 7): $f" }
           }
           powershell -NoProfile -Command "`$e=`$null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/docpipe/com-extract.ps1'), [ref]`$null, [ref]`$e); if (`$e) { 'PARSE ERROR (5.1): ' + `$e[0].Message; exit 1 } else { 'parses (Windows PowerShell 5.1)' }"
+          if ($LASTEXITCODE) { $bad++ }
+          # PowerShell-only pipeline on recorded worker output (no Office here), in 7 and in 5.1
+          pwsh -NoProfile -File tools/docpipe/tests/ps/run-docpipe-ps.ps1
+          if ($LASTEXITCODE) { $bad++ }
+          powershell -NoProfile -File tools/docpipe/tests/ps/run-docpipe-ps.ps1
           if ($LASTEXITCODE) { $bad++ }
           $office = foreach ($p in 'Excel.Application','Word.Application','PowerPoint.Application') { "$p registered: $([bool](Get-Item -Path "Registry::HKEY_CLASSES_ROOT\$p\CLSID" -ErrorAction SilentlyContinue))" }
           $office

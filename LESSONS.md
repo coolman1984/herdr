@@ -572,3 +572,10 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 116. **An owner question must survive the death of the agent that asked it** (2026-10-30, soak round 11): a
     restart is a fresh process that may not ask again, so "dead -> restart" silently skipped a sign-in /
     secret request. Rules that keep the human in the loop must be checked before recovery rules run.
+117. **A policy check that runs after a hash is too late** (2026-10-30, round-2 audit): computing a SHA-256
+    or sniffing magic bytes is already a read of the protected file. Decide the route from the name and
+    metadata first; only the authorized application touches the content.
+118. **Excel serial dates have three traps** (2026-10-30): the 1904 system (per workbook), the fake
+    1900-02-29 at serial 60 (serials 1-59 are one day off from a naive 1899-12-30 epoch), and fractional
+    serials that carry the time. Python's Decimal default precision (28 digits) silently rounds big sums -
+    set the precision and trap `Inexact`.

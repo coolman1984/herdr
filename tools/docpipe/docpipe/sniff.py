@@ -47,17 +47,40 @@ def kind_of(path):
 OFFICE_EXT = {".xlsx", ".xlsm", ".xls", ".docx", ".docm", ".doc", ".pptx", ".pptm", ".ppt", ".pdf"}
 
 
+# What the authorized Office applications open on a company PC (Excel also opens CSV/TXT/TSV).
+COM_EXT = {".xlsx", ".xlsm", ".xls", ".xlsb", ".csv", ".tsv", ".txt", ".prn",
+           ".docx", ".docm", ".doc", ".rtf", ".pptx", ".pptm", ".ppt"}
+
+
+def policy_route(path, profile):
+    """Decide the route from the file's NAME ONLY when a policy requires it - before any byte is read.
+    company_nasca: every file goes to an authorized application; a type with no authorized reader is a
+    documented blocked capability, never a raw-parser fallback. Returns (route, why) or (None, '')."""
+    if profile != "company_nasca":
+        return None, ""
+    ext = os.path.splitext(path)[1].lower()
+    if ext in COM_EXT:
+        return "com", "company_nasca: authorized Office application over COM (PowerShell bridge)"
+    if ext == ".pdf":
+        return "blocked", "company_nasca: no authorized PDF reader automation is wired on this device"
+    return "blocked", f"company_nasca: no authorized application is known for {ext or 'files without an extension'}"
+
+
+def kind_from_name(path):
+    """Kind from the extension only (used when content must not be read)."""
+    ext = os.path.splitext(path)[1].lower()
+    return {".xlsx": "xlsx", ".xlsm": "xlsx", ".docx": "docx", ".docm": "docx", ".pptx": "pptx", ".pptm": "pptx",
+            ".pdf": "pdf", ".csv": "csv", ".tsv": "csv", ".txt": "txt"}.get(ext, ext.lstrip(".") or "unknown")
+
+
 def route(path, kind, profile):
     """Which extractor may read this file, and why.
 
     company_nasca: every Office/PDF file goes to the authorized application (COM) whatever its bytes look
     like - a protected file may be a wrapper, and a parser failing on it does not mean it is damaged.
     Elsewhere: our own stdlib readers; a CFB file (legacy binary or encrypted) needs the application."""
-    ext = os.path.splitext(path)[1].lower()
-    if profile == "company_nasca" and (ext in OFFICE_EXT or kind in ("xlsx", "docx", "pptx", "pdf", "cfb")):
-        if kind == "pdf" or ext == ".pdf":
-            return "app-pdf", "company_nasca: PDF needs its authorized reader's automation; none is wired"
-        return "com", "company_nasca: authorized Office application over COM"
+    if profile == "company_nasca":
+        return policy_route(path, profile)
     if kind in ("xlsx", "docx", "pptx", "pdf", "csv", "txt"):
         return "native", "stdlib reader"
     if kind == "cfb":

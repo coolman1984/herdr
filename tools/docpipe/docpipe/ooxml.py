@@ -50,6 +50,17 @@ _REF = re.compile(r"([A-Z]+)(\d+)")
 
 # ---------- xlsx ----------
 
+# Limits that bound memory before allocation on hostile or broken files.
+MAX_MERGE_CELLS = 100_000          # a merged range larger than this is not expanded cell by cell
+MAX_SHARED_STRING_CHARS = 200_000_000
+MAX_XML_PART_BYTES = 256 << 20     # a docx/pptx part loaded whole must be smaller than this
+MAX_ROWS = 5_000_000
+
+
+class LimitExceeded(Exception):
+    pass
+
+
 def xlsx_records(path):
     """Yield dicts: sheet, sheet_hidden, row, col, cell, raw, kind (n/s/b/d/e/str), formula, row_hidden,
     is_date, date1904, merged (range or None)."""
@@ -57,6 +68,8 @@ def xlsx_records(path):
         wb = ET.fromstring(z.read("xl/workbook.xml"))
         pr = wb.find("m:workbookPr", NS)
         date1904 = pr is not None and pr.get("date1904") in ("1", "true")
+        calc = wb.find("m:calcPr", NS)
+        stale = calc is not None and calc.get("fullCalcOnLoad") in ("1", "true")
         rels = _rels(z, "xl/workbook.xml")
         strings = _shared_strings(z)
         datestyles = _date_styles(z)
@@ -66,39 +79,50 @@ def xlsx_records(path):
             if not part or part not in z.namelist():
                 continue
             merged = _merged(z, part)
-            yield from _sheet(z, part, name, state != "visible", strings, datestyles, date1904, merged)
+            for rec in _sheet(z, part, name, state != "visible", strings, datestyles, date1904, merged):
+                rec["stale_calc"] = stale
+                yield rec
 
 
 def _shared_strings(z):
     out = []
     if "xl/sharedStrings.xml" not in z.namelist():
         return out
+    total = 0
     with z.open("xl/sharedStrings.xml") as f:
         for ev, el in ET.iterparse(f, events=("end",)):
             if el.tag == _q("m", "si"):
-                out.append("".join(t.text or "" for t in el.iter(_q("m", "t"))))
+                s = "".join(t.text or "" for t in el.iter(_q("m", "t")))
+                total += len(s)
+                if total > MAX_SHARED_STRING_CHARS:
+                    raise LimitExceeded(f"shared strings exceed {MAX_SHARED_STRING_CHARS} characters")
+                out.append(s)
                 el.clear()
     return out
 
 
 def _date_styles(z):
-    """Indexes of cellXfs that format numbers as dates."""
+    """cellXfs index -> (is_date, currency or None) from the number format."""
     if "xl/styles.xml" not in z.namelist():
-        return set()
+        return {}
     root = ET.fromstring(z.read("xl/styles.xml"))
+    from .normalize import currency_of
     custom = {}
     nf = root.find("m:numFmts", NS)
     if nf is not None:
         for f in nf.findall("m:numFmt", NS):
-            code = re.sub(r"\[[^\]]*\]|\"[^\"]*\"", "", f.get("formatCode", ""))
-            custom[int(f.get("numFmtId"))] = bool(_DATE_FMT.search(code))
-    out = set()
+            raw = f.get("formatCode", "")
+            code = re.sub(r"\[[^\]]*\]|\"[^\"]*\"", "", raw)
+            cur = currency_of(re.sub(r"\[\$([^-\]]*)[^\]]*\]", r" \1 ", raw).replace('"', " "))
+            custom[int(f.get("numFmtId"))] = (bool(_DATE_FMT.search(code)), cur)
+    out = {}
     xfs = root.find("m:cellXfs", NS)
     if xfs is not None:
         for i, xf in enumerate(xfs.findall("m:xf", NS)):
             fid = int(xf.get("numFmtId", "0"))
-            if fid in _BUILTIN_DATE_FMTS or custom.get(fid):
-                out.add(i)
+            is_date, cur = custom.get(fid, (fid in _BUILTIN_DATE_FMTS, None))
+            if is_date or cur:
+                out[i] = (is_date, cur)
     return out
 
 
@@ -111,6 +135,10 @@ def _merged(z, part):
                 if ":" in ref:
                     a, b = ref.split(":")
                     (c1, r1), (c2, r2) = _REF.match(a).groups(), _REF.match(b).groups()
+                    area = (int(r2) - int(r1) + 1) * (col_to_num(c2) - col_to_num(c1) + 1)
+                    if area > MAX_MERGE_CELLS:
+                        out[(int(r1), col_to_num(c1))] = ref + " (huge merge, not expanded)"
+                        continue
                     for r in range(int(r1), int(r2) + 1):
                         for c in range(col_to_num(c1), col_to_num(c2) + 1):
                             out[(r, c)] = ref
@@ -144,10 +172,13 @@ def _sheet(z, part, name, hidden, strings, datestyles, date1904, merged):
                 if raw is not None or fml is not None:
                     col, row = _REF.match(ref).groups()
                     r, c = int(row), col_to_num(col)
+                    if r > MAX_ROWS:
+                        raise LimitExceeded(f"sheet {name} has more than {MAX_ROWS} rows")
+                    style = datestyles.get(int(el.get("s", "0")), (False, None))
                     yield {
                         "sheet": name, "sheet_hidden": hidden, "row": r, "col": c, "cell": ref, "raw": raw,
                         "kind": t, "formula": fml is not None, "row_hidden": row_hidden,
-                        "is_date": t == "n" and int(el.get("s", "0")) in datestyles, "date1904": date1904,
+                        "is_date": t == "n" and style[0], "currency": style[1], "date1904": date1904,
                         "merged": merged.get((r, c)),
                     }
                 el.clear()
@@ -160,6 +191,8 @@ def _sheet(z, part, name, hidden, strings, datestyles, date1904, merged):
 def docx_records(path):
     """Yield dicts: where (p<n> or t<n>r<r>c<c>), text, rtl, style."""
     with zipfile.ZipFile(path) as z:
+        if z.getinfo("word/document.xml").file_size > MAX_XML_PART_BYTES:
+            raise LimitExceeded("word/document.xml is too large to read whole")
         root = ET.fromstring(z.read("word/document.xml"))
     body = root.find("w:body", NS)
     p_no = t_no = 0
@@ -178,7 +211,8 @@ def docx_records(path):
                 for ci, tc in enumerate(tr.findall("w:tc", NS), 1):
                     text = " ".join(_wtext(p) for p in tc.findall("w:p", NS)).strip()
                     if text:
-                        yield {"where": f"t{t_no}r{ri}c{ci}", "text": text, "rtl": False, "style": "table"}
+                        yield {"where": f"t{t_no}r{ri}c{ci}", "text": text, "rtl": False, "style": "table",
+                               "table": f"table{t_no}", "row": ri, "col": ci}
 
 
 def _wtext(p):
@@ -207,7 +241,7 @@ def pptx_records(path):
                         for ci, tc in enumerate(tr.findall("a:tc", NS), 1):
                             text = "".join(t.text or "" for t in tc.iter(_q("a", "t"))).strip()
                             if text:
-                                yield {"where": f"s{n}:{name}:r{ri}c{ci}", "text": text}
+                                yield {"where": f"s{n}:{name}:r{ri}c{ci}", "text": text, "table": f"s{n}:{name}", "row": ri, "col": ci}
                     continue
                 for pi, para in enumerate(sp.iter(_q("a", "p")), 1):
                     text = "".join(t.text or "" for t in para.iter(_q("a", "t"))).strip()

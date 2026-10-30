@@ -73,8 +73,22 @@ _EXCEL_EPOCH = _dt.datetime(1899, 12, 30)
 
 
 def excel_serial_to_date(n, date1904=False):
-    base = _dt.datetime(1904, 1, 1) if date1904 else _EXCEL_EPOCH
-    return base + _dt.timedelta(days=float(n))
+    """Excel serial -> datetime. The 1900 system copies Lotus' fake 1900-02-29 (serial 60): serials 1-59
+    count from 1899-12-31, 60 is refused, 61+ from 1899-12-30. The 1904 system counts from 1904-01-01."""
+    n = Decimal(str(n))
+    if date1904:
+        base = _dt.datetime(1904, 1, 1)
+    elif n < 60:
+        base = _dt.datetime(1899, 12, 31)
+    elif n < 61:
+        if n >= 60:
+            raise ValueError("serial 60 is 1900-02-29, a date that does not exist (Excel's 1900 leap-year bug)")
+        base = _dt.datetime(1899, 12, 31)
+    else:
+        base = _EXCEL_EPOCH
+    days = int(n)
+    secs = round((n - days) * 86400)
+    return base + _dt.timedelta(days=days, seconds=secs)
 
 
 def parse_date(raw, dayfirst=True):

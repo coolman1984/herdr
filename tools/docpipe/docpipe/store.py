@@ -34,7 +34,18 @@ MIGRATIONS = [
     );
     CREATE INDEX records_field ON records(field);
     """,
+    # 3: identity includes policy profile and parser version; content hash kept separately; import lease
+    """
+    ALTER TABLE files ADD COLUMN content_sha TEXT;
+    ALTER TABLE files ADD COLUMN profile TEXT;
+    ALTER TABLE files ADD COLUMN lease_owner TEXT;
+    ALTER TABLE files ADD COLUMN lease_until REAL
+    """,
 ]
+
+
+class DiskFull(Exception):
+    """SQLite reported a full disk (or its page limit); the batch was rolled back."""
 
 
 def now():
@@ -42,7 +53,17 @@ def now():
 
 
 def connect(path):
-    db = sqlite3.connect(path, timeout=30, isolation_level=None)
+    p = str(path)
+    if p.startswith(("\\\\", "//")):
+        # WAL needs shared memory on one machine; a database file on a network share can corrupt.
+        raise ValueError(f"{p}: a database on a network share is not supported; use a local disk")
+    new_file = p != ":memory:" and not __import__("os").path.exists(p)
+    db = sqlite3.connect(p, timeout=30, isolation_level=None)
+    if new_file:
+        try:
+            __import__("os").chmod(p, 0o600)  # derived company data: owner only (ACLs on Windows)
+        except OSError:
+            pass
     db.execute("PRAGMA journal_mode=WAL")  # local disk only: never a shared network file (see README)
     db.execute("PRAGMA synchronous=FULL")
     db.execute("PRAGMA foreign_keys=ON")
@@ -51,9 +72,15 @@ def connect(path):
 
 
 def migrate(db):
-    v = db.execute("PRAGMA user_version").fetchone()[0]
-    for i, sql in enumerate(MIGRATIONS[v:], v + 1):
+    """Each migration runs in a write transaction that re-reads the version after taking the lock, so two
+    processes opening an old database never apply the same migration twice."""
+    while True:
         db.execute("BEGIN IMMEDIATE")
+        v = db.execute("PRAGMA user_version").fetchone()[0]
+        if v >= len(MIGRATIONS):
+            db.execute("COMMIT")
+            return
+        i, sql = v + 1, MIGRATIONS[v]
         try:
             for stmt in [s for s in sql.split(";") if s.strip()]:
                 db.execute(stmt)
@@ -68,10 +95,40 @@ def file_row(db, sha):
     return db.execute("SELECT id, status FROM files WHERE sha256=?", (sha,)).fetchone()
 
 
-def add_file(db, sha, path, kind, size, route, status, note=""):
-    db.execute("INSERT OR IGNORE INTO files(sha256,path,kind,size,route,status,note) VALUES(?,?,?,?,?,?,?)",
-               (sha, path, kind, size, route, status, note))
-    return db.execute("SELECT id FROM files WHERE sha256=?", (sha,)).fetchone()[0]
+def add_file(db, ident, path, kind, size, route, status, note="", content_sha=None, profile=None):
+    db.execute("INSERT OR IGNORE INTO files(sha256,path,kind,size,route,status,note,content_sha,profile) VALUES(?,?,?,?,?,?,?,?,?)",
+               (ident, path, kind, size, route, status, note, content_sha, profile))
+    return db.execute("SELECT id FROM files WHERE sha256=?", (ident,)).fetchone()[0]
+
+
+def take_lease(db, file_id, owner, seconds=600):
+    """One importer per file: a lease that expires if its holder dies."""
+    t = time.time()
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        cur = db.execute("""UPDATE files SET lease_owner=?, lease_until=? WHERE id=? AND
+                            (lease_owner IS NULL OR lease_owner=? OR lease_until < ?)""", (owner, t + seconds, file_id, owner, t))
+        db.execute("COMMIT")
+    except Exception:
+        db.execute("ROLLBACK")
+        raise
+    return cur.rowcount == 1
+
+
+def release_lease(db, file_id, owner):
+    db.execute("UPDATE files SET lease_owner=NULL, lease_until=NULL WHERE id=? AND lease_owner=?", (file_id, owner))
+
+
+def discard_file_rows(db, file_id):
+    db.execute("BEGIN IMMEDIATE")
+    for t in ("cells", "records", "issues", "checkpoints"):
+        db.execute(f"DELETE FROM {t} WHERE file_id=?", (file_id,))
+    db.execute("COMMIT")
+
+
+def db_path(db):
+    row = db.execute("PRAGMA database_list").fetchone()
+    return row[2] if row else None
 
 
 def checkpoint(db, file_id):
@@ -89,11 +146,20 @@ def write_batch(db, file_id, seq_end, cells, records, issues):
         db.executemany("""INSERT OR IGNORE INTO records(file_id,sheet,row,field,num,text,date,currency,loc)
                           VALUES(?,?,?,?,?,?,?,?,?)""", records)
         db.executemany("INSERT INTO issues(file_id,loc,level,note) VALUES(?,?,?,?)", issues)
-        db.execute("INSERT INTO checkpoints(file_id,last_loc_seq,at) VALUES(?,?,?) ON CONFLICT(file_id) DO UPDATE SET last_loc_seq=excluded.last_loc_seq, at=excluded.at",
+        # monotonic: an older importer can never move the checkpoint back
+        db.execute("""INSERT INTO checkpoints(file_id,last_loc_seq,at) VALUES(?,?,?) ON CONFLICT(file_id) DO UPDATE
+                      SET last_loc_seq=excluded.last_loc_seq, at=excluded.at WHERE excluded.last_loc_seq > checkpoints.last_loc_seq""",
                    (file_id, seq_end, now()))
         db.execute("COMMIT")
+    except sqlite3.OperationalError as e:
+        if db.in_transaction:  # SQLITE_FULL may already have rolled it back
+            db.execute("ROLLBACK")
+        if "full" in str(e).lower():
+            raise DiskFull(str(e)) from e
+        raise
     except Exception:
-        db.execute("ROLLBACK")
+        if db.in_transaction:
+            db.execute("ROLLBACK")
         raise
 
 

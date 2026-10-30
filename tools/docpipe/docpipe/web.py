@@ -6,6 +6,7 @@ data-ready="1" when their content is in place (tests wait on that, never on netw
 import html
 import json
 import sqlite3
+from contextlib import closing
 import urllib.parse
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -72,17 +73,22 @@ def fmt(v):
 
 
 class App:
-    def __init__(self, db_path, fields=None):
+    def __init__(self, db_path, fields=None, export_ok=True):
         self.db_path = db_path
         self.fields = fields
+        self.export_ok = export_ok
 
     def db(self):
+        """A read-only connection that closes when the request is done (use with `with closing(...)`)."""
         db = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True, timeout=10)
         return db
 
     def dashboard(self, lang):
+        with closing(self.db()) as db:
+            return self._dashboard(lang, db)
+
+    def _dashboard(self, lang, db):
         t, e = T[lang], html.escape
-        db = self.db()
         files = db.execute("SELECT id, path, kind, status, records FROM files ORDER BY id").fetchall()
         if not files:
             return page(lang, t["title"], f"<h1>{t['title']}</h1><p class='state' role='status'>{t['empty']}</p>")
@@ -114,8 +120,11 @@ class App:
 <th scope="col" class="opt">{t['conf']}</th><th scope="col" class="opt">{t['method']}</th><th scope="col" class="opt">{t['flags']}</th></tr></thead><tbody>{body}</tbody></table></div>"""
 
     def file(self, lang, fid, offset):
+        with closing(self.db()) as db:
+            return self._file(lang, fid, offset, db)
+
+    def _file(self, lang, fid, offset, db):
         t, e = T[lang], html.escape
-        db = self.db()
         f = db.execute("SELECT path, kind, route, status, note, sha256 FROM files WHERE id=?", (fid,)).fetchone()
         if not f:
             return None
@@ -132,22 +141,19 @@ class App:
 <div id="results" aria-live="polite" data-ready="1"></div>""")
 
     def search(self, lang, q):
-        db = self.db()
+        with closing(self.db()) as db:
+            return self._search(lang, q, db)
+
+    def _search(self, lang, q, db):
         like = "%" + q.replace("%", "").replace("_", "") + "%"
         rows = db.execute("""SELECT (SELECT path FROM files WHERE id=c.file_id) || ' — ' || c.loc, c.raw, c.num, c.confidence, c.method, c.flags
                              FROM cells c WHERE c.raw LIKE ? OR c.num = ? ORDER BY c.id LIMIT 100""", (like, q)).fetchall()
         return self.values_table(lang, rows)
 
-    def csv(self):
-        import csv
-        import io
-        buf = io.StringIO()
-        w = csv.writer(buf)
-        w.writerow(["file", "sheet", "row", "field", "number", "text", "date", "currency", "source"])
-        for row in self.db().execute("""SELECT f.path, r.sheet, r.row, r.field, r.num, r.text, r.date, r.currency, r.loc
-                                        FROM records r JOIN files f ON f.id=r.file_id ORDER BY r.file_id, r.sheet, r.row, r.field"""):
-            w.writerow(row)
-        return "﻿" + buf.getvalue()
+    def csv_chunks(self):
+        from .export import stream_csv
+        with closing(self.db()) as db:
+            yield from stream_csv(db)
 
 
 def make_handler(app):
@@ -189,7 +195,16 @@ def make_handler(app):
                     if body:
                         return self.send(200, body)
                 if u.path == "/records.csv":
-                    return self.send(200, app.csv(), "text/csv; charset=utf-8", {"Content-Disposition": "attachment; filename=records.csv"})
+                    if not app.export_ok:
+                        return self.send(403, page(lang, "export", "<p class='state' role='alert'>Export is not approved for this data (company policy).</p>"))
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/csv; charset=utf-8")
+                    self.send_header("Content-Disposition", "attachment; filename=records.csv")
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    self.end_headers()
+                    for chunk in app.csv_chunks():  # streamed: no whole-file buffer
+                        self.wfile.write(chunk)
+                    return
                 if u.path == "/healthz":
                     return self.send(200, json.dumps({"ok": True}), "application/json")
                 t = T[lang]
@@ -199,7 +214,14 @@ def make_handler(app):
     return H
 
 
-def serve(db_path, host="127.0.0.1", port=8765):
-    srv = ThreadingHTTPServer((host, port), make_handler(App(db_path)))
+LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
+
+def serve(db_path, host="127.0.0.1", port=8765, allow_remote=False, export_ok=True):
+    """Loopback only unless allow_remote: this server has no login; on a network it would show the data
+    to anyone who can reach the port."""
+    if host not in LOOPBACK and not allow_remote:
+        raise SystemExit(f"refusing to serve on {host}: no authentication; pass --allow-remote only behind an authenticating proxy")
+    srv = ThreadingHTTPServer((host, port), make_handler(App(db_path, export_ok=export_ok)))
     print(f"docpipe web on http://{host}:{srv.server_address[1]}/", flush=True)
     srv.serve_forever()

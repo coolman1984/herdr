@@ -90,11 +90,11 @@ class Readers(unittest.TestCase):
         recs = list(ooxml.docx_records(dp))
         self.assertEqual(recs[0]["where"], "p1")
         self.assertTrue(recs[0]["rtl"])
-        self.assertIn({"where": "t1r2c2", "text": "5,000", "rtl": False, "style": "table"}, recs)
+        self.assertIn(("t1r2c2", "5,000", "table1", 2, 2), [(r["where"], r["text"], r.get("table"), r.get("row"), r.get("col")) for r in recs])
         pp = os.path.join(self.d, "deck.pptx")
         F.make_pptx(pp, [("الملخص", ["نمو 12%", "هامش 30%"], None), ("الأرقام", [], [["ربع", "إيراد"], ["Q3", "2,150.75"]])])
         prec = list(ooxml.pptx_records(pp))
-        self.assertIn({"where": "s2:Table 3:r2c2", "text": "2,150.75"}, prec)
+        self.assertIn(("s2:Table 3:r2c2", "2,150.75", "s2:Table 3"), [(r["where"], r["text"], r.get("table")) for r in prec])
         try:
             import docx
             import pptx

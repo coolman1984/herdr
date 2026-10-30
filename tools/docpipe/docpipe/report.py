@@ -103,11 +103,8 @@ code{{direction:ltr;unicode-bidi:isolate}}
     parts.append("</ul></section></main></body></html>")
     with open(out_html, "w", encoding="utf-8") as f:
         f.write("".join(parts))
+    from .export import write_csv
     with open(out_csv, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        w.writerow(["file", "sheet", "row", "field", "number", "text", "date", "currency", "source"])
-        for row in db.execute("""SELECT f.path, r.sheet, r.row, r.field, r.num, r.text, r.date, r.currency, r.loc
-                                 FROM records r JOIN files f ON f.id=r.file_id ORDER BY r.file_id, r.sheet, r.row, r.field"""):
-            w.writerow(row)
+        write_csv(db, f)
     return {"cards": [(k, str(v), n) for k, v, n in cards], "checks": [(k, str(a), str(b), ok) for k, a, b, ok in checks],
             "quality": quality, "issues": len(issues)}

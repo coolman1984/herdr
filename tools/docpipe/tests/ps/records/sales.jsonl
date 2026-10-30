@@ -1,0 +1,13 @@
+{"loc":"S!A1","sheet":"S","row":1,"col":1,"raw":"Branch","kind":"s"}
+{"loc":"S!B1","sheet":"S","row":1,"col":2,"raw":"Amount","kind":"s"}
+{"loc":"S!C1","sheet":"S","row":1,"col":3,"raw":"Amount","kind":"s"}
+{"loc":"S!D1","sheet":"S","row":1,"col":4,"raw":"Note","kind":"s"}
+{"loc":"S!A2","sheet":"S","row":2,"col":1,"raw":"القاهرة","kind":"s"}
+{"loc":"S!B2","sheet":"S","row":2,"col":2,"raw":1250.5,"kind":"n"}
+{"loc":"S!C2","sheet":"S","row":2,"col":3,"raw":0.1,"kind":"n"}
+{"loc":"S!D2","sheet":"S","row":2,"col":4,"raw":"=HYPERLINK(\"x\")","kind":"s"}
+{"loc":"S!A3","sheet":"S","row":3,"col":1,"raw":"الجيزة","kind":"s"}
+{"loc":"S!B3","sheet":"S","row":3,"col":2,"raw":100.25,"kind":"n"}
+{"loc":"S!C3","sheet":"S","row":3,"col":3,"raw":0.2,"kind":"n"}
+{"loc":"S!E3","sheet":"S","row":3,"col":5,"raw":"orphan","kind":"s"}
+{"loc":"S!B4","sheet":"S","row":4,"col":2,"raw":46325,"kind":"n","is_date":true,"date1904":false}
