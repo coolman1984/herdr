@@ -35,3 +35,18 @@ rule); HISTORY entry, LESSONS if durable; `pwsh -File check.ps1` shows only the 
 
 ## Answer format
 Short: M0 answers, M1 files, test lines, what the spec got wrong, doubts.
+
+## Added by the owner (2026-10-30): Agent Watchdog - top priority inside M1
+Owner: "Opus 5.5 is replacing the human all the time, no need for a human until the goal is met."
+Read the new section "Agent Watchdog" in I:\herdr\docs\SPEC-GOAL-ENGINE.md (main branch, committed; the
+copy in your worktree is older) and build it in `app/internal/goal`:
+- Launch check, state sensing, answers, retry caps, escalation and event records, as the spec says.
+- `prompts.json` with the real prompts this project has met: Claude folder trust (default highlighted is
+  "No, exit", so move to Yes, then confirm, and read the screen back), Codex trust, Cline pop-up (esc),
+  Cline queued message (empty Enter), Codex "at capacity", Cline "model not found", Claude rate limit.
+  Sources: LESSONS.md #98-100, #47, #91 and the `ask` dialog guard `Get-AgentDialog` in herdr-agents.ps1,
+  with its fixture tests/fixture-claude-answer-mentions-trust.txt (an answer that MENTIONS trust is not a
+  prompt: this false positive must have a test).
+- Never answers secrets or sign-ins; trust only for folders inside the goal's project. Tests for both.
+- Each rule tested with fake screens; one mutation per rule. Real lab proof for the Claude trust prompt:
+  start an agent in a fresh folder in the isolated session and show the Watchdog gets it working.

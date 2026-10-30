@@ -55,7 +55,10 @@ Then run `pwsh -File check.ps1` - it must pass.
    `--always-approve`.
    The owner made this change; agents must not change approval or trust settings on their
    own, and must not widen them further (e.g. Codex's full sandbox bypass) unless the owner
-   asks. Secrets, sign-ins and folder-trust questions still go to the owner.
+   asks. Secrets and sign-ins still go to the owner. Folder-trust questions also go to the owner,
+   except (owner's decision, 2026-10-30): during a goal run the Goal Engine's Watchdog answers trust and
+   choice prompts for folders inside the goal's project, because Opus 5.5 replaces the human until the
+   goal is met (docs/SPEC-GOAL-ENGINE.md).
 4. **Claude's own settings are the owner's.** `~/.claude/settings.json` and Herdr
    integrations (`herdr integration install ...`) change Claude Code itself - give the
    owner the exact command to run, do not run it (LESSONS #3).
