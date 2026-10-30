@@ -775,3 +775,34 @@ func TestAgentsThatCannotStartAreCapped(t *testing.T) {
 		t.Fatalf("task %s goal %s", r.e.G.Task("T1").State, r.e.G.State)
 	}
 }
+
+func TestHealthyAgentKilledManyTimesKeepsRestarting(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.tick()
+	for i := 0; i < 8; i++ {
+		a := r.agentOf("T1")
+		a.Begun = true
+		r.advance(5 * time.Minute) // it worked for a while, then something killed it
+		r.b.agents[a.Name].exists = false
+		r.tick()
+	}
+	if len(r.events("model-switch")) > 0 || r.agentOf("T1") == nil || r.e.G.Task("T1").Attempts != 0 || r.e.G.State != GoalRunning {
+		t.Fatalf("outside kills of a healthy agent used up its caps: %+v %s", r.e.G.Task("T1"), r.e.G.State)
+	}
+}
+
+func TestNeedsOwnerLeavesNoUnwatchedAgents(t *testing.T) {
+	r := newRig(t, task("T1"), task("T2"))
+	r.tick()
+	r.screen("T2", StatusIdle, "Please enter your API key:")
+	r.tick()
+	r.e.setState(GoalNeedsOwner, "test")
+	for _, a := range r.e.G.Agents {
+		if !a.Ended && a.State != "needs-owner" {
+			t.Fatalf("%s left running unwatched", a.Name)
+		}
+	}
+	if a := r.agentOf("T2"); a == nil || a.Ended {
+		t.Fatal("the agent showing the owner's prompt was closed")
+	}
+}

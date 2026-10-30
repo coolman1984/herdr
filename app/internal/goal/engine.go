@@ -230,6 +230,15 @@ func (e *Engine) setState(s, reason string) {
 	}
 	e.G.State, e.G.Reason = s, reason
 	e.event("goal-"+s, "", "", reason)
+	if s == GoalNeedsOwner {
+		// The runner ends here: nothing may keep running unwatched. Only an agent showing the owner's
+		// prompt (secret, sign-in, outside trust) stays, so the owner can answer it in its pane.
+		for _, name := range sortedKeys(e.G.Agents) {
+			if a := e.G.Agents[name]; !a.Ended && a.State != "needs-owner" {
+				e.endAgent(a, "goal needs the owner")
+			}
+		}
+	}
 }
 
 func (e *Engine) stopAll(why string) {

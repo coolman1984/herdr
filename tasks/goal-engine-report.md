@@ -31,7 +31,7 @@ HISTORY Phase 57; LESSONS #103-#108.
 
 ## Evidence
 
-- `go test ./internal/goal`: 33 tests pass. `python3 app/tests/goal-mutations.py`: 24/24 rules, each
+- `go test ./internal/goal`: 35 tests pass. `python3 app/tests/goal-mutations.py`: 24/24 rules, each
   broken alone, make their test fail. `node --test`: 42/42. `GOOS=windows go vet ./...`: clean.
 - e2e (`app/tests/goal-e2e/run.sh`), goal "wordstat", 5 tasks, writers alpha + beta (two agent kinds),
   reviewers always the other kind, lead agent present. Timeline (UTC):

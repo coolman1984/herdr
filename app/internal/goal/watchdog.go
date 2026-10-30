@@ -260,6 +260,9 @@ func (e *Engine) restartOrFail(a *AgentRun, why string) {
 			e.event("work-saved", a.Name, a.Task, "committed what the agent left")
 		}
 	}
+	if a.Begun && e.Now().Sub(a.Started.Time) > e.G.Limits.StartTimeout.D() {
+		a.Retries["restart"] = 0 // it ran fine for a while: an outside death, not a crash loop
+	}
 	if !e.retry(a, "restart") {
 		e.switchModel(a, why)
 		return

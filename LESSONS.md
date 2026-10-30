@@ -543,3 +543,7 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 108. **The cloud container cannot build Herdr** (2026-10-30): the vendored libghostty-vt needs Zig 0.16;
     ziglang.org is refused by the egress proxy (403) and installing Zig from PyPI was refused by the
     auto-mode classifier. Herdr pane tests (`--backend herdr`) must run in the lab on the owner's PC.
+109. **A restart cap must not count outside kills of a healthy agent** (2026-10-30, goal soak round 8): a
+    lead that worked 30-60 s between four chaos kills used up a lifetime cap of 3 restarts and the goal
+    stopped at needs-owner - a human pulled in by a normal event. Count restarts only while the agent dies
+    before it has begun and lasted `start_timeout`; that still stops a crash loop.
