@@ -57,3 +57,17 @@ See docs/GOAL-ENGINE.md "Not proven yet". The independent review of this engine 
 (Codex) was not possible from this session: the owner's rule forbids the lead's own subagents and no
 other agent CLI is reachable here. Next step on the PC: `tasks/goal-m1-review.md.spec` against this branch,
 then a lab run with `--backend herdr` and real Claude + Codex.
+
+## Round 2 (after the independent audit, PR #16)
+
+Evidence per item: `docs/audits/goal-engine-response-20261030.md`; HISTORY Phases 58-62.
+
+| Gate (tasks/OPUS-AUTONOMY-HARDENING.md) | Result | Proof |
+|---|---|---|
+| 1. all old and new tests, race, mutations, fail-before-fix | done | 81 Go tests (`-race` clean) incl. the 6 audit tests (all 6 failed on 3b6d8b1 first); 45/45 mutations; every new test run on the previous commit and fails there; CI Linux + Windows each push |
+| 2. real contracts with Herdr, Claude, Codex; isolated Windows run | **not done** | no Herdr build (Zig blocked), no Codex, Claude only as this session (owner's rule: no own subagents). Windows: CI runs the Go and docpipe tests and parses the COM worker in PowerShell 5.1 and 7 - a test run, not a product run |
+| 3. real goal, >=5 tasks, 2 agent kinds, kills, limit, conflict, rejection, cancel, late result | done with **scripted agents** | `app/tests/goal-e2e/run.sh`: 6 tasks, lead + runner killed -9, second runner refused by the OS lock, account limit, capacity, crash with work saved, merge conflict, review rejection, task cancelled mid-run, forged late result ignored, DONE, acceptance re-run green by the script |
+| 4. real 2-hour run, then harder | **partly** | three chaos soaks of 30-35 min with scripted agents (runner kill -9 every 40-90 s, agent kill -9 every 20-50 s): found and fixed two real bugs (rounds 5 and 8). No 2-hour run with real agents |
+| 5. multi-format documents -> DB -> report/dashboard with reference totals; big data under a memory bound | done (synthetic data) | `tools/docpipe`: 14 tests cross-checked with openpyxl/python-docx/python-pptx/pdftotext and a LibreOffice PDF; 300,000 rows in 63 s, peak 56 MB under a 300 MB bound, totals exact |
+| 6. responsive site, full journey, browser test, screenshots, accessibility, performance | done | `node --test tools/docpipe/tests/web/journey.test.mjs` 8/8 in Chromium; screenshots `tasks/docpipe-web-shots/` |
+| Policy: discover first, NASCA/COM, PowerShell first, no package loops, 90% quotas | done in code; **NASCA/Office unproven** | `herdr-goal env`, `capabilities.json`, measured budget; quota adapters + 90% rule tests; docpipe never parses office bytes under company_nasca (test); COM worker untested against real Office |
