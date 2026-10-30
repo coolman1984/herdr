@@ -223,11 +223,13 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(res["checks"], [("المبلغ", "4301.50", "4301.50", True)])
         bad = report.build(self.db, html_p, csv_p, "تقرير", ["المبلغ"], {"المبلغ": "4301.49"})
         self.assertFalse(bad["checks"][0][3])
-        body = open(html_p, encoding="utf-8").read()
+        with open(html_p, encoding="utf-8") as fh:
+            body = fh.read()
         self.assertIn('dir="rtl"', body)
         self.assertIn("مبيعات!C2", body)  # provenance shown
         import csv
-        rows = list(csv.reader(open(csv_p, encoding="utf-8-sig")))
+        with open(csv_p, encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.reader(fh))
         self.assertEqual(rows[0][0], "file")
         self.assertTrue(any(r[3] == "المبلغ" and r[4] == "1200.25" and r[8] == "مبيعات!C3" for r in rows))
 
@@ -236,9 +238,12 @@ class Pipeline(unittest.TestCase):
         bk = os.path.join(self.d, "b.db")
         store.backup(self.db, bk)
         b = store.connect(bk)
-        self.assertEqual(store.integrity(b), "ok")
-        self.assertEqual(b.execute("SELECT COUNT(*) FROM cells").fetchone(), self.db.execute("SELECT COUNT(*) FROM cells").fetchone())
-        self.assertEqual(b.execute("PRAGMA user_version").fetchone()[0], len(store.MIGRATIONS))
+        try:
+            self.assertEqual(store.integrity(b), "ok")
+            self.assertEqual(b.execute("SELECT COUNT(*) FROM cells").fetchone(), self.db.execute("SELECT COUNT(*) FROM cells").fetchone())
+            self.assertEqual(b.execute("PRAGMA user_version").fetchone()[0], len(store.MIGRATIONS))
+        finally:
+            b.close()  # Windows cannot delete an open database file
 
 
 if __name__ == "__main__":
