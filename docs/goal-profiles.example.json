@@ -1,0 +1,19 @@
+{
+  "_comment": "Example --profiles file for herdr-goal on the owner's PC (not run yet: see docs/GOAL-ENGINE.md doubts). Flags follow agents.json (approval mode is the owner's decision, CLAUDE.md 2.3). {prompt} = the brief line, {account} = the account name, {home} = the user folder. accounts are tried in order on a limit. kind = vendor: a reviewer is always another kind.",
+  "profiles": [
+    {"name": "codex", "kind": "openai", "roles": ["write", "review"], "accounts": ["default"],
+     "command": ["codex", "-m", "gpt-6.1-sol", "-a", "never", "-s", "workspace-write", "-c", "model_reasoning_effort=medium", "{prompt}"],
+     "fallback": "codex-terra"},
+    {"name": "codex-terra", "kind": "openai", "roles": ["write", "review"], "accounts": ["default"],
+     "command": ["codex", "-m", "gpt-6.1-terra", "-a", "never", "-s", "workspace-write", "{prompt}"]},
+    {"name": "claude", "kind": "anthropic", "roles": ["write", "review"], "accounts": ["1984", "2040"],
+     "command": ["claude", "--model", "claude-opus-5-5", "--permission-mode", "auto", "{prompt}"],
+     "env": {"CLAUDE_CONFIG_DIR": "{home}\\.herdr-accounts\\claude\\{account}"}},
+    {"name": "lead", "kind": "anthropic", "roles": ["lead"], "accounts": ["2040", "1984"],
+     "command": ["claude", "--model", "claude-opus-5-5", "--permission-mode", "auto", "{prompt}"],
+     "env": {"CLAUDE_CONFIG_DIR": "{home}\\.herdr-accounts\\claude\\{account}"}}
+  ],
+  "lead": "lead",
+  "decider": ["claude", "-p", "--model", "claude-sonnet-5-5"],
+  "limits": {"max_agents": 2, "min_free_ram_mb": 1536, "max_duration": "8h", "max_tasks": 40}
+}

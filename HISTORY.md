@@ -1456,3 +1456,44 @@ hello JSON, the exact resize bytes, no frame for an unchanged size, a refusal an
 `node --test` 42/42 (4 new in `herdrsize.test.mjs`); both new test files cannot run on the phase-1
 commit (`sizer.go`, `herdrsize.js` missing).
 **Lesson:** #95 (rewritten), #102.
+
+## Phase 57 - Goal engine: ledger, Supervisor, Watchdog, merges, `herdr-goal` (2026-10-30)
+
+**Symptom:** the owner's loop was still "type continue": no part kept a goal going, sensed a stuck or
+blocked agent, recovered after a crash, or proved DONE. The M1 work of the earlier delegate
+(`I:\herdr\.wt\goal-m1`, branch `goal-engine`) was never pushed; this cloud session could not see it, so
+the engine was built here from the spec and the M1/M2 fix lists (`tasks/goal-m0-m1.md`, `goal-m2.md`).
+**Cause:** missing feature (spec M1/M2).
+**Fix:** `app/internal/goal` + `app/cmd/herdr-goal` (Go standard library; docs/GOAL-ENGINE.md):
+- Ledger: one atomically written `goal.json` + append-only `events.jsonl`; an inbox (`inbox.jsonl`) is
+  the only way the lead/owner change a running goal; intents written before every outward action and
+  reconciled after a crash (no lost or doubled start); a runner lock with heartbeat (a second runner
+  exits, a dead one is replaced).
+- Messages with ids: a brief file per agent, an ack file as receipt, a result file checked against the
+  message id. Idle is not done; "done" without a commit is rejected.
+- Watchdog (`prompts.json`, one line per known prompt): secret/sign-in never answered and re-checked
+  before every send; trust answered only inside the project (the "Yes" option, also when "No" is
+  highlighted); Cline pop-up and queued text; menus to a decider command or the CLI default (recorded);
+  capacity -> "continue" then another model; account limit -> next account, next profile, then
+  `waiting-limit` and resume at the reset (never the owner); dead -> restart in the same worktree with the
+  work committed; launch check, stopped-early and stall (hash without timer/spinner/digits) with capped
+  nudges; lead handoff when its context is low.
+- Scheduler: dependencies, file reservations, `max_agents` 2 and free RAM/disk gates, writer by the
+  goal's record, reviewer always another vendor, last attempt to another vendor, failed tasks to the lead.
+- Git: worktree per task, `--no-ff` merges as checkpoints into `goal/<id>`, project tests after each merge
+  (a failing merge is undone), conflicts back to the writer, `revert` of one task keeps later merges,
+  DONE only after the Supervisor's own acceptance run and an independent review pass per task.
+- Backends: Herdr panes (`pane split` + `pane run`, pane ids kept in `panes.json`) and detached
+  processes (`herdr-goal relay`). Skill `skills/herdr-architect` (not synced: `sync-skills.ps1` is the
+  owner's PC). Example profiles `docs/goal-profiles.example.json`.
+**Bugs found by the e2e runs and fixed:** prompt answered 3 times from a log screen (#103); timeout check
+after `cancel()` (#106); goal acceptance run after partial merges looped (#105); `__pycache__` blocked
+merges (#104); merge failures had no attempt cap; lead nudged on every event; relay refused under a
+delegate role.
+**Proof (Linux cloud container, scripted agent stand-ins, no Herdr):** `go test ./internal/goal` 32 tests
+pass; `app/tests/goal-mutations.py` 24/24 rule mutations caught; `node --test` 42/42; `GOOS=windows go
+vet ./...` clean. `app/tests/goal-e2e/run.sh`: 5 tasks, 2 agent kinds, runner and lead killed -9,
+second runner refused, trust/crash/idle/limit/capacity/review-reject/merge-conflict all recovered:
+DONE in 51 s, acceptance re-run green by the script, 0 agents left. Soak: see below.
+**Not proven:** real CLIs and real Herdr panes (#108), Windows run, `check.ps1`.
+**Lesson:** #103-#108.

@@ -37,6 +37,12 @@
 | `tests/test-dialog-guard.ps1`, `tests/fixture-claude-answer-mentions-trust.txt` | Offline tests for the `ask` startup-dialog guard; the fixture is a real Claude screen that must NOT count as a dialog |
 | `tests/test-headless.ps1` | Offline tests for the headless Cline runner (arguments, result parsing, refusals, main flow) |
 | `tests/test-hud-cline.ps1` | Offline tests for the HUD's Cline session, model and token values |
+| `docs/GOAL-ENGINE.md` | Goal engine: how to use `herdr-goal`, its parts, what stops at the owner, proof and doubts |
+| `docs/SPEC-GOAL-ENGINE.md` | The goal engine's spec (Architect + ledger + Supervisor + Watchdog) |
+| `app/internal/goal/`, `app/cmd/herdr-goal/` | Goal engine (Go standard library): ledger, inbox, intents, Watchdog with `prompts.json`, scheduler, worktrees and merges, Herdr/process backends; the `herdr-goal` command |
+| `app/tests/goalagent/`, `app/tests/goal-e2e/` | Scripted agent stand-in with fault injection; `run.sh` 5-task end-to-end with kills, `soak.sh` chaos soak, `genplan.py` random plans |
+| `app/tests/goal-mutations.py` | Breaks each Watchdog/Supervisor rule in turn; its test must fail |
+| `skills/herdr-architect/` | Master copy of the Architect skill (lead of one goal) |
 | `docs/TEAM-PLAYBOOK.md` | How the lead solves hard problems with the agent team: strategies, control cards, verification ladder, loops |
 | `tests/test-batch-b.ps1` | Offline regression tests for installer, launchers, folder team model, spaces and Stop; `-SourceRoot` tests baseline copies, including the launcher binary |
 | `linux/` | Linux port: `install.sh`, `herdr-agents`, `herdr-layout`, `keys.toml`, `README.md` (Phase 46) |

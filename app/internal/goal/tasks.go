@@ -470,11 +470,13 @@ func (e *Engine) verify() {
 	if len(g.Tasks) == 0 {
 		return
 	}
-	open, blocked := 0, 0
+	open, failed, blocked := 0, 0, 0
 	for _, t := range g.Tasks {
 		switch t.State {
 		case TaskDone, TaskCancelled:
-		case TaskFailed, TaskBlocked:
+		case TaskFailed:
+			failed++
+		case TaskBlocked:
 			blocked++
 		default:
 			open++
@@ -483,10 +485,12 @@ func (e *Engine) verify() {
 	if open > 0 {
 		return
 	}
-	if blocked > 0 {
-		if g.Lead == "" {
-			e.setState(GoalNeedsOwner, fmt.Sprintf("%s failed or blocked and no lead to re-plan", plural(blocked, "task")))
-		}
+	if failed > 0 && g.Lead != "" {
+		return // the lead re-plans failed tasks
+	}
+	if failed+blocked > 0 {
+		// Only the owner can move on: secrets, sign-ins, or two models failed with no lead to re-plan.
+		e.setState(GoalNeedsOwner, fmt.Sprintf("%d task(s) need the owner (blocked %d, failed %d); all other work is done and kept", failed+blocked, blocked, failed))
 		return
 	}
 	head, err := e.W.Head()

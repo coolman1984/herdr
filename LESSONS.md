@@ -520,3 +520,26 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 102. **A lab Herdr session restores its panes on the next start** (2026-10-29): `server stop` saves
     `sessions\lab\session.json`, so a script that splits a pane adds one more pane on every run. Delete
     the lab session folder (in an isolated APPDATA) before a run that needs a known layout.
+
+103. **A screen read from an output log keeps the prompt you already answered** (2026-10-30, goal engine
+    e2e): the engine answered one trust prompt three times in one second, because the log still showed it
+    after the answer. Two guards: never answer the same screen twice (wait up to 30 s for it to change),
+    and the process backend shows only what the agent printed since its last input, like a terminal
+    redraw. A real TUI can also redraw late; "sent" never means "answered" until the screen changed.
+104. **Test runs leave untracked files in a merge worktree that block the next merge** (2026-10-30):
+    Python's `__pycache__` from the acceptance run made `git merge` fail with "untracked working tree
+    files would be overwritten by merge" when an agent had committed its own `__pycache__`. The engine's
+    integration worktree is its own: `reset --hard` + `clean -fdx` before every merge.
+105. **The goal's acceptance is not the project's tests** (2026-10-30): running the final acceptance
+    after every merge rejected every correct partial merge (README task merged before the install task)
+    and looped. Two lists: `--test` (must stay green after each merge) and `--accept` (the DONE gate).
+106. **`exec.CommandContext`: read `ctx.Err()` before `cancel()`** (2026-10-30): after cancel it is always
+    `Canceled`, so every command looked timed out ("TIMEOUT after 2m0s" on a 0.1 s `grep`).
+107. **Killing test processes from a tool shell** (2026-10-30): `pkill -f herdr-goal` matched the calling
+    bash command line itself and killed it, leaving old runners alive; an old runner then kept writing into
+    a ledger re-created at the same path. Use `pkill -x <name>` and kill runners before re-creating a ledger.
+    Go: `select {}` in a program with no other goroutine panics ("all goroutines are asleep") instead of
+    hanging; a stand-in CLI that must hang sleeps in a loop.
+108. **The cloud container cannot build Herdr** (2026-10-30): the vendored libghostty-vt needs Zig 0.16;
+    ziglang.org is refused by the egress proxy (403) and installing Zig from PyPI was refused by the
+    auto-mode classifier. Herdr pane tests (`--backend herdr`) must run in the lab on the owner's PC.

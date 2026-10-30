@@ -672,3 +672,83 @@ func TestNoProgressStops(t *testing.T) {
 		t.Fatalf("state %s after 46 min with no event", r.e.G.State)
 	}
 }
+
+func TestOnlySecretBlockedTasksLeftMeansNeedsOwnerEvenWithALead(t *testing.T) {
+	r := newRig(t, task("T1"), task("T2"))
+	r.e.G.Lead = "alpha"
+	r.e.G.Profiles[0].Roles = append(r.e.G.Profiles[0].Roles, "lead")
+	r.e.G.Limits.MaxAgents = 3
+	r.tick()
+	r.screen("T2", StatusIdle, "Please enter your API key:")
+	r.finish("T1", Answer{Status: "done"})
+	r.tick()
+	r.tick()
+	r.finish("T1", Answer{Status: "done", Verdict: "pass"})
+	r.tick()
+	r.tick()
+	if r.e.G.State != GoalNeedsOwner || r.e.G.Task("T1").State != TaskDone {
+		t.Fatalf("state %s (%s), T1 %s", r.e.G.State, r.e.G.Reason, r.e.G.Task("T1").State)
+	}
+}
+
+func TestLeadHandsOffWhenContextIsLow(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.e.G.Lead = "alpha"
+	r.e.G.Profiles[0].Roles = append(r.e.G.Profiles[0].Roles, "lead")
+	r.e.G.Limits.MaxAgents = 3
+	r.tick()
+	var lead *AgentRun
+	for _, a := range r.e.G.Agents {
+		if a.Role == "lead" {
+			lead = a
+		}
+	}
+	f := r.b.agents[lead.Name]
+	f.status, f.screen = StatusIdle, "● planning\nContext left until auto-compact: 3%\n"
+	r.tick()
+	if len(f.sent) != 1 || !strings.Contains(f.sent[0], "handoff.md") {
+		t.Fatalf("lead not asked for a handoff: %v", f.sent)
+	}
+	for i := 0; i < 5; i++ {
+		f.screen += " \n"
+		r.tick()
+	}
+	n := 0
+	for _, a := range r.e.G.Agents {
+		if a.Role == "lead" && !a.Ended {
+			n++
+			if a.Name == lead.Name {
+				t.Fatal("old lead still running")
+			}
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d live leads after handoff, want 1", n)
+	}
+}
+
+func TestMenuGoesToDeciderAndOnlyItsValidPick(t *testing.T) {
+	r := newRig(t, task("T1"))
+	menu := " Which format?\n ❯ 1. Plain\n   2. JSON\n Enter to confirm · Esc to cancel\n"
+	picked := "2"
+	r.e.Decide = func(g *Goal, a *AgentRun, screen string, opts []Option) ([]string, string, error) {
+		for _, o := range opts {
+			if o.Num == picked {
+				return []string{o.Num}, "json fits the task", nil
+			}
+		}
+		return nil, "", errors.New("not on screen")
+	}
+	r.tick()
+	f := r.screen("T1", StatusBlocked, menu)
+	r.tick()
+	if len(f.keys) != 1 || f.keys[0][0] != "2" {
+		t.Fatalf("keys %v, want the decider's pick", f.keys)
+	}
+	picked = "9" // a pick that is not on the screen is refused; the CLI default is taken and recorded
+	f.screen += "\n"
+	r.tick()
+	if len(f.keys) != 2 || f.keys[1][0] != "Enter" || len(r.e.G.Assumptions) == 0 {
+		t.Fatalf("keys %v assumptions %v", f.keys, r.e.G.Assumptions)
+	}
+}

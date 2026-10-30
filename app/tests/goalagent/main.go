@@ -128,12 +128,29 @@ func main() {
 	if role == "lead" {
 		os.WriteFile(ackRe.FindStringSubmatch(brief)[1], []byte("ack"), 0o644)
 		say("lead: plan given at creation; watching.")
+		retried := map[string]bool{}
 		for {
 			l, ok := readLine()
 			if !ok {
 				hang()
 			}
 			say("lead got: %s", l)
+			if !strings.Contains(l, "Next step needed") {
+				continue
+			}
+			// Stand-in for the Architect's re-plan: retry each failed task once with a note.
+			var g struct {
+				Tasks []struct{ ID, State string }
+			}
+			b, _ := os.ReadFile(filepath.Join(os.Getenv("HERDR_GOAL"), "goal.json"))
+			json.Unmarshal(b, &g)
+			for _, t := range g.Tasks {
+				if t.State == "failed" && !retried[t.ID] {
+					retried[t.ID] = true
+					out, err := exec.Command("herdr-goal", "task", "retry", os.Getenv("HERDR_GOAL"), "--id", t.ID, "--feedback", "lead: one more try after a failure").CombinedOutput()
+					say("lead retried %s: %s %v", t.ID, out, err)
+				}
+			}
 		}
 	}
 	dir := folderRe.FindStringSubmatch(brief)[1]

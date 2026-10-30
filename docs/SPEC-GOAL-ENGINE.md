@@ -1,6 +1,17 @@
 # Spec: Herdr as one product - give a goal, the Architect finishes it
 
-Status: draft for owner review, 2026-10-30.
+Status: draft for owner review, 2026-10-30. M1 + the M2 engine are built (`app/internal/goal`,
+`herdr-goal`; how it works and what is proven: [GOAL-ENGINE.md](GOAL-ENGINE.md), HISTORY Phase 57).
+
+Changes from this draft made while building (2026-10-30):
+- One state file: `goal.json` holds goal, tasks, agents, messages and intents, so one atomic write keeps
+  them consistent; separate `goal.json` + `tasks.json` could be torn apart by a kill between two writes.
+- Two check lists: `accept` (the DONE gate) and `tests` (the project's full tests after every merge).
+  Running the goal's acceptance after each partial merge rejects every correct partial merge (LESSONS #105).
+- No cost limit: no source reports cost per agent; limits are time, tasks, attempts, agents and RAM/disk.
+- A goal folder that is not a git repository with one commit is refused with a message (no `git init`
+  in someone's folder by the engine).
+- The lead changes the plan only through `herdr-goal` commands (an inbox the runner applies once each).
 
 ## Objective
 
