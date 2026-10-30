@@ -1,0 +1,577 @@
+package goal
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+// schedule moves tasks forward: start writers and reviewers, run checks and merges.
+func (e *Engine) schedule() {
+	g := e.G
+	merging := false
+	for _, t := range g.Tasks {
+		switch t.State {
+		case TaskPending:
+			if !e.depsDone(t) || !e.locksFree(t) {
+				continue
+			}
+			if ok, why := e.canStart(); !ok {
+				e.waitNote(why)
+				return
+			}
+			if err := e.W.TaskWorktree(g, t); err != nil {
+				e.event("error", "", t.ID, "worktree: "+err.Error())
+				continue
+			}
+			w := t.Writer
+			if w == "" || e.unusable(w) {
+				w = e.pickProfile("write", "", "")
+			}
+			if w == "" {
+				e.noProfile(t, "write")
+				continue
+			}
+			if t.Writer != w {
+				e.event("choose", "", t.ID, fmt.Sprintf("writer %s (record %+v)", w, *g.score(w)))
+			}
+			t.Writer = w
+			for _, f := range t.Files {
+				g.Locks[f] = t.ID
+			}
+			t.State = TaskRunning
+			e.event("task-running", "", t.ID, "attempt "+fmt.Sprint(t.Attempts+1))
+			e.startAgent("write", t.ID, w, "", nil, "")
+		case TaskRunning, TaskReview:
+			if t.Agent != "" && g.Agents[t.Agent] != nil && !g.Agents[t.Agent].Ended {
+				continue
+			}
+			if ok, why := e.canStart(); !ok {
+				e.waitNote(why)
+				return
+			}
+			if t.State == TaskRunning {
+				e.startAgent("write", t.ID, t.Writer, "", nil, "Continue this task; earlier work is committed in this folder.")
+				continue
+			}
+			r := t.Reviewer
+			if r == "" || e.unusable(r) || e.kindOf(r) == e.kindOf(t.Writer) {
+				r = e.pickProfile("review", e.kindOf(t.Writer), "")
+			}
+			if r == "" {
+				e.noProfile(t, "review (different vendor from "+t.Writer+")")
+				continue
+			}
+			t.Reviewer = r
+			e.event("choose", "", t.ID, "reviewer "+r+" for writer "+t.Writer)
+			e.startAgent("review", t.ID, r, "", nil, "")
+		case TaskChecking:
+			e.runCheck(t)
+		case TaskMerging:
+			if !merging {
+				merging = true
+				e.runMerge(t)
+			}
+		}
+	}
+}
+
+func (e *Engine) depsDone(t *Task) bool {
+	for _, d := range t.Deps {
+		dt := e.G.Task(d)
+		if dt == nil || dt.State != TaskDone && dt.State != TaskCancelled {
+			return false
+		}
+	}
+	return true
+}
+
+func (e *Engine) locksFree(t *Task) bool {
+	for _, f := range t.Files {
+		if owner := e.G.Locks[f]; owner != "" && owner != t.ID {
+			return false
+		}
+	}
+	return true
+}
+
+func (e *Engine) unlock(t *Task) {
+	for f, owner := range e.G.Locks {
+		if owner == t.ID {
+			delete(e.G.Locks, f)
+		}
+	}
+}
+
+var lastWait = map[string]string{}
+
+func (e *Engine) waitNote(why string) {
+	if lastWait[e.L.Dir] != why {
+		lastWait[e.L.Dir] = why
+		e.event("waiting-resources", "", "", why)
+	}
+}
+
+// canStart is the readiness check before every new agent: slots, free memory, free disk.
+func (e *Engine) canStart() (bool, string) {
+	l := e.G.Limits
+	if n := e.liveAgents(""); l.MaxAgents > 0 && n >= l.MaxAgents {
+		return false, fmt.Sprintf("%d agents running (max %d)", n, l.MaxAgents)
+	}
+	if ram := e.Probe.FreeRAMMB(); ram >= 0 && ram < l.MinFreeRAMMB {
+		return false, fmt.Sprintf("free RAM %d MB < %d MB", ram, l.MinFreeRAMMB)
+	}
+	if disk := e.Probe.FreeDiskMB(e.G.Project); disk >= 0 && disk < l.MinFreeDiskMB {
+		return false, fmt.Sprintf("free disk %d MB < %d MB", disk, l.MinFreeDiskMB)
+	}
+	lastWait[e.L.Dir] = ""
+	return true, ""
+}
+
+func (e *Engine) unusable(profile string) bool {
+	p := e.G.Profile(profile)
+	if p == nil || len(p.Command) == 0 {
+		return true
+	}
+	if _, err := e.Probe.LookPath(p.Command[0]); err != nil {
+		return true
+	}
+	prof, _ := e.freeAccount(profile)
+	return prof == ""
+}
+
+// pickProfile chooses by role and by this goal's record (lessons): fewer failures and rejections first.
+func (e *Engine) pickProfile(role, excludeKind, excludeProfile string) string {
+	var cands []string
+	for _, p := range e.G.Profiles {
+		if !has(p.Roles, role) || p.Name == excludeProfile || excludeKind != "" && p.Kind == excludeKind || e.unusable(p.Name) {
+			continue
+		}
+		cands = append(cands, p.Name)
+	}
+	rank := func(n string) int {
+		s := e.G.score(n)
+		return 2*s.Done - 3*s.Failed - 2*s.Rejected - s.Errors
+	}
+	sort.SliceStable(cands, func(i, j int) bool { return rank(cands[i]) > rank(cands[j]) })
+	if len(cands) == 0 {
+		return ""
+	}
+	return cands[0]
+}
+
+func has(xs []string, x string) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Engine) noProfile(t *Task, role string) {
+	if t.Note != "no usable profile for "+role {
+		t.Note = "no usable profile for " + role
+		e.event("no-profile", "", t.ID, t.Note+" (CLI missing, or all its accounts limited)")
+	}
+}
+
+// startAgent records the agent and its brief, then starts it under an intent.
+func (e *Engine) startAgent(role, task, profile, account string, retries map[string]int, note string) *AgentRun {
+	g := e.G
+	p := g.Profile(profile)
+	if p == nil {
+		e.event("error", "", task, "unknown profile "+profile)
+		return nil
+	}
+	if account == "" {
+		_, account = e.freeAccount(profile)
+	}
+	g.Seq++
+	name := fmt.Sprintf("%s-%s-%d", map[string]string{"write": "w", "review": "r", "lead": "lead"}[role], task, g.Seq)
+	name = strings.ReplaceAll(name, "--", "-")
+	msg := fmt.Sprintf("m%d", g.Seq)
+	cwd := e.W.MainDir()
+	t := g.Task(task)
+	if t != nil {
+		cwd = t.Worktree
+	}
+	a := &AgentRun{Name: name, Role: role, Task: task, Profile: profile, Account: account, Cwd: cwd, Msg: msg,
+		State: "starting", Started: T(e.Now()), LastMove: T(e.Now()), Retries: map[string]int{}}
+	for k, v := range retries {
+		if k == "restart" {
+			a.Retries[k] = v // restarts are capped across runs; the other counters start fresh
+		}
+	}
+	if role != "lead" {
+		a.Answer = filepath.Join(e.L.AnswerDir(), name+".json")
+		os.Remove(a.Answer)
+	}
+	brief := e.brief(a, t, note)
+	bdir := e.L.path("briefs")
+	os.MkdirAll(bdir, 0o755)
+	bpath := filepath.Join(bdir, name+".md")
+	if err := writeAtomic(bpath, []byte(brief)); err != nil {
+		e.event("error", name, task, "brief: "+err.Error())
+		return nil
+	}
+	line := e.briefLine(a)
+	argv := make([]string, 0, len(p.Command))
+	for _, c := range p.Command {
+		if strings.Contains(c, "{prompt}") {
+			a.Sent = true
+		}
+		argv = append(argv, strings.NewReplacer("{prompt}", line, "{model}", p.Model, "{account}", account, "{brief}", bpath).Replace(c))
+	}
+	home, _ := os.UserHomeDir()
+	env := map[string]string{"HERDR_GOAL": e.L.Dir, "HERDR_GOAL_ROLE": role, "HERDR_GOAL_AGENT": name}
+	for k, v := range p.Env {
+		env[k] = strings.NewReplacer("{account}", account, "{home}", home).Replace(v)
+	}
+	g.Messages = append(g.Messages, &Message{ID: msg, To: name, Kind: role, Body: bpath, Sent: T(e.Now()), Attempts: 1})
+	g.Agents[name] = a
+	if t != nil {
+		t.Agent = name
+	}
+	e.event("agent-start", name, task, fmt.Sprintf("%s profile %s account %q in %s", role, profile, account, cwd))
+	if err := e.do(Action{Kind: "start", Agent: name, Start: StartSpec{Name: name, Cwd: cwd, Argv: argv, Env: env}}); err != nil {
+		e.event("start-failed", name, task, err.Error())
+		a.Ended, a.State = true, "start-failed"
+		g.score(profile).Errors++
+		if t != nil {
+			t.Agent = ""
+		}
+	}
+	return a
+}
+
+func (e *Engine) briefLine(a *AgentRun) string {
+	return fmt.Sprintf("Read and follow the brief %s (message %s). No human is watching: decide, act, record.", filepath.Join(e.L.path("briefs"), a.Name+".md"), a.Msg)
+}
+
+func (e *Engine) brief(a *AgentRun, t *Task, note string) string {
+	g := e.G
+	var b strings.Builder
+	ack := e.ackPath(a.Msg)
+	switch a.Role {
+	case "lead":
+		fmt.Fprintf(&b, "# You lead goal %s (message %s)\n\n%s\n\nProject: %s. Ledger: %s.\n\n", g.ID, a.Msg, g.Text, g.Project, e.L.Dir)
+		fmt.Fprintf(&b, "First create the file %s (acknowledgement).\n\n", ack)
+		b.WriteString("Follow the skill herdr-architect. No human is coming: decide and record with `herdr-goal decide`/`assume`.\n")
+		fmt.Fprintf(&b, "See the state with `herdr-goal status %s`. Change the plan only with `herdr-goal task ...` commands; never edit ledger files.\n", e.L.Dir)
+		b.WriteString("You cannot mark the goal done or stop it: the Supervisor runs the acceptance itself.\n")
+	case "write":
+		fmt.Fprintf(&b, "# Task %s: %s\n\nGoal %s, message %s. You are a delegate of the Herdr goal engine; no human is watching.\n\n", t.ID, t.Title, g.ID, a.Msg)
+		fmt.Fprintf(&b, "1. First create the file %s (any content): it acknowledges this brief.\n", ack)
+		fmt.Fprintf(&b, "2. Work only in this folder: %s (git branch %s). Commit your work with git; uncommitted work is committed for you if you stop.\n", t.Worktree, t.Branch)
+		fmt.Fprintf(&b, "3. The task:\n\n%s\n\n", t.Spec)
+		if len(t.Accept) > 0 {
+			fmt.Fprintf(&b, "4. The engine itself runs these checks in your folder when you finish; they must pass:\n")
+			for _, c := range t.Accept {
+				fmt.Fprintf(&b, "   - `%s`\n", c)
+			}
+		}
+		if t.Feedback != "" {
+			fmt.Fprintf(&b, "\nFeedback from the last attempt or review (fix this):\n\n%s\n", t.Feedback)
+		}
+	case "review":
+		fmt.Fprintf(&b, "# Review task %s: %s\n\nGoal %s, message %s. You review work written by another model (%s). No human is watching.\n\n", t.ID, t.Title, g.ID, a.Msg, t.Writer)
+		fmt.Fprintf(&b, "1. First create the file %s (any content).\n", ack)
+		fmt.Fprintf(&b, "2. In %s run `git diff %s...HEAD` and read the change. Do NOT change any file.\n", t.Worktree, g.Branch)
+		fmt.Fprintf(&b, "3. The task it had to do:\n\n%s\n\n", t.Spec)
+		if len(t.Accept) > 0 {
+			fmt.Fprintf(&b, "Its checks (already green): %s\n", strings.Join(t.Accept, "; "))
+		}
+		b.WriteString("Verdict \"pass\" only if the change does the task correctly; else \"fail\" with concrete notes the writer can act on.\n")
+	}
+	if note != "" {
+		fmt.Fprintf(&b, "\nNote: %s\n", note)
+	}
+	if a.Answer != "" {
+		fmt.Fprintf(&b, "\nLast step, only when finished: write %s as JSON\n", a.Answer)
+		if a.Role == "review" {
+			fmt.Fprintf(&b, "{\"msg\":\"%s\",\"status\":\"done\",\"verdict\":\"pass|fail\",\"summary\":\"...\",\"notes\":\"...\"}\n", a.Msg)
+		} else {
+			fmt.Fprintf(&b, "{\"msg\":\"%s\",\"status\":\"done|blocked|failed\",\"summary\":\"...\",\"notes\":\"assumptions, doubts\"}\n", a.Msg)
+		}
+		b.WriteString("\"blocked\" only for a sign-in or secret you must not handle. Never type secrets, never push, never edit outside your folder.\n")
+	}
+	return b.String()
+}
+
+// finished handles a result file.
+func (e *Engine) finished(a *AgentRun, ans *Answer) {
+	g := e.G
+	e.event("result", a.Name, a.Task, fmt.Sprintf("%s %s: %s", ans.Status, ans.Verdict, oneLine(ans.Summary, 200)))
+	e.endAgent(a, "finished")
+	t := g.Task(a.Task)
+	if t == nil {
+		return
+	}
+	t.Agent = ""
+	switch a.Role {
+	case "write":
+		switch ans.Status {
+		case "done":
+			if saved, _ := e.W.SaveWork(t, a.Name); saved {
+				e.event("work-saved", a.Name, t.ID, "committed what the agent left uncommitted")
+			}
+			if e.W.Ahead(g, t) == 0 {
+				e.taskAttemptFailed(a, "reported done but made no commit on "+t.Branch)
+				return
+			}
+			t.Result = ans.Summary
+			t.State = TaskChecking
+			e.event("task-checking", a.Name, t.ID, "running the task's own checks")
+		case "blocked":
+			e.ownerBlock(a, "agent reports blocked: "+ans.Summary+" "+ans.Notes, "")
+			e.unlock(t)
+		default:
+			e.taskAttemptFailed(a, "agent reports failure: "+ans.Summary+" "+ans.Notes)
+		}
+	case "review":
+		if ans.Verdict == "pass" {
+			t.Proof = append(t.Proof, fmt.Sprintf("review pass by %s (%s): %s", a.Profile, e.kindOf(a.Profile), oneLine(ans.Summary, 200)))
+			t.State = TaskMerging
+			e.event("task-approved", a.Name, t.ID, ans.Summary)
+			return
+		}
+		t.Reviews++
+		g.score(t.Writer).Rejected++
+		t.Feedback = "Reviewer " + a.Profile + " rejected the change: " + ans.Summary + "\n" + ans.Notes
+		if t.Reviews > g.Limits.MaxAttempts {
+			e.failTask(t, "rejected by review too often: "+ans.Summary)
+			return
+		}
+		t.State = TaskRunning
+		e.event("task-rejected", a.Name, t.ID, ans.Summary+" "+ans.Notes)
+	}
+}
+
+// taskAttemptFailed: retry with the feedback; the last attempt goes to a different vendor; then failed.
+func (e *Engine) taskAttemptFailed(a *AgentRun, why string) {
+	g := e.G
+	if !a.Ended {
+		e.endAgent(a, why)
+	}
+	t := g.Task(a.Task)
+	if t == nil {
+		if a.Role == "lead" {
+			e.setState(GoalNeedsOwner, "no lead can run: "+why)
+		}
+		return
+	}
+	t.Agent = ""
+	if a.Role == "review" {
+		t.Reviews++
+		t.Reviewer = ""
+		if t.Reviews > g.Limits.MaxAttempts {
+			e.failTask(t, "no reviewer could finish: "+why)
+		}
+		return
+	}
+	t.Attempts++
+	g.score(a.Profile).Failed++
+	t.Feedback = why
+	if t.Attempts >= g.Limits.MaxAttempts {
+		e.failTask(t, why)
+		return
+	}
+	if t.Attempts == g.Limits.MaxAttempts-1 {
+		if alt := e.pickProfile("write", e.kindOf(t.Writer), ""); alt != "" {
+			e.event("model-switch", "", t.ID, "last attempt goes to another vendor: "+alt)
+			t.Writer = alt
+		}
+	}
+	t.State = TaskRunning
+	e.event("task-retry", "", t.ID, why)
+}
+
+func (e *Engine) failTask(t *Task, why string) {
+	t.State, t.Note = TaskFailed, why
+	e.unlock(t)
+	e.event("task-failed", "", t.ID, why)
+}
+
+func (e *Engine) startJob(key string, fn func(j *job)) *job {
+	e.mu.Lock()
+	j := e.jobs[key]
+	if j == nil {
+		j = &job{}
+		e.jobs[key] = j
+		e.mu.Unlock()
+		if e.Sync {
+			fn(j)
+			j.done = true
+		} else {
+			go func() {
+				fn(j)
+				e.mu.Lock()
+				j.done = true
+				e.mu.Unlock()
+			}()
+		}
+		e.mu.Lock()
+	}
+	defer e.mu.Unlock()
+	if !j.done {
+		return nil
+	}
+	delete(e.jobs, key)
+	return j
+}
+
+func (e *Engine) runCheck(t *Task) {
+	dir, cmds, to := t.Worktree, t.Accept, e.G.Limits.VerifyTimeout.D()
+	j := e.startJob("check:"+t.ID, func(j *job) { j.ok, j.out = RunChecks(dir, cmds, to) })
+	if j == nil {
+		return
+	}
+	if j.ok {
+		t.Proof = append(t.Proof, "task checks green: "+strings.Join(t.Accept, "; "))
+		t.State = TaskReview
+		e.event("task-review", "", t.ID, "checks green; to review")
+		return
+	}
+	e.event("task-check-failed", "", t.ID, j.out)
+	a := &AgentRun{Name: "", Role: "write", Task: t.ID, Profile: t.Writer, Ended: true}
+	e.taskAttemptFailed(a, "the engine's run of your checks failed:\n"+j.out)
+}
+
+func (e *Engine) runMerge(t *Task) {
+	g := e.G
+	w, to := e.W, g.Limits.VerifyTimeout.D()
+	tc := *t
+	j := e.startJob("merge:"+t.ID, func(j *job) { j.sha, j.out, j.err = w.Merge(g, &tc, to) })
+	if j == nil {
+		return
+	}
+	if j.err == nil {
+		t.Merge, t.State = j.sha, TaskDone
+		t.Proof = append(t.Proof, "merged as "+short(j.sha)+"; project tests green")
+		g.score(t.Writer).Done++
+		e.unlock(t)
+		e.event("task-done", "", t.ID, "merged "+short(j.sha))
+		e.W.RemoveTask(t)
+		return
+	}
+	e.event("merge-failed", "", t.ID, j.err.Error())
+	t.Reviews = 0
+	a := &AgentRun{Role: "write", Task: t.ID, Profile: t.Writer, Ended: true}
+	e.taskAttemptFailed(a, fmt.Sprintf("Merging your branch into %s failed: %v\nMerge %s into your branch, fix it, commit, then finish again.\n%s", g.Branch, j.err, g.Branch, j.out))
+}
+
+// verify is the gate to done: the Supervisor runs the goal's acceptance itself on the goal branch.
+func (e *Engine) verify() {
+	g := e.G
+	if len(g.Tasks) == 0 {
+		return
+	}
+	open, blocked := 0, 0
+	for _, t := range g.Tasks {
+		switch t.State {
+		case TaskDone, TaskCancelled:
+		case TaskFailed, TaskBlocked:
+			blocked++
+		default:
+			open++
+		}
+	}
+	if open > 0 {
+		return
+	}
+	if blocked > 0 {
+		if g.Lead == "" {
+			e.setState(GoalNeedsOwner, fmt.Sprintf("%s failed or blocked and no lead to re-plan", plural(blocked, "task")))
+		}
+		return
+	}
+	head, err := e.W.Head()
+	if err != nil {
+		e.event("error", "", "", err.Error())
+		return
+	}
+	if g.State != GoalVerifying {
+		e.setState(GoalVerifying, "all tasks merged; running acceptance on "+short(head))
+	}
+	dir, cmds, to := e.W.MainDir(), g.Accept, g.Limits.VerifyTimeout.D()
+	if g.Verify == nil || g.Verify.Head != head {
+		g.Verify = &VerifyRun{Head: head, Started: T(e.Now())}
+	}
+	j := e.startJob("verify", func(j *job) { j.ok, j.out = RunChecks(dir, cmds, to) })
+	if j == nil {
+		return
+	}
+	g.Verify.Done, g.Verify.Ok, g.Verify.Output = true, j.ok, j.out
+	for _, t := range g.Tasks {
+		if t.State == TaskDone && !reviewed(t) {
+			e.setState(GoalFailed, "task "+t.ID+" has no independent review pass")
+			return
+		}
+	}
+	if !j.ok {
+		e.event("acceptance-failed", "", "", j.out)
+		if g.Lead != "" {
+			e.setState(GoalRunning, "acceptance failed; the lead re-plans")
+			return
+		}
+		e.setState(GoalFailed, "acceptance failed: "+oneLine(j.out, 300))
+		return
+	}
+	e.event("acceptance-passed", "", "", j.out)
+	e.stopAll("goal done")
+	e.setState(GoalDone, fmt.Sprintf("acceptance green on %s at %s", short(head), e.Now().Format(time.RFC3339)))
+}
+
+func reviewed(t *Task) bool {
+	for _, p := range t.Proof {
+		if strings.HasPrefix(p, "review pass by ") {
+			return true
+		}
+	}
+	return false
+}
+
+// lead keeps the Architect alive and tells it when something needs a decision.
+func (e *Engine) lead() {
+	g := e.G
+	if g.Lead == "" {
+		return
+	}
+	var cur *AgentRun
+	for _, a := range g.Agents {
+		if a.Role == "lead" && !a.Ended {
+			cur = a
+		}
+	}
+	if cur == nil {
+		e.startAgent("lead", "", g.Lead, "", nil, "")
+		g.LeadSeen = g.Seq
+		return
+	}
+	var news []string
+	for _, x := range g.Escalations {
+		if !x.Resolved && !strings.HasPrefix(x.Problem, "OWNER:") {
+			news = append(news, "esc "+x.ID)
+		}
+	}
+	for _, t := range g.Tasks {
+		if t.State == TaskFailed {
+			news = append(news, "failed "+t.ID+fmt.Sprint(t.Updated.Unix()))
+		}
+	}
+	if len(g.Tasks) == 0 {
+		news = append(news, "no plan")
+	}
+	if g.Verify != nil && g.Verify.Done && !g.Verify.Ok {
+		news = append(news, "acceptance failed "+g.Verify.Head)
+	}
+	key := strings.Join(news, ",")
+	if key != "" && key != g.LeadNews && cur.Begun && (cur.State == "idle" || cur.State == "stopped-early") {
+		g.LeadSeen, g.LeadNews = g.Seq, key
+		e.send(cur, fmt.Sprintf("Next step needed. Run `herdr-goal status %s`, decide, act with herdr-goal commands, record why.", e.L.Dir))
+	}
+}

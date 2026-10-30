@@ -1,0 +1,18 @@
+{
+  "_comment": "Known agent screens for the Watchdog. First match wins, in order. window = how many of the last non-empty lines are searched; footer = a menu footer (enter to confirm / esc to ...) must be in the last 8 lines, so an answer that only MENTIONS a prompt is not one (fixture-claude-answer-mentions-trust.txt). kind: secret (never answered: needs-owner), trust (answered only inside the goal project), choice (decided, then sent), popup, queued, capacity, model-error, rate-limited. keys = what is sent; 'menu:yes' picks the yes/trust option of a numbered or arrow menu. Add a line for a new CLI prompt.",
+  "prompts": [
+    {"name": "sign-in", "kind": "secret", "window": 8, "pattern": "(?i)not logged in|not signed in|please (log|sign) ?in|run /login|invalid api key|authentication (failed|required)|oauth|login required"},
+    {"name": "secret-question", "kind": "secret", "window": 4, "pattern": "(?i)^\\W*(please )?(enter|type|paste|provide|input)\\b.{0,40}\\b(password|passphrase|api[ _-]?key|token|secret|otp|2fa|verification code|pin)\\b.{0,40}[:?]\\s*$"},
+    {"name": "secret-field", "kind": "secret", "window": 3, "pattern": "(?i)^\\W*(password|passphrase|api[ _-]?key|access token|secret key|otp)( for [^:]{1,60})?\\s*:\\s*$"},
+    {"name": "claude-trust", "kind": "trust", "window": 16, "footer": true, "pattern": "(?i)do you trust the files in this folder|is this a project you created or one you trust|yes, i trust this folder"},
+    {"name": "codex-trust", "kind": "trust", "window": 16, "footer": true, "pattern": "(?i)do you trust the contents of this (directory|project)|trust this folder\\?"},
+    {"name": "generic-trust", "kind": "trust", "window": 12, "footer": true, "pattern": "(?i)do you trust"},
+    {"name": "cline-desktop-popup", "kind": "popup", "window": 10, "pattern": "(?i)get cline desktop.*press enter to open", "keys": ["Escape"]},
+    {"name": "cline-queued", "kind": "queued", "window": 14, "pattern": "(?i)queued messages|enter with empty input to steer", "keys": ["Enter"]},
+    {"name": "codex-capacity", "kind": "capacity", "window": 10, "pattern": "(?i)selected model is at capacity|model is (currently )?overloaded|overloaded_error|server is at capacity"},
+    {"name": "model-not-found", "kind": "model-error", "window": 10, "pattern": "(?i)model not found|unknown model|model .{0,40} does not exist|invalid model"},
+    {"name": "account-limit", "kind": "rate-limited", "window": 10, "pattern": "(?i)you've hit your (usage )?limit|usage limit (reached|exceeded)|(5-hour|weekly|session) limit reached|rate limit(ed)? (reached|exceeded)|limit will reset|try again at \\d"},
+    {"name": "context-low", "kind": "context-low", "window": 6, "pattern": "(?i)context left until auto-compact: ?[0-5]%|context (window )?(is )?(almost )?full"},
+    {"name": "generic-menu", "kind": "choice", "window": 16, "footer": true, "pattern": "(?i)^\\W*(❯|›|>)?\\s*\\d+[.)]\\s+\\S"}
+  ]
+}

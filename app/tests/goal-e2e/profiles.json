@@ -1,0 +1,14 @@
+{
+  "profiles": [
+    {"name": "alpha", "kind": "alpha", "roles": ["write", "review"], "accounts": ["a1", "a2"],
+     "command": ["goalagent", "{prompt}"], "env": {"STUB_PERSONA": "alpha", "STUB_ACCOUNT": "{account}"}},
+    {"name": "beta", "kind": "beta", "roles": ["write", "review"], "accounts": ["b1"],
+     "command": ["goalagent"], "env": {"STUB_PERSONA": "beta", "STUB_ACCOUNT": "{account}"}},
+    {"name": "lead", "kind": "alpha", "roles": ["lead"], "accounts": ["L1"],
+     "command": ["goalagent", "{prompt}"], "env": {"STUB_PERSONA": "lead", "STUB_ACCOUNT": "{account}"}}
+  ],
+  "lead": "lead",
+  "limits": {"max_agents": 2, "min_free_ram_mb": 256, "min_free_disk_mb": 256, "start_timeout": "20s",
+             "ack_timeout": "20s", "idle_grace": "4s", "stall_after": "60s", "no_progress": "5m",
+             "default_limit_for": "30s", "verify_timeout": "2m", "max_duration": "1h", "retry_cap": 3}
+}

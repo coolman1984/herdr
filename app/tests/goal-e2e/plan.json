@@ -1,0 +1,19 @@
+{
+  "tasks": [
+    {"id": "T1", "title": "word count core", "writer": "alpha",
+     "spec": "Create the package wordstat with count(text) returning (lines, words, chars), and its unit test. FAULT:trust\n```sh\nmkdir -p wordstat tests\ncat > wordstat/__init__.py <<'PY'\nfrom .core import count\nPY\ncat > wordstat/core.py <<'PY'\ndef count(text):\n    lines = text.count('\\n') + (1 if text and not text.endswith('\\n') else 0)\n    return lines, len(text.split()), len(text)\nPY\ncat > tests/test_core.py <<'PY'\nimport unittest\nfrom wordstat import count\nclass T(unittest.TestCase):\n    def test_basic(self):\n        self.assertEqual(count('a b\\nc\\n'), (2, 3, 6))\nPY\n```",
+     "accept": ["python3 -m unittest discover -s tests -q"], "files": ["wordstat/core.py"]},
+    {"id": "T2", "title": "command line", "deps": ["T1"], "writer": "alpha",
+     "spec": "Add `python3 -m wordstat FILE` printing 'lines words chars', with a test. FAULT:crash\n```sh\ncat > wordstat/__main__.py <<'PY'\nimport sys\nfrom .core import count\ntext = open(sys.argv[1]).read() if len(sys.argv) > 1 else sys.stdin.read()\nprint(*count(text))\nPY\ncat > tests/test_cli.py <<'PY'\nimport subprocess, sys, unittest, tempfile, os\nclass T(unittest.TestCase):\n    def test_cli(self):\n        f = tempfile.NamedTemporaryFile('w', delete=False); f.write('x y\\n'); f.close()\n        out = subprocess.run([sys.executable, '-m', 'wordstat', f.name], capture_output=True, text=True).stdout\n        os.unlink(f.name)\n        self.assertEqual(out.split(), ['1', '2', '4'])\nPY\nrm -f half-done.txt\n```",
+     "accept": ["python3 -m unittest discover -s tests -q"]},
+    {"id": "T3", "title": "README usage", "writer": "beta",
+     "spec": "Replace the TODO line of README.md with a Usage section. FAULT:idle\n```sh\ngrep -q '## Usage' README.md || sed -i 's/^TODO$/## Usage\\n\\npython3 -m wordstat FILE/' README.md\n```\n```resolve\nprintf '# wordstat\\n\\n## Usage\\n\\npython3 -m wordstat FILE\\n\\n## Install\\n\\nCopy the wordstat folder next to your script.\\n' > README.md\n```",
+     "accept": ["grep -q '## Usage' README.md"]},
+    {"id": "T4", "title": "README install", "writer": "alpha",
+     "spec": "Replace the TODO line of README.md with an Install section. FAULT:limit\n```sh\ngrep -q '## Install' README.md || sed -i 's/^TODO$/## Install\\n\\nCopy the wordstat folder next to your script./' README.md\n```\n```resolve\nprintf '# wordstat\\n\\n## Usage\\n\\npython3 -m wordstat FILE\\n\\n## Install\\n\\nCopy the wordstat folder next to your script.\\n' > README.md\n```",
+     "accept": ["grep -q '## Install' README.md"]},
+    {"id": "T5", "title": "empty input edge case", "deps": ["T1", "T2"], "writer": "beta",
+     "spec": "Add a test that empty input gives (0, 0, 0). REVIEW-FAIL-ONCE FAULT:capacity\n```sh\ncat > tests/test_edge.py <<'PY'\nimport unittest\nfrom wordstat import count\nclass T(unittest.TestCase):\n    def test_empty(self):\n        self.assertEqual(count(''), (0, 0, 0))\nPY\n```",
+     "accept": ["python3 -m unittest discover -s tests -q"]}
+  ]
+}
