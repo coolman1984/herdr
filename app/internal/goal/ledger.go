@@ -192,6 +192,7 @@ type Goal struct {
 	Waiting     Time                 `json:"waiting_until"`
 	InboxOff    int64                `json:"inbox_offset"` // commands applied from inbox.jsonl
 	LeadSeen    int                  `json:"lead_seen"`    // event seq the lead was last nudged at
+	LeadStarts  int                  `json:"lead_starts"`
 	LeadNews    string               `json:"lead_news"`    // what the lead was last told about
 	Decider     []string             `json:"decider,omitempty"`
 }

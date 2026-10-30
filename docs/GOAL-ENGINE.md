@@ -52,7 +52,7 @@ no lead to re-plan. Account limits never reach the owner: next account, next pro
 
 ## Proof (2026-10-30, Linux cloud container, see HISTORY Phase 57)
 
-- `go test ./internal/goal` 29 tests; `python3 app/tests/goal-mutations.py`: 24/24 rule mutations make
+- `go test ./internal/goal` 33 tests; `python3 app/tests/goal-mutations.py`: 24/24 rule mutations make
   their test fail.
 - `app/tests/goal-e2e/run.sh`: real 5-task goal (a Python word-count tool), 2 agent kinds, faults
   injected (trust prompt with "No" highlighted, crash, stop without result, account limit, model at

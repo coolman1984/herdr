@@ -752,3 +752,26 @@ func TestMenuGoesToDeciderAndOnlyItsValidPick(t *testing.T) {
 		t.Fatalf("keys %v assumptions %v", f.keys, r.e.G.Assumptions)
 	}
 }
+
+type failingStart struct{ *fakeBackend }
+
+func (f failingStart) Start(s StartSpec) error {
+	f.starts = append(f.starts, s.Name)
+	return errors.New("exec: \"codex\": executable file not found")
+}
+
+func TestAgentsThatCannotStartAreCapped(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.e.G.Lead = "alpha"
+	r.e.G.Profiles[0].Roles = append(r.e.G.Profiles[0].Roles, "lead")
+	r.e.B = failingStart{r.b}
+	for i := 0; i < 60; i++ {
+		r.tick()
+	}
+	if n := len(r.b.starts); n > 25 {
+		t.Fatalf("%d start attempts in 60 ticks: no cap", n)
+	}
+	if r.e.G.Task("T1").State != TaskFailed || r.e.G.State != GoalNeedsOwner {
+		t.Fatalf("task %s goal %s", r.e.G.Task("T1").State, r.e.G.State)
+	}
+}

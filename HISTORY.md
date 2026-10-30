@@ -1489,8 +1489,9 @@ the engine was built here from the spec and the M1/M2 fix lists (`tasks/goal-m0-
 **Bugs found by the e2e runs and fixed:** prompt answered 3 times from a log screen (#103); timeout check
 after `cancel()` (#106); goal acceptance run after partial merges looped (#105); `__pycache__` blocked
 merges (#104); merge failures had no attempt cap; lead nudged on every event; relay refused under a
-delegate role.
-**Proof (Linux cloud container, scripted agent stand-ins, no Herdr):** `go test ./internal/goal` 32 tests
+delegate role; an agent whose CLI cannot start was restarted every tick for ever (found in self-review:
+120 starts in 60 ticks before, now an attempt failure and a capped lead, test `TestAgentsThatCannotStartAreCapped`).
+**Proof (Linux cloud container, scripted agent stand-ins, no Herdr):** `go test ./internal/goal` 33 tests
 pass; `app/tests/goal-mutations.py` 24/24 rule mutations caught; `node --test` 42/42; `GOOS=windows go
 vet ./...` clean. `app/tests/goal-e2e/run.sh`: 5 tasks, 2 agent kinds, runner and lead killed -9,
 second runner refused, trust/crash/idle/limit/capacity/review-reject/merge-conflict all recovered:

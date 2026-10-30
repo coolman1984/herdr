@@ -243,6 +243,7 @@ func (e *Engine) startAgent(role, task, profile, account string, retries map[str
 		g.score(profile).Errors++
 		if t != nil {
 			t.Agent = ""
+			e.taskAttemptFailed(a, "agent could not start: "+err.Error())
 		}
 	}
 	return a
@@ -552,6 +553,11 @@ func (e *Engine) lead() {
 		}
 	}
 	if cur == nil {
+		g.LeadStarts++
+		if g.LeadStarts > 3*g.Limits.RetryCap+1 {
+			e.setState(GoalNeedsOwner, fmt.Sprintf("the lead was started %d times and keeps ending; all work is kept", g.LeadStarts-1))
+			return
+		}
 		e.startAgent("lead", "", g.Lead, "", nil, "")
 		g.LeadSeen = g.Seq
 		return
