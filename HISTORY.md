@@ -1525,4 +1525,15 @@ progress counted only from product events, a failure budget across re-plans the 
 replacement lead is told the open problems again (#14; found by soak round 5: a lead killed every
 30-60 s kept a failed task un-replanned for 15 min and the no-progress limit never fired). On Linux a
 zombie counts as dead (`/proc/<pid>/stat`). Each fix has a test that fails on the previous commit.
+**Fix (part 3):** stop confirmed (observed gone) before work is saved; an unconfirmed stop keeps the run
+owned and counted (`stop-pending`) (#9); an account limit only parks that task, healthy agents on other
+accounts keep working (#9); a reviewer fallback of the writer's vendor is refused (#6); trust is decided on
+the folder the prompt shows, a path-less prompt only at the agent's own start (#7); menus with a risky
+option (push, delete, publish, force ...) are never answered by default and the decider runs in the
+background (#8); events dedupe by number and skip damaged lines anywhere (#15); a damaged `panes.json`
+stops starts instead of reading as empty, arguments with newlines/control characters are refused (#16);
+`max_procs` (default 4) counts lead + delegates + jobs, the lead is started first, RAM gate reserves one
+agent's estimate, optional login `probe` per profile drops a signed-out CLI at creation (#17); reset times
+use the zone the CLI prints, file changes in the worktree count as progress (#18). `go test -race` clean;
+mutations 45/45 (`app/tests/goal-mutations.py`); e2e `run.sh` DONE, second runner refused by the OS lock.
 **Lesson:** #110.
