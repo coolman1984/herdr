@@ -1,0 +1,53 @@
+Baseline execution on Ubuntu, commit 70b437a4b0941ac999ffd937aa018cad0fbc2298.
+Run https://github.com/coolman1984/herdr/actions/runs/41086822290
+2026-10-30T16:06:52.6845629Z --- PASS: TestHerdrBackendCommandsAndPaneMemory (0.04s)
+2026-10-30T16:06:52.6846946Z --- PASS: TestProcBackendScreenIsOutputSinceLastInput (0.00s)
+2026-10-30T16:06:52.6850880Z --- PASS: TestTrustNeedsMenuFooter (0.01s)
+2026-10-30T16:06:52.6852187Z --- PASS: TestTrustKeysPickYesWhenNoIsHighlighted (0.01s)
+2026-10-30T16:06:52.6853304Z --- PASS: TestSecretQuestionButNotPasswordTalk (0.01s)
+2026-10-30T16:06:52.6854254Z --- PASS: TestParseReset (0.01s)
+2026-10-30T16:06:52.6855298Z --- PASS: TestProgressHashIgnoresTimerAndSpinner (0.00s)
+2026-10-30T16:06:52.6856372Z --- PASS: TestTrustInsideProjectIsAnswered (0.11s)
+2026-10-30T16:06:52.6857394Z --- PASS: TestTrustOutsideProjectGoesToOwner (0.06s)
+2026-10-30T16:06:52.6858653Z --- PASS: TestNothingIsTypedIntoASecretScreen (0.07s)
+2026-10-30T16:06:52.6859689Z --- PASS: TestDeadAgentRestartsAndKeepsWork (0.07s)
+2026-10-30T16:06:52.6860664Z --- PASS: TestBackendErrorIsNotDeath (0.07s)
+2026-10-30T16:06:52.6861629Z --- PASS: TestIdleWithoutResultIsNotDone (0.10s)
+2026-10-30T16:06:52.6862538Z --- PASS: TestStalledAgentIsNudged (0.16s)
+2026-10-30T16:06:52.6863406Z --- PASS: TestNotStartedResendsBrief (0.06s)
+2026-10-30T16:06:52.6864451Z --- PASS: TestCapacityContinuesThenSwitchesModel (0.09s)
+2026-10-30T16:06:52.6865522Z --- PASS: TestAccountLimitsRotateThenWaitThenResume (0.11s)
+2026-10-30T16:06:52.6866574Z --- PASS: TestRecoverNeitherLosesNorDoublesAStart (0.05s)
+2026-10-30T16:06:52.6867573Z --- PASS: TestLedgerSurvivesTornWrites (0.05s)
+2026-10-30T16:06:52.6870217Z --- PASS: TestMaxAgentsAndFreeMemoryGate (0.07s)
+2026-10-30T16:06:52.6871234Z --- PASS: TestFileReservationsSerializeTasks (0.06s)
+2026-10-30T16:06:52.6872873Z --- PASS: TestDependenciesAndIndependentReviewToDone (0.26s)
+2026-10-30T16:06:52.6874001Z --- PASS: TestDoneOnlyAfterTheSupervisorsOwnAcceptance (0.11s)
+2026-10-30T16:06:52.6875223Z --- PASS: TestDoneWithoutCommitIsRejected (0.07s)
+2026-10-30T16:06:52.6876413Z --- PASS: TestMergeConflictGoesBackToWriterAndRevertKeepsOthers (0.27s)
+2026-10-30T16:06:52.6877503Z --- PASS: TestFailingProjectTestsUndoTheMerge (0.11s)
+2026-10-30T16:06:52.6878656Z --- PASS: TestLeadCannotStopTheGoal (0.03s)
+2026-10-30T16:06:52.6879824Z --- PASS: TestCreateRefusesNonGitFolderAndCostlessProfiles (0.00s)
+2026-10-30T16:06:52.6880745Z --- PASS: TestNoProgressStops (0.05s)
+2026-10-30T16:06:52.6881981Z --- PASS: TestOnlySecretBlockedTasksLeftMeansNeedsOwnerEvenWithALead (0.26s)
+2026-10-30T16:06:52.6883046Z --- PASS: TestLeadHandsOffWhenContextIsLow (0.09s)
+2026-10-30T16:06:52.6884118Z --- PASS: TestMenuGoesToDeciderAndOnlyItsValidPick (0.07s)
+2026-10-30T16:06:52.6885289Z --- PASS: TestAgentsThatCannotStartAreCapped (0.36s)
+2026-10-30T16:06:52.6886141Z ok  	herdrdeck/internal/goal	3.905s
+2026-10-30T16:06:53.2250826Z     independent_audit_test.go:15: exited agent accepted input; shell must never receive agent instructions
+2026-10-30T16:06:53.2251648Z --- FAIL: TestIndependentAuditExitedAgentGetsNoInput (0.05s)
+2026-10-30T16:06:53.2252912Z     independent_audit_test.go:23: non-done review approved work
+2026-10-30T16:06:53.2253660Z --- FAIL: TestIndependentAuditBlockedReviewCannotApprove (0.04s)
+2026-10-30T16:06:53.2254950Z     independent_audit_test.go:28: cancelled prerequisite unlocked dependent work
+2026-10-30T16:06:53.2255690Z --- FAIL: TestIndependentAuditCancelledPrerequisiteIsNotSuccess (0.04s)
+2026-10-30T16:06:53.2256987Z     independent_audit_test.go:33: child path bypassed directory ownership
+2026-10-30T16:06:53.2257626Z --- FAIL: TestIndependentAuditDirectoryOwnershipIncludesChildren (0.04s)
+2026-10-30T16:06:53.2259373Z     independent_audit_test.go:38: inbox consumer accepted a delegate's owner-only command
+2026-10-30T16:06:53.2260033Z --- FAIL: TestIndependentAuditConsumerRejectsDelegateStop (0.03s)
+2026-10-30T16:06:53.2261339Z     independent_audit_test.go:45: rejected update stopped a valid running worker
+2026-10-30T16:06:53.2262001Z --- FAIL: TestIndependentAuditInvalidUpdateLeavesWorkerRunning (0.07s)
+2026-10-30T16:07:00.1971977Z ℹ tests 42
+2026-10-30T16:07:00.1972648Z ℹ pass 42
+2026-10-30T16:07:00.1972946Z ℹ fail 0
+
+Tests compile and run. All 33 original goal tests passed; all 6 independent regression specifications failed, confirming the six identified behavioral gaps. Web tests 42/42 passed. Backend agents in unit tests are fakes; no real authenticated CLI-agent integration is claimed.
