@@ -395,7 +395,7 @@ func (e *Engine) kindOf(profile string) string {
 	return ""
 }
 
-func screenHash(s string) string { return ProgressHash(s + "\n\n\n") + fmt.Sprint(len(s)) }
+func screenHash(s string) string { return ProgressHash(s+"\n\n\n") + fmt.Sprint(len(s)) }
 
 func plural(n int, s string) string {
 	if n == 1 {

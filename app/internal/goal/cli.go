@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -19,6 +20,7 @@ const usage = `herdr-goal - give a goal, the engine finishes it (docs/GOAL-ENGIN
           (--accept = the goal's acceptance, the gate to done; --test = the project's full tests,
            run on the goal branch after every merge, a failing merge is undone)
   run     LEDGER [--backend herdr|proc] [--interval 5s] [--lead-pane ID] [--once]
+  keep    LEDGER [--every 15s] [run flags]   restarts a dead runner until the goal ends
   status  LEDGER                     events LEDGER
   task    add|update|retry|cancel LEDGER --id ID [--title T] [--spec S|--spec-file F] [--deps a,b]
           [--accept CMD]... [--files f,g] [--writer P] [--reviewer P] [--feedback TEXT]
@@ -73,6 +75,8 @@ func Main(args []string) int {
 		return cmdNew(rest)
 	case "run":
 		return cmdRun(rest)
+	case "keep":
+		return cmdKeep(rest)
 	case "status":
 		if len(rest) != 1 {
 			return 2
@@ -356,5 +360,81 @@ func cmdRun(args []string) int {
 			return 1
 		case <-time.After(*interval):
 		}
+	}
+}
+
+// runnerAlive reports whether a runner holds the goal (live pid, heartbeat under a minute old).
+func runnerAlive(dir string) bool {
+	b, err := os.ReadFile(filepath.Join(dir, "runner.lock"))
+	if err != nil {
+		return false
+	}
+	var l runnerLock
+	json.Unmarshal(b, &l)
+	t, _ := time.Parse(time.RFC3339, l.Beat)
+	return processAlive(l.Pid) && time.Since(t) < time.Minute
+}
+
+func terminal(state string) bool {
+	switch state {
+	case GoalDone, GoalFailed, GoalStopped, GoalNeedsOwner:
+		return true
+	}
+	return false
+}
+
+// cmdKeep is the runner's keeper: whenever no runner holds the goal, it starts a detached one (output
+// in logs/runner.log). It exits when the goal ends. Killing the keeper leaves the runner running; on
+// Windows a scheduled task that starts `keep` at logon makes the pair self-healing.
+func cmdKeep(args []string) int {
+	if len(args) < 1 {
+		return 2
+	}
+	dir, _ := filepath.Abs(args[0])
+	fs := flag.NewFlagSet("keep", flag.ContinueOnError)
+	every := fs.Duration("every", 15*time.Second, "")
+	var runArgs []string
+	rest := args[1:]
+	for i := 0; i < len(rest); i++ {
+		if rest[i] == "--every" && i+1 < len(rest) {
+			fs.Parse(rest[i : i+2])
+			i++
+			continue
+		}
+		runArgs = append(runArgs, rest[i])
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return fail(err)
+	}
+	for {
+		g, err := Ledger{Dir: dir}.Load()
+		if err != nil {
+			return fail(err)
+		}
+		if terminal(g.State) {
+			fmt.Printf("goal %s: %s - %s\n", g.ID, g.State, g.Reason)
+			if g.State == GoalDone {
+				return 0
+			}
+			return 1
+		}
+		if !runnerAlive(dir) {
+			logf, err := os.OpenFile(filepath.Join(dir, "logs", "runner.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+			if err != nil {
+				return fail(err)
+			}
+			cmd := exec.Command(exe, append([]string{"run", dir, "--quiet"}, runArgs...)...)
+			cmd.Stdout, cmd.Stderr = logf, logf
+			detach(cmd)
+			if err := cmd.Start(); err != nil {
+				logf.Close()
+				return fail(err)
+			}
+			fmt.Printf("%s keep: started runner %d\n", time.Now().Format("15:04:05"), cmd.Process.Pid)
+			go cmd.Wait()
+			logf.Close()
+		}
+		time.Sleep(*every)
 	}
 }

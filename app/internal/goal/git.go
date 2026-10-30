@@ -73,7 +73,7 @@ type Workspace struct {
 	Ledger  Ledger
 }
 
-func (w Workspace) MainDir() string           { return filepath.Join(w.Ledger.WorktreeDir(), "_main") }
+func (w Workspace) MainDir() string            { return filepath.Join(w.Ledger.WorktreeDir(), "_main") }
 func (w Workspace) TaskDir(task string) string { return filepath.Join(w.Ledger.WorktreeDir(), task) }
 
 func (w Workspace) Setup(g *Goal) error {

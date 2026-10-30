@@ -11,6 +11,7 @@ herdr-goal new --project I:\HERDR-trials\x --id x1 --goal "..." \
    --accept "go test ./..." --test "go test ./..." --profiles goal-profiles.json [--plan plan.json]
 herdr-goal run I:\HERDR-trials\x\.herdr-goal\x1 --backend herdr     # agents in Herdr panes
 herdr-goal status <ledger>      herdr-goal events <ledger>
+herdr-goal keep <ledger> [--every 15s] [run flags]   # restarts a dead runner until the goal ends
 herdr-goal pause|resume|stop <ledger>
 ```
 
@@ -22,9 +23,10 @@ herdr-goal pause|resume|stop <ledger>
   for routine menus, and `limits`. Example: `app/tests/goal-e2e/profiles.json`.
 - `--plan`: tasks given up front; without it the lead (Architect) plans with `herdr-goal task add`.
 - `run` is safe to start again at any time: a live runner holds `runner.lock` (pid + heartbeat), a
-  second one exits; a killed runner's lock is taken over and its ledger reconciled. On Windows,
-  start it from a scheduled task every few minutes and it is self-healing (not set up yet: owner's call,
-  it changes the PC).
+  second one exits; a killed runner's lock is taken over and its ledger reconciled. `herdr-goal keep`
+  starts a detached runner whenever none holds the goal (`app/tests/goal-e2e/keep.sh`: runner killed -9
+  three times, restarted three times, goal DONE). On Windows a scheduled task that starts `keep` at logon
+  would make the pair self-healing (not set up: owner's call, it changes the PC).
 
 ## Parts
 

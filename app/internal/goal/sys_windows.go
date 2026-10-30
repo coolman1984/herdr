@@ -40,8 +40,8 @@ var kernel32 = syscall.NewLazyDLL("kernel32.dll")
 
 func FreeRAMMB() int {
 	type memStatus struct {
-		Length, MemoryLoad                              uint32
-		TotalPhys, AvailPhys, TotalPage, AvailPage      uint64
+		Length, MemoryLoad                               uint32
+		TotalPhys, AvailPhys, TotalPage, AvailPage       uint64
 		TotalVirtual, AvailVirtual, AvailExtendedVirtual uint64
 	}
 	m := memStatus{Length: uint32(unsafe.Sizeof(memStatus{}))}

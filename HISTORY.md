@@ -1483,6 +1483,7 @@ the engine was built here from the spec and the M1/M2 fix lists (`tasks/goal-m0-
 - Git: worktree per task, `--no-ff` merges as checkpoints into `goal/<id>`, project tests after each merge
   (a failing merge is undone), conflicts back to the writer, `revert` of one task keeps later merges,
   DONE only after the Supervisor's own acceptance run and an independent review pass per task.
+- `herdr-goal keep`: restarts a killed runner by itself (keep.sh: 3 kills -9, 3 restarts, DONE).
 - Backends: Herdr panes (`pane split` + `pane run`, pane ids kept in `panes.json`) and detached
   processes (`herdr-goal relay`). Skill `skills/herdr-architect` (not synced: `sync-skills.ps1` is the
   owner's PC). Example profiles `docs/goal-profiles.example.json`.

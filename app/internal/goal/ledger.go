@@ -99,10 +99,10 @@ type Task struct {
 	Agent    string   `json:"agent,omitempty"` // current agent run name
 	Feedback string   `json:"feedback,omitempty"`
 	Result   string   `json:"result,omitempty"`
-	Merge    string   `json:"merge,omitempty"`      // merge commit on the goal branch
-	Reverted bool     `json:"reverted,omitempty"`   // merge reverted by `revert`
-	Note     string   `json:"note,omitempty"`       // why failed/blocked
-	Proof    []string `json:"proof,omitempty"`      // evidence lines
+	Merge    string   `json:"merge,omitempty"`    // merge commit on the goal branch
+	Reverted bool     `json:"reverted,omitempty"` // merge reverted by `revert`
+	Note     string   `json:"note,omitempty"`     // why failed/blocked
+	Proof    []string `json:"proof,omitempty"`    // evidence lines
 	Updated  Time     `json:"updated"`
 }
 
@@ -119,7 +119,7 @@ type AgentRun struct {
 	State     string         `json:"state"`  // watchdog state
 	Started   Time           `json:"started"`
 	Acked     bool           `json:"acked"`
-	Sent      bool           `json:"sent"` // brief delivered (in argv or typed)
+	Sent      bool           `json:"sent"`  // brief delivered (in argv or typed)
 	Begun     bool           `json:"begun"` // launch check passed
 	LastHash  string         `json:"last_hash,omitempty"`
 	AnsHash   string         `json:"answered_screen,omitempty"` // screen an answer was sent to
@@ -193,7 +193,7 @@ type Goal struct {
 	InboxOff    int64                `json:"inbox_offset"` // commands applied from inbox.jsonl
 	LeadSeen    int                  `json:"lead_seen"`    // event seq the lead was last nudged at
 	LeadStarts  int                  `json:"lead_starts"`
-	LeadNews    string               `json:"lead_news"`    // what the lead was last told about
+	LeadNews    string               `json:"lead_news"` // what the lead was last told about
 	Decider     []string             `json:"decider,omitempty"`
 }
 
