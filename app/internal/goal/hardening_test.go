@@ -570,3 +570,22 @@ func TestCheckOfAnOlderCommitIsDropped(t *testing.T) {
 		t.Fatal("checks of an older commit moved the task to review")
 	}
 }
+
+// Soak 3 round 11: an agent blocked on a secret request was killed, its replacement finished the task and
+// the owner's question was never answered. A blocked task stays blocked when its agent dies.
+func TestOwnerBlockedTaskIsNotResumedByARestart(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.tick()
+	a := r.agentOf("T1")
+	r.screen("T1", StatusIdle, "Please enter your API key:")
+	r.tick()
+	r.b.agents[a.Name].exists = false // killed while waiting for the owner
+	r.tick()
+	r.tick()
+	if n := len(r.b.starts); n != 1 {
+		t.Fatalf("%d starts: a replacement carried on past the owner's question", n)
+	}
+	if r.e.G.Task("T1").State != TaskBlocked || r.e.G.State != GoalNeedsOwner {
+		t.Fatalf("task %s goal %s", r.e.G.Task("T1").State, r.e.G.State)
+	}
+}

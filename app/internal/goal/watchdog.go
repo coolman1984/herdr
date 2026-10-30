@@ -56,6 +56,15 @@ func (e *Engine) watch(a *AgentRun) {
 	}
 
 	if !o.Exists || o.Status == StatusExited {
+		if a.State == "needs-owner" {
+			// It was waiting for the owner (secret, sign-in, outside trust). A replacement must not
+			// quietly carry on past that question: the task stays blocked until the owner answers.
+			e.endAgent(a, "agent waiting for the owner is gone; task stays blocked for the owner")
+			if t := e.G.Task(a.Task); t != nil {
+				t.Agent = ""
+			}
+			return
+		}
 		e.setAgent(a, "dead")
 		e.event("agent-dead", a.Name, a.Task, "agent process is gone without a result", o.Screen)
 		e.restartOrFail(a, "agent died")

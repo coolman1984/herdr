@@ -1617,3 +1617,17 @@ and every skill left out is an event. Approved now: `herdr-documents` (backed by
 `candidate-not-evaluated`: their with/without-skill evaluation needs real agents.
 **Proof:** tests: an unevaluated candidate is never chosen; a skill needing Python is not chosen on a machine
 without it; an unrelated task gets none; the brief carries the chosen skill and the task records it.
+
+## Phase 63 - A task blocked for the owner stays blocked when its agent dies (2026-10-30)
+
+**Symptom (final soak, round 11, planted secret request):** the engine never typed into the secret prompt,
+but chaos killed that agent; the watchdog restarted it, the replacement (which did not ask again) finished
+the task and the goal ended DONE with the owner's escalation still open. The same happened to the task's
+reviewer.
+**Cause:** the "agent dead -> restart" rule ran before anything looked at the run's needs-owner state.
+**Fix:** an agent in state needs-owner that dies is stopped and its task stays blocked; nothing restarts on
+top of an open owner question. The goal then ends needs-owner with all other work kept.
+**Proof:** `TestOwnerBlockedTaskIsNotResumedByARestart` fails on the previous commit (2 starts) and passes;
+final soak before the fix: rounds 1-10 DONE (acceptance re-run green by the script each time; 2-3 runner
+kill -9 and 3-6 agent kill -9 per round, 0 agents left), round 11 showed the bug; secret-only rerun after
+the fix: see the commit's report (`tasks/goal-engine-report.md`).

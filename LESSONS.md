@@ -569,3 +569,6 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     while the dashboard showed a nonsense "client" total, because the tests checked that the right totals were
     present, not that wrong ones were absent. Assert the full set (exactly these cards), and read every
     screenshot before calling a UI done.
+116. **An owner question must survive the death of the agent that asked it** (2026-10-30, soak round 11): a
+    restart is a fresh process that may not ask again, so "dead -> restart" silently skipped a sign-in /
+    secret request. Rules that keep the human in the loop must be checked before recovery rules run.
