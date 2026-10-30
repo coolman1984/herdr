@@ -14,6 +14,7 @@ _CURRENCY = [
     (re.compile(r"(?i)\bEUR\b|€"), "EUR"),
     (re.compile(r"(?i)\bGBP\b|£"), "GBP"),
 ]
+_CUR_TOKENS = re.compile(r"(?i)(?<![a-z])(EGP|LE|L\.E\.?|SAR|AED|USD|US\$|EUR|GBP)(?![a-z])|[$€£]|ج\.?\s?م\.?|جنيه(ا|ات)?|ر\.?\s?س\.?|ريال(ا|ات)?|د\.?\s?إ\.?|درهم(ا)?")
 _NUM = re.compile(r"^[+-]?(\d{1,3}([,\s٬]\d{3})+|\d+)?([.٫]\d+)?$")
 
 
@@ -39,7 +40,9 @@ def parse_number(raw):
     cur = currency_of(s)
     if cur:
         info.append("currency " + cur)
-    s = re.sub(r"(?i)[a-z$€£]+\.?|[؀-ۿ.]+(?=\s|$)|ج\.م|ر\.س", lambda m: "" if not m.group(0).replace(".", "").isdigit() else m.group(0), s).strip()
+    # Only currency tokens are removed; any other word means this is text that contains a number
+    # ("عميل 17", "Invoice 1001"), not a number.
+    s = _CUR_TOKENS.sub(" ", s).strip()
     neg = False
     if s.startswith("(") and s.endswith(")"):
         neg, s = True, s[1:-1].strip()

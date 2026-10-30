@@ -1583,3 +1583,23 @@ peak RSS 56 MB under a 300 MB bound, total exact.
 **Not proven:** the COM worker against real Office and a real NASCA-protected file (needs the owner's
 authorized PC); whether `exit` inside `try` runs the `finally` that closes Office in every PowerShell
 version (to check there).
+
+## Phase 61 - docpipe web app: a responsive journey tested in a real browser (2026-10-30)
+
+**Symptom:** the review package (phase 4) asks for a responsive site with a full journey, browser tests,
+screenshots, accessibility and performance checks.
+**Fix:** `python -m docpipe serve --db work.db` (`tools/docpipe/docpipe/web.py`, standard library, read-only
+SQLite): dashboard (totals with counts, files, quality notes) -> a file's values with their source cells,
+100 per page -> search with loading, empty and error states -> CSV. Arabic RTL by default, English with
+`?lang=en`, light/dark, skip link, visible focus, 44 px targets, labelled search, `prefers-reduced-motion`,
+CSP header. Pages mark `data-ready="1"`; the tests wait on that, never on network idle (PR #16 adaptation).
+**Bug found by looking at the screenshots:** client names like "عميل 17" were read as the number 17 and
+summed into a fake "client" total (959,289). `parse_number` removed every Arabic word; now it removes only
+currency tokens, and text with any other word is text. The unit test (fails on the previous code) and the
+browser test (exactly two money totals, no "client" total) cover it.
+**Proof:** `node --test tools/docpipe/tests/web/journey.test.mjs`: 8/8 in Chromium - phone 390x844 and
+desktop 1280x800 in light and dark (totals, no sideways scroll, WCAG contrast >= 4.5 measured on text),
+keyboard-only journey, search under a 1.2 s network delay and an aborted request, empty database, 404,
+English/LTR, reduced motion, 4x CPU slowdown with 20,000 records: ready in ~0.5-0.8 s, 77 DOM nodes, file
+pages paged. Screenshots: `tasks/docpipe-web-shots/`. Also `__pycache__` removed from the last commit and
+ignored.

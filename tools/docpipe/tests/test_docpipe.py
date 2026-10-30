@@ -38,7 +38,7 @@ class Normalize(unittest.TestCase):
         for raw, want in cases.items():
             v, _ = N.parse_number(raw)
             self.assertEqual(v, Decimal(want), raw)
-        for raw in ("abc", "", None, "12/10/2026"):
+        for raw in ("abc", "", None, "12/10/2026", "عميل 17", "Invoice 1001", "Q3", "فرع 5"):
             self.assertIsNone(N.parse_number(raw)[0], raw)
 
     def test_money_is_exact(self):

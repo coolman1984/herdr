@@ -27,6 +27,10 @@ def main(argv=None):
     r.add_argument("--batch", type=int, default=2000)
     c = sub.add_parser("check")
     c.add_argument("--db", required=True)
+    w = sub.add_parser("serve")
+    w.add_argument("--db", required=True)
+    w.add_argument("--host", default="127.0.0.1")
+    w.add_argument("--port", type=int, default=8765)
     b = sub.add_parser("backup")
     b.add_argument("--db", required=True)
     b.add_argument("--to", required=True)
@@ -35,6 +39,10 @@ def main(argv=None):
         res = store.integrity(store.connect(a.db))
         print(res)
         return 0 if res == "ok" else 1
+    if a.cmd == "serve":
+        from . import web
+        web.serve(a.db, a.host, a.port)
+        return 0
     if a.cmd == "backup":
         store.backup(store.connect(a.db), a.to)
         print("backup", a.to, store.integrity(store.connect(a.to)))

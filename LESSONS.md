@@ -565,3 +565,7 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 114. **openpyxl rejects a styles.xml that Excel tolerates** (2026-10-30): fixtures need complete fonts,
     fills (none + gray125), borders and cellStyleXfs. Use an independent library as a test oracle, but keep
     the product on the standard library for locked-down company PCs.
+115. **Look at the screenshot, not only the assertions** (2026-10-30, docpipe web): all 8 browser tests passed
+    while the dashboard showed a nonsense "client" total, because the tests checked that the right totals were
+    present, not that wrong ones were absent. Assert the full set (exactly these cards), and read every
+    screenshot before calling a UI done.
