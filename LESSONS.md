@@ -558,3 +558,10 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     lead starts knowing nothing: tell it the open problems again.
 112. **`kill(pid, 0)` succeeds for a zombie** (2026-10-30): in a container whose init does not reap,
     a killed child stays a zombie and looked alive; read the state letter in `/proc/<pid>/stat`.
+113. **A PDF's text is only as good as its font maps** (2026-10-30, docpipe): LibreOffice PDFs use subset
+    fonts whose codes are not characters; reading through the font's ToUnicode CMap fixed it. Arabic is
+    stored in visual order (reverse each Arabic run back), and word spaces are gaps inside TJ arrays, not
+    space characters. Text that is still unprintable is low-confidence, never passed on as data.
+114. **openpyxl rejects a styles.xml that Excel tolerates** (2026-10-30): fixtures need complete fonts,
+    fills (none + gray125), borders and cellStyleXfs. Use an independent library as a test oracle, but keep
+    the product on the standard library for locked-down company PCs.

@@ -1559,3 +1559,27 @@ low-trust concurrency, a running agent moved, sample Claude and Codex files; bud
 unknown and one-CPU machines. Real run of `herdr-goal env` in this container: 15.3 GB free, 4 CPUs ->
 2 agents; claude, git, go, node, python, LibreOffice found; pwsh, codex, herdr absent; no Office COM (Linux).
 **Not proven:** the Codex log field names and the Windows registry/session probes on a real Windows PC.
+
+## Phase 60 - Document and data pipeline: docpipe (2026-10-30)
+
+**Symptom:** the review package (PR #16, phase 3) asks for documents -> values with provenance -> database
+-> exact totals -> report and dashboard, under the company policy (NASCA files only through the authorized
+Office application; PowerShell / Python standard library; no package downloads).
+**Fix:** `tools/docpipe` (Python standard library only): content-based discovery (SHA-256, kind from bytes),
+routing by device profile (company_nasca -> Office COM worker `com-extract.ps1`, read-only, own instance,
+macros off, no save; PDF under company_nasca stays `needs-authorized-app`), streaming xlsx/docx/pptx readers
+with exact locations, a stdlib PDF reader with ToUnicode CMaps and Arabic reading order (scans reported, not
+guessed), normalisation (Arabic digits, currencies, parentheses negatives, percent, d/m/y with confidence,
+Excel serials), SQLite store (WAL, migrations, idempotent by SHA-256, batch + checkpoint resume, backup,
+integrity), quality notes (mixed types, duplicates, column-set drift, hidden/merged/error cells), Decimal
+totals with reference checks, self-contained RTL/dark report with sources, CSV export. Skill
+`skills/herdr-documents`. CI runs the tests on Linux and Windows and parses the COM worker in Windows
+PowerShell 5.1 and 7.
+**Proof:** 14 tests, cross-checked against openpyxl, python-docx, python-pptx and pdftotext (test oracles
+only) and a LibreOffice-made PDF (subset fonts, Arabic); a cut import resumes with no duplicates; a
+company_nasca file is never parsed (the parser is replaced by one that fails the test if called); zip bomb
+quarantined; CFB/protected file -> needs-authorized-app, not "damaged". Bench: 300,000 rows imported in 63 s,
+peak RSS 56 MB under a 300 MB bound, total exact.
+**Not proven:** the COM worker against real Office and a real NASCA-protected file (needs the owner's
+authorized PC); whether `exit` inside `try` runs the `finally` that closes Office in every PowerShell
+version (to check there).
