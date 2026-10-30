@@ -1,7 +1,7 @@
 name: Independent goal engine audit
 on:
   push:
-    branches: [codex/goal-audit-20261030]
+    branches: [codex/goal-audit-20261030, ccr-efd59209-8jk5t6]
   workflow_dispatch:
 permissions:
   contents: read
