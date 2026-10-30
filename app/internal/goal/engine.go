@@ -35,8 +35,9 @@ type Engine struct {
 	Now       func() time.Time
 	Probe     Probes
 	Decide    Decider
-	Sync      bool // run checks and merges inside the tick (tests); else in the background
-	Gen       int  // this runner's generation; a newer one on disk means this runner must stop writing
+	Q         *Quotas // account quotas; nil = every account unknown (low trust)
+	Sync      bool    // run checks and merges inside the tick (tests); else in the background
+	Gen       int     // this runner's generation; a newer one on disk means this runner must stop writing
 	G         *Goal
 	Log       func(string)
 	mu        sync.Mutex

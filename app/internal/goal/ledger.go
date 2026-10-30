@@ -73,10 +73,13 @@ func DefaultLimits() Limits {
 
 // Profile is one way to start an agent: a CLI + model on an account.
 type Profile struct {
-	Name    string   `json:"name"`
-	Kind    string   `json:"kind"`    // vendor family; a reviewer must differ from the writer
-	Command []string `json:"command"` // argv; {prompt} is replaced by the first prompt when present
-	Model   string   `json:"model,omitempty"`
+	Name string `json:"name"`
+	Kind string `json:"kind"` // vendor family; a reviewer must differ from the writer
+	// Provider names the real subscription (anthropic, openai, google, cline); profiles with the same
+	// provider and account share one quota. Empty = Kind.
+	Provider string   `json:"provider,omitempty"`
+	Command  []string `json:"command"` // argv; {prompt} is replaced by the first prompt when present
+	Model    string   `json:"model,omitempty"`
 	// Fallback is tried after RetryCap capacity/model errors.
 	Fallback string            `json:"fallback,omitempty"`
 	Accounts []string          `json:"accounts,omitempty"` // tried in order on account limits

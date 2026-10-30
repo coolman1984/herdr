@@ -105,7 +105,7 @@ func newRig(t *testing.T, tasks ...Task) *rig {
 		t.Fatal(err)
 	}
 	r.e = &Engine{L: l, W: Workspace{Project: g.Project, Ledger: l}, B: r.b, P: MustPrompts(), Now: func() time.Time { return r.now },
-		Probe: probe, Sync: true, G: g, jobs: map[string]*job{}}
+		Probe: probe, Sync: true, G: g, jobs: map[string]*job{}, Q: fakeQuotas(map[string]float64{})}
 	return r
 }
 
@@ -806,4 +806,26 @@ func TestNeedsOwnerLeavesNoUnwatchedAgents(t *testing.T) {
 	if a := r.agentOf("T2"); a == nil || a.Ended {
 		t.Fatal("the agent showing the owner's prompt was closed")
 	}
+}
+
+// fixedSource reports a fixed five-hour usage per account (default 10%), observed now.
+type fixedSource struct {
+	used map[string]float64
+	now  func() time.Time
+}
+
+func (f fixedSource) Read(account string) QuotaReading {
+	u, ok := f.used[account]
+	if !ok {
+		u = 10
+	}
+	if u < 0 {
+		return QuotaReading{Account: account, State: QuotaUnknown, Note: "test: no reading"}
+	}
+	return QuotaReading{Account: account, State: QuotaKnown, Observed: f.now(), Limits: []Limit{{Kind: "five_hour", UsedPct: &u, ResetsAt: f.now().Add(2 * time.Hour)}}}
+}
+
+func fakeQuotas(used map[string]float64) *Quotas {
+	src := fixedSource{used: used, now: time.Now}
+	return &Quotas{TTL: 0, Sources: map[string]QuotaSource{"a": src, "b": src}}
 }

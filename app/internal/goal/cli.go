@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ const usage = `herdr-goal - give a goal, the engine finishes it (docs/GOAL-ENGIN
   run     LEDGER [--backend herdr|proc] [--interval 5s] [--lead-pane ID] [--once]
   keep    LEDGER [--every 15s] [run flags]   restarts a dead runner until the goal ends
   status  LEDGER                     events LEDGER
+  env     [--project DIR] [--policy FILE] [--out FILE]   capability report (discover before planning)
   task    add|update|retry|cancel LEDGER --id ID [--title T] [--spec S|--spec-file F] [--deps a,b]
           [--accept CMD]... [--files f,g] [--writer P] [--reviewer P] [--feedback TEXT]
   assume  LEDGER TEXT                decide LEDGER TEXT
@@ -73,6 +75,23 @@ func Main(args []string) int {
 		return Relay(rest[0], rest[2:])
 	case "new":
 		return cmdNew(rest)
+	case "env":
+		fs := flag.NewFlagSet("env", flag.ContinueOnError)
+		project := fs.String("project", ".", "")
+		policy := fs.String("policy", DevicePolicyPath(), "")
+		out := fs.String("out", "", "")
+		if fs.Parse(rest) != nil {
+			return 2
+		}
+		r := Discover(*project, *policy)
+		b, _ := json.MarshalIndent(r, "", "  ")
+		if *out != "" {
+			if err := WriteReport(r, *out); err != nil {
+				return fail(err)
+			}
+		}
+		fmt.Println(string(b))
+		return 0
 	case "run":
 		return cmdRun(rest)
 	case "keep":
@@ -236,10 +255,20 @@ func cmdNew(args []string) int {
 		}
 		n.Tasks = p.Tasks
 	}
+	// Discover first: the measured budget caps the configured one (never raises it).
+	capr := Discover(*project, DevicePolicyPath())
+	if b := capr.Budget; b.MaxAgents < n.Limits.MaxAgents {
+		n.Limits.MaxAgents = max(1, b.MaxAgents)
+		n.Limits.MaxProcs = min(n.Limits.MaxProcs, max(3, b.MaxProcs))
+	}
 	g, l, err := Create(n, RealProbes(), time.Now())
 	if err != nil {
 		return fail(err)
 	}
+	if err := WriteReport(capr, filepath.Join(l.Dir, "capabilities.json")); err != nil {
+		return fail(err)
+	}
+	fmt.Printf("capabilities: %s; budget %d agents (%s); %d unknowns\n", filepath.Join(l.Dir, "capabilities.json"), g.Limits.MaxAgents, capr.Budget.Reason, len(capr.Unknowns))
 	fmt.Printf("goal %s created: %s\nstate %s, %d tasks, branch %s\nrun it: herdr-goal run %s\n", g.ID, l.Dir, g.State, len(g.Tasks), g.Branch, l.Dir)
 	return 0
 }
@@ -330,6 +359,7 @@ func cmdRun(args []string) int {
 	if !*quiet {
 		e.Log = func(s string) { fmt.Println(s) }
 	}
+	e.Q = DefaultQuotas()
 	if len(e.G.Decider) > 0 {
 		e.Decide = CommandDecider(e.G.Decider)
 	}
@@ -445,4 +475,16 @@ func cmdKeep(args []string) int {
 		}
 		time.Sleep(*every)
 	}
+}
+
+// DevicePolicyPath is the owner's per-device policy file (profile company_nasca / personal, packages).
+func DevicePolicyPath() string {
+	if v := os.Getenv("HERDR_DEVICE_POLICY"); v != "" {
+		return v
+	}
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("APPDATA"), "herdr", "device-policy.json")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "herdr", "device-policy.json")
 }

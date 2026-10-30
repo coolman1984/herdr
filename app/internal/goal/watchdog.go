@@ -35,6 +35,9 @@ func (e *Engine) watch(a *AgentRun) {
 	}
 	a.Retries["backend-error"] = 0
 	e.checkAck(a)
+	if e.checkQuota(a) {
+		return
+	}
 
 	// A result file wins over everything else: the agent finished.
 	ans, err := e.readAnswer(a)
@@ -405,7 +408,7 @@ func (e *Engine) accountLimited(a *AgentRun, s Sight, screen string) {
 	if until.IsZero() {
 		until = e.Now().Add(e.G.Limits.DefaultLimitFor.D())
 	}
-	key := a.Profile + "/" + a.Account
+	key := e.realAccount(a.Profile, a.Account)
 	acc := e.G.Accounts[key]
 	if acc == nil {
 		acc = &Account{}
@@ -450,9 +453,61 @@ func (e *Engine) reviewExclude(a *AgentRun) string {
 	return ""
 }
 
+// realAccount is the budget key: provider + account, so profiles on one subscription share it.
+func (e *Engine) realAccount(profile, account string) string {
+	prov := profile
+	if p := e.G.Profile(profile); p != nil {
+		prov = p.Provider
+		if prov == "" {
+			prov = p.Kind
+		}
+	}
+	return prov + "/" + account
+}
+
+// accountVerdict reads the account's quota (90% rule). No quota source = unknown = low trust, never 0%.
+func (e *Engine) accountVerdict(profile, account string) Verdict {
+	p := e.G.Profile(profile)
+	if e.Q == nil || p == nil {
+		return Verdict{Eligible: true, LowTrust: true, Reason: "no quota source"}
+	}
+	prov := p.Provider
+	if prov == "" {
+		prov = p.Kind
+	}
+	return Judge(e.Q.Reading(prov, account, e.Now()), e.Now())
+}
+
+// liveOnAccount counts live agents (any profile) on one real account.
+func (e *Engine) liveOnAccount(key string) int {
+	n := 0
+	for _, a := range e.G.Agents {
+		if !a.Ended && e.realAccount(a.Profile, a.Account) == key {
+			n++
+		}
+	}
+	return n
+}
+
 func (e *Engine) accountFree(profile, account string) bool {
-	acc := e.G.Accounts[profile+"/"+account]
-	return acc == nil || !acc.LimitedUntil.After(e.Now())
+	key := e.realAccount(profile, account)
+	if acc := e.G.Accounts[key]; acc != nil && acc.LimitedUntil.After(e.Now()) {
+		return false
+	}
+	v := e.accountVerdict(profile, account)
+	if !v.Eligible {
+		until := v.Until
+		if until.IsZero() {
+			until = e.Now().Add(e.G.Limits.DefaultLimitFor.D())
+		}
+		e.G.Accounts[key] = &Account{LimitedUntil: T(until)}
+		e.event("quota-90", "", "", fmt.Sprintf("%s not eligible: %s; held until %s", key, v.Reason, until.Format(time.RFC3339)))
+		return false
+	}
+	if v.LowTrust && e.liveOnAccount(key) >= 1 {
+		return false // limits unknown: one agent at a time on this account
+	}
+	return true
 }
 
 // freeAccount returns the profile and its first account that is not limited ("" account when the
@@ -474,6 +529,21 @@ func (e *Engine) freeAccount(profile string) (string, string) {
 		}
 	}
 	return "", ""
+}
+
+// checkQuota moves a running agent off an account that reached 90% of any limit: its work is saved,
+// it is stopped and the task continues on an eligible account (or waits for the reset).
+func (e *Engine) checkQuota(a *AgentRun) bool {
+	if e.Q == nil {
+		return false
+	}
+	v := e.accountVerdict(a.Profile, a.Account)
+	if v.Eligible {
+		return false
+	}
+	e.event("quota-90", a.Name, a.Task, "running on an account at "+v.Reason+"; handing the task to another account")
+	e.accountLimited(a, Sight{Reset: v.Until, Line: "quota " + v.Reason}, "")
+	return true
 }
 
 // handoff: the lead's context is nearly full. It writes handoff.md, then a fresh lead continues from it.

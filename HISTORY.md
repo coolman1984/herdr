@@ -1537,3 +1537,25 @@ agent's estimate, optional login `probe` per profile drops a signed-out CLI at c
 use the zone the CLI prints, file changes in the worktree count as progress (#18). `go test -race` clean;
 mutations 45/45 (`app/tests/goal-mutations.py`); e2e `run.sh` DONE, second runner refused by the OS lock.
 **Lesson:** #110.
+
+## Phase 59 - Environment discovery and account quotas under 90% (2026-10-30)
+
+**Symptom:** the owner's policy (`docs/COMPANY-ENVIRONMENT-POLICY.md`, PR #16) requires discovery before
+planning and no new work on an account at >= 90% of any limit; the engine planned with fixed numbers and
+knew only accounts that had already printed a limit message.
+**Fix:** `herdr-goal env` (`envcap.go`): host, session, container, cgroup memory/CPU, load, disk, tools with
+versions (PowerShell first on Windows, any version), Python modules found without importing or installing,
+Office ProgIDs from the registry (Office is never started), proxy/DNS, the owner's per-device policy
+(`device-policy.json`: `company_nasca` / personal, packages allowed) - every fact tested / untested / absent /
+denied / unknown with its source. A budget is derived from the measured free RAM and CPUs (reserve for OS,
+lead and one job); `herdr-goal new` writes `capabilities.json` into the ledger and lowers (never raises) the
+configured agents. `quota.go`: readings per real account (provider + account: profile aliases share one
+budget) from the Claude status-line files and Codex session logs; Antigravity/Cline are `unsupported`;
+`known/unknown/unsupported/stale` explicit. `Judge` blocks at >= 90% of any limit until its reset; unknown
+or stale = low trust (one agent at a time on that account, never 0%). Checked before each start and on
+every tick of a running agent, which is moved off an account that reaches 90% with its work saved.
+**Proof:** tests for 89.9 / 90 / 90.1 %, weekly missing, unknown, unsupported, stale, reset passed, aliases,
+low-trust concurrency, a running agent moved, sample Claude and Codex files; budget for strong, weak,
+unknown and one-CPU machines. Real run of `herdr-goal env` in this container: 15.3 GB free, 4 CPUs ->
+2 agents; claude, git, go, node, python, LibreOffice found; pwsh, codex, herdr absent; no Office COM (Linux).
+**Not proven:** the Codex log field names and the Windows registry/session probes on a real Windows PC.
