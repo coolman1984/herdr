@@ -1499,3 +1499,7 @@ second runner refused, trust/crash/idle/limit/capacity/review-reject/merge-confl
 DONE in 51 s, acceptance re-run green by the script, 0 agents left. Soak: see below.
 **Not proven:** real CLIs and real Herdr panes (#108), Windows run, `check.ps1`.
 **Lesson:** #103-#108.
+
+## Independent audit preparation (2026-10-30)
+
+Separate branch from cd846676: 18 source-inspection findings, six unexecuted behavioral regression specifications, five pinned upstream skill candidates with licenses and adoption policy, and a Linux/Windows CI evidence workflow. No engine production behavior changed. Go is absent locally and download failed. New tests must run before any passing claim. Candidates are not activated. Real-agent integration remains unverified.
