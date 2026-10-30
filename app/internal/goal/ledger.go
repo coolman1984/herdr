@@ -46,7 +46,9 @@ type Limits struct {
 	MaxDuration     Duration `json:"max_duration"`
 	MaxTasks        int      `json:"max_tasks"`
 	MaxAttempts     int      `json:"max_attempts"`      // writer attempts per task before it fails
-	MaxAgents       int      `json:"max_agents"`        // agents alive at once (lead excluded)
+	MaxAgents       int      `json:"max_agents"`        // delegates alive at once (lead excluded)
+	MaxProcs        int      `json:"max_procs"`         // lead + delegates + background jobs at once
+	AgentRAMMB      int      `json:"agent_ram_mb"`      // RAM one more agent is expected to need
 	MinFreeRAMMB    int      `json:"min_free_ram_mb"`   // no new agent below this
 	MinFreeDiskMB   int      `json:"min_free_disk_mb"`  // no new agent below this
 	NoProgress      Duration `json:"no_progress"`       // no progress event (result, merge, re-plan ...) this long: stop and report
@@ -61,7 +63,7 @@ type Limits struct {
 
 func DefaultLimits() Limits {
 	return Limits{
-		MaxDuration: Duration(8 * time.Hour), MaxTasks: 40, MaxAttempts: 3, MaxAgents: 2,
+		MaxDuration: Duration(8 * time.Hour), MaxTasks: 40, MaxAttempts: 3, MaxAgents: 2, MaxProcs: 4, AgentRAMMB: 600,
 		MinFreeRAMMB: 1536, MinFreeDiskMB: 2048, NoProgress: Duration(45 * time.Minute),
 		StartTimeout: Duration(3 * time.Minute), AckTimeout: Duration(3 * time.Minute),
 		StallAfter: Duration(20 * time.Minute), IdleGrace: Duration(90 * time.Second), RetryCap: 3,
@@ -80,6 +82,9 @@ type Profile struct {
 	Accounts []string          `json:"accounts,omitempty"` // tried in order on account limits
 	Env      map[string]string `json:"env,omitempty"`      // {account} is replaced
 	Roles    []string          `json:"roles,omitempty"`    // write, review, lead
+	// Probe is a tiny real request (e.g. claude -p "Reply OK") run at goal creation: it proves the CLI
+	// is signed in and the model answers. A failing probe removes the profile from the goal.
+	Probe []string `json:"probe,omitempty"`
 }
 
 type Task struct {
@@ -125,6 +130,7 @@ type AgentRun struct {
 	Sent      bool           `json:"sent"`  // brief delivered (in argv or typed)
 	Begun     bool           `json:"begun"` // launch check passed
 	LastHash  string         `json:"last_hash,omitempty"`
+	LastFP    string         `json:"last_worktree,omitempty"`   // worktree fingerprint: files changing is progress too
 	AnsHash   string         `json:"answered_screen,omitempty"` // screen an answer was sent to
 	AnsAt     Time           `json:"answered_at"`
 	LastMove  Time           `json:"last_move"`  // normalized screen last changed
@@ -344,14 +350,23 @@ func (l Ledger) Events() ([]Event, error) {
 		return nil, err
 	}
 	defer f.Close()
+	// A crash between Append and Save can leave events whose numbers the next runner reuses; the later
+	// line wins. A damaged line anywhere (not only the last) is skipped and counted.
 	var out []Event
+	index := map[int]int{}
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64<<10), 8<<20)
 	for sc.Scan() {
 		var e Event
-		if json.Unmarshal(sc.Bytes(), &e) == nil {
-			out = append(out, e)
+		if json.Unmarshal(sc.Bytes(), &e) != nil || e.Seq == 0 {
+			continue
 		}
+		if i, ok := index[e.Seq]; ok {
+			out[i] = e
+			continue
+		}
+		index[e.Seq] = len(out)
+		out = append(out, e)
 	}
 	return out, sc.Err()
 }

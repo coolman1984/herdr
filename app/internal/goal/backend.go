@@ -89,11 +89,27 @@ func (h *HerdrBackend) run(args ...string) (string, error) {
 }
 
 func (h *HerdrBackend) panes() map[string]string {
-	m := map[string]string{}
-	if b, err := os.ReadFile(filepath.Join(h.Dir, "panes.json")); err == nil {
-		json.Unmarshal(b, &m)
+	m, err := h.loadPanes()
+	if err != nil {
+		return map[string]string{}
 	}
 	return m
+}
+
+// loadPanes fails loudly on a damaged panes.json: reading it as empty would orphan live panes.
+func (h *HerdrBackend) loadPanes() (map[string]string, error) {
+	m := map[string]string{}
+	b, err := os.ReadFile(filepath.Join(h.Dir, "panes.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return m, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("panes.json is damaged (%v); not starting agents until it is repaired", err)
+	}
+	return m, nil
 }
 
 func (h *HerdrBackend) savePanes(m map[string]string) error {
@@ -102,6 +118,14 @@ func (h *HerdrBackend) savePanes(m map[string]string) error {
 }
 
 func (h *HerdrBackend) Start(s StartSpec) error {
+	if _, err := h.loadPanes(); err != nil {
+		return err
+	}
+	for _, a := range s.Argv {
+		if strings.ContainsAny(a, "\r\n\x00\x1b") {
+			return fmt.Errorf("argument for %s holds a newline or control character; refused (it would be typed into the pane)", s.Name)
+		}
+	}
 	lead := h.LeadPane
 	if lead == "" {
 		lead = os.Getenv("HERDR_PANE_ID")
@@ -120,7 +144,7 @@ func (h *HerdrBackend) Start(s StartSpec) error {
 			} `json:"pane"`
 		} `json:"result"`
 	}
-	if json.Unmarshal([]byte(out), &r) != nil || r.Result.Pane.ID == "" {
+	if err := json.Unmarshal([]byte(out), &r); err != nil || r.Result.Pane.ID == "" {
 		return fmt.Errorf("herdr pane split gave no pane id: %s", oneLine(out, 200))
 	}
 	m := h.panes()

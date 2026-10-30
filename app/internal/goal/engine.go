@@ -28,20 +28,21 @@ type Decider func(g *Goal, agent *AgentRun, screen string, opts []Option) ([]str
 
 // Engine is the Supervisor: it never thinks about the goal, it keeps the loop alive and honest.
 type Engine struct {
-	L       Ledger
-	W       Workspace
-	B       Backend
-	P       Prompts
-	Now     func() time.Time
-	Probe   Probes
-	Decide  Decider
-	Sync    bool // run checks and merges inside the tick (tests); else in the background
-	Gen     int  // this runner's generation; a newer one on disk means this runner must stop writing
-	G       *Goal
-	Log     func(string)
-	mu      sync.Mutex
-	jobs    map[string]*job
-	pending []Event
+	L         Ledger
+	W         Workspace
+	B         Backend
+	P         Prompts
+	Now       func() time.Time
+	Probe     Probes
+	Decide    Decider
+	Sync      bool // run checks and merges inside the tick (tests); else in the background
+	Gen       int  // this runner's generation; a newer one on disk means this runner must stop writing
+	G         *Goal
+	Log       func(string)
+	mu        sync.Mutex
+	jobs      map[string]*job
+	decisions map[string]*decision
+	pending   []Event
 }
 
 type job struct {
@@ -246,8 +247,8 @@ func (e *Engine) Tick() error {
 	if g.State == GoalWaitingLimit {
 		return e.flush()
 	}
+	e.lead() // the lead takes its share of the process budget before delegates
 	e.schedule()
-	e.lead()
 	e.verify()
 	return e.flush()
 }
@@ -277,13 +278,26 @@ func (e *Engine) stopAll(why string) {
 	}
 }
 
-func (e *Engine) endAgent(a *AgentRun, why string) {
-	if err := e.do(Action{Kind: "stop", Agent: a.Name}); err != nil {
-		e.event("error", a.Name, a.Task, "stop: "+err.Error())
+// endAgent stops an agent and confirms it is gone. If the stop cannot be confirmed the run stays owned
+// and counted (state stop-pending) and the watchdog retries the stop; it is never reported as stopped.
+func (e *Engine) endAgent(a *AgentRun, why string) bool {
+	err := e.do(Action{Kind: "stop", Agent: a.Name})
+	if err == nil {
+		if o := e.B.Observe(a.Name); o.Err == nil && o.Exists && o.Status != StatusExited {
+			err = errors.New("still running after the stop")
+		} else if o.Err != nil {
+			err = o.Err
+		}
+	}
+	if err != nil {
+		a.State = "stop-pending"
+		e.event("stop-unconfirmed", a.Name, a.Task, why+": "+err.Error())
+		return false
 	}
 	a.Ended = true
 	a.State = "ended"
 	e.event("agent-stopped", a.Name, a.Task, why)
+	return true
 }
 
 func (e *Engine) liveAgents(role string) int {

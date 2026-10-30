@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -240,19 +241,21 @@ func TestIntegrationWorktreeHasOneOwner(t *testing.T) {
 	if j := r.e.startJob("merge:A:0", true, func(ctx context.Context, j *job) { <-release }); j != nil {
 		t.Fatal("job finished early")
 	}
-	ran := false
-	if j := r.e.startJob("revert:B", true, func(ctx context.Context, j *job) { ran = true }); j != nil || ran {
+	var ran atomic.Bool
+	j := r.e.startJob("revert:B", true, func(ctx context.Context, j *job) { ran.Store(true) })
+	time.Sleep(200 * time.Millisecond)
+	if j != nil || ran.Load() {
 		t.Fatal("a second job touched the integration worktree while a merge held it")
 	}
 	close(release)
 	time.Sleep(100 * time.Millisecond)
 	r.e.startJob("merge:A:0", true, nil)
 	time.Sleep(50 * time.Millisecond)
-	for i := 0; i < 20 && !ran; i++ {
-		r.e.startJob("revert:B", true, func(ctx context.Context, j *job) { ran = true })
+	for i := 0; i < 20 && !ran.Load(); i++ {
+		r.e.startJob("revert:B", true, func(ctx context.Context, j *job) { ran.Store(true) })
 		time.Sleep(20 * time.Millisecond)
 	}
-	if !ran {
+	if !ran.Load() {
 		t.Fatal("worktree never freed")
 	}
 }
@@ -381,5 +384,189 @@ func TestFailureBudgetSurvivesReplans(t *testing.T) {
 	}
 	if err := r.e.apply(Command{Cmd: "task-retry", By: "lead", Args: json.RawMessage(`{"id":"T1"}`)}); err == nil {
 		t.Fatal("lead retried past the budget")
+	}
+}
+
+// Audit #7: trust is decided on the folder the prompt shows, not on where we started the agent.
+func TestTrustUsesTheFolderOnScreen(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.tick()
+	f := r.screen("T1", StatusBlocked, strings.Replace(claudeTrust, "/work/project", t.TempDir(), 1))
+	r.tick()
+	if len(f.keys) != 0 || r.e.G.Task("T1").State != TaskBlocked {
+		t.Fatalf("trusted a folder outside the project because the agent started inside it: %v", f.keys)
+	}
+}
+
+// Audit #8: no blind default on a menu with a risky option; the decider does not block the watchdog.
+func TestRiskyMenuIsNotAnsweredByDefault(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.tick()
+	f := r.screen("T1", StatusBlocked, " Apply the change?\n ❯ 1. Push to origin now\n   2. Keep local\n Enter to confirm · Esc to cancel\n")
+	r.tick()
+	if len(f.keys) != 0 || len(r.events("escalated")) == 0 {
+		t.Fatalf("risky menu answered by default: %v", f.keys)
+	}
+}
+
+func TestDeciderRunsInTheBackground(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.e.Sync = false
+	release := make(chan struct{})
+	r.e.Decide = func(g *Goal, a *AgentRun, screen string, opts []Option) ([]string, string, error) {
+		<-release
+		return []string{"2"}, "json", nil
+	}
+	r.tick()
+	f := r.screen("T1", StatusBlocked, " Which format?\n ❯ 1. Plain\n   2. JSON\n Enter to confirm · Esc to cancel\n")
+	done := make(chan bool)
+	go func() { r.tick(); done <- true }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the tick waited for the decider")
+	}
+	close(release)
+	time.Sleep(100 * time.Millisecond)
+	r.tick()
+	if len(f.keys) != 1 || f.keys[0][0] != "2" {
+		t.Fatalf("decider pick not sent after it finished: %v", f.keys)
+	}
+}
+
+// Audit #9: an unconfirmed stop keeps the agent owned; nothing restarts on top of it.
+type stuckStop struct{ *fakeBackend }
+
+func (s stuckStop) Stop(n string) error { return nil } // reports success, process lives on
+
+func TestUnconfirmedStopKeepsOwnership(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.tick()
+	a := r.agentOf("T1")
+	r.e.B = stuckStop{r.b}
+	r.e.restartOrFail(a, "test")
+	if a.Ended || a.State != "stop-pending" || len(r.b.starts) != 1 {
+		t.Fatalf("stop not confirmed but agent released: ended=%v state=%s starts=%d", a.Ended, a.State, len(r.b.starts))
+	}
+}
+
+// Audit #9: an account limit on one agent does not stop healthy agents on other accounts.
+func TestAccountLimitDoesNotStopHealthyAgents(t *testing.T) {
+	r := newRig(t, task("T1"), task("T2"))
+	r.e.G.Profiles[0].Accounts = []string{"a1"}
+	r.e.G.Tasks[1].Writer = "beta"
+	r.tick()
+	healthy := r.agentOf("T2")
+	r.e.G.Accounts["beta/b1"] = &Account{LimitedUntil: T(r.now.Add(time.Hour))} // no free account left anywhere
+	r.screen("T1", StatusIdle, "You've hit your limit · resets in 1h 0m\n")
+	r.tick()
+	if healthy.Ended || !r.b.agents[healthy.Name].exists {
+		t.Fatal("a healthy agent was stopped because another account hit its limit")
+	}
+	if r.e.G.State == GoalWaitingLimit {
+		t.Fatal("goal waits while an agent still works")
+	}
+}
+
+// Audit #15: a reused event number keeps the later line; a damaged line in the middle is skipped.
+func TestEventsDeduplicateAndSkipDamagedLines(t *testing.T) {
+	l := Ledger{Dir: t.TempDir()}
+	os.WriteFile(filepath.Join(l.Dir, "events.jsonl"), []byte(`{"seq":1,"kind":"a"}
+{"seq":2,"kind":"b-before-crash"}
+{"seq":2,"kind":"to
+{"seq":2,"kind":"b-after-restart"}
+{"seq":3,"kind":"c"}
+`), 0o644)
+	evs, err := l.Events()
+	if err != nil || len(evs) != 3 || evs[1].Kind != "b-after-restart" {
+		t.Fatalf("%v %+v", err, evs)
+	}
+}
+
+// Audit #16: a damaged pane map is an error, not "no panes"; newlines never reach a pane.
+func TestHerdrBackendRefusesDamagedPaneMapAndNewlines(t *testing.T) {
+	dir := t.TempDir()
+	h := &HerdrBackend{Exe: "/nonexistent/herdr", LeadPane: "p1", Dir: dir}
+	if err := h.Start(StartSpec{Name: "a", Argv: []string{"claude", "line1\nrm -rf ~"}}); err == nil || !strings.Contains(err.Error(), "newline") {
+		t.Fatalf("newline argument accepted: %v", err)
+	}
+	os.WriteFile(filepath.Join(dir, "panes.json"), []byte(`{"a": "p-`), 0o644)
+	if err := h.Start(StartSpec{Name: "b", Argv: []string{"claude"}}); err == nil || !strings.Contains(err.Error(), "damaged") {
+		t.Fatalf("damaged panes.json read as empty: %v", err)
+	}
+}
+
+// Audit #17: the process budget counts the lead and background jobs.
+func TestProcessBudgetCountsLeadAndJobs(t *testing.T) {
+	r := newRig(t, task("T1"), task("T2"))
+	r.e.G.Lead = "alpha"
+	r.e.G.Profiles[0].Roles = append(r.e.G.Profiles[0].Roles, "lead")
+	r.e.G.Limits.MaxAgents, r.e.G.Limits.MaxProcs = 5, 3
+	r.e.Sync = false
+	release := make(chan struct{})
+	defer close(release)
+	r.e.startJob("check:X:0", false, func(ctx context.Context, j *job) { <-release })
+	r.tick() // lead: 1 proc + 1 job = 2; one delegate may start (3), not two
+	if n := r.e.liveAgents(""); n != 1 {
+		t.Fatalf("%d delegates started; lead + job + delegates must stay within 3", n)
+	}
+}
+
+func TestProbeDropsAProfileThatDoesNotAnswer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh fixture")
+	}
+	ps := []Profile{{Name: "ok", Probe: []string{"sh", "-c", "echo OK"}}, {Name: "signed-out", Probe: []string{"sh", "-c", "echo 'Not logged in' >&2; exit 1"}}, {Name: "none"}}
+	kept, notes := ProbeProfiles(ps, 10*time.Second)
+	if len(kept) != 2 || kept[0].Name != "ok" || kept[1].Name != "none" || !strings.Contains(strings.Join(notes, ";"), "signed-out: DROPPED") {
+		t.Fatalf("%+v %v", kept, notes)
+	}
+}
+
+// Audit #18: the zone printed by the CLI decides, not the PC's.
+func TestResetTimeUsesThePrintedZone(t *testing.T) {
+	now := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC) // 13:00 in Cairo (UTC+3 summer? use LoadLocation)
+	cairo, err := time.LoadLocation("Africa/Cairo")
+	if err != nil {
+		t.Skip("no tz database")
+	}
+	s := MustPrompts().Classify("You've hit your limit · resets 3pm (Africa/Cairo)", now)
+	want := time.Date(2026, 10, 30, 15, 0, 0, 0, cairo)
+	if !s.Reset.Equal(want) {
+		t.Fatalf("reset %v, want %v", s.Reset, want)
+	}
+}
+
+// Audit #18: files changing counts as progress even with an identical screen.
+func TestWorktreeChangesAreProgress(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.tick()
+	a := r.agentOf("T1")
+	f := r.screen("T1", StatusWorking, "● working\n✻ Thinking (3s)\n>\nctx\nfoot\nx")
+	for i := 0; i < 30; i++ {
+		os.WriteFile(filepath.Join(a.Cwd, "out.txt"), []byte(strings.Repeat("x", i+1)), 0o644)
+		r.advance(time.Minute)
+		r.tick()
+	}
+	if len(f.keys) != 0 || len(r.events("stalled")) != 0 {
+		t.Fatal("an agent writing files every minute was called stalled")
+	}
+}
+
+// Audit #5: checks that ran on an older commit than the branch now holds are not accepted.
+func TestCheckOfAnOlderCommitIsDropped(t *testing.T) {
+	r := newRig(t, Task{ID: "T1", Title: "t", Spec: "s", Accept: []string{"sleep 2"}})
+	r.e.Sync = false
+	r.tick()
+	r.finish("T1", Answer{Status: "done"})
+	r.tick() // checks start on the current head
+	wt := r.e.G.Task("T1").Worktree
+	os.WriteFile(filepath.Join(wt, "later.txt"), []byte("x\n"), 0o644)
+	run(t, wt, "git", "add", "-A")
+	run(t, wt, "git", "commit", "-qm", "pushed while checks ran")
+	time.Sleep(3 * time.Second)
+	r.tick()
+	if len(r.events("stale-result")) != 1 || r.e.G.Task("T1").State == TaskReview {
+		t.Fatal("checks of an older commit moved the task to review")
 	}
 }

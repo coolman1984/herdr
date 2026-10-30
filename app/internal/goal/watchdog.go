@@ -1,7 +1,12 @@
 package goal
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -12,6 +17,12 @@ func (e *Engine) watch(a *AgentRun) {
 		a.Retries = map[string]int{}
 	}
 	now := e.Now()
+	if a.State == "stop-pending" {
+		if !e.endAgent(a, "retrying an unconfirmed stop") && e.retry(a, "stop") == false {
+			e.escalate(a, "agent cannot be stopped; it is still counted against the limits", "")
+		}
+		return
+	}
 	o := e.B.Observe(a.Name)
 	if o.Err != nil {
 		// Herdr could not be asked: that is not "dead". Count it and look again next tick.
@@ -65,10 +76,21 @@ func (e *Engine) watch(a *AgentRun) {
 		return
 	case "trust":
 		e.setAgent(a, "trust")
-		if !insideProject(e.G.Project, a.Cwd) {
+		asked := trustPath(o.Screen)
+		if asked == "" {
+			// No folder on screen: accepted only as the startup prompt of an agent we just started in
+			// a.Cwd and that has not begun yet; any later trust prompt without a path is not answered.
+			if a.Begun {
+				e.escalate(a, "trust prompt without a folder after the agent began", o.Screen)
+				e.restartOrFail(a, "trust prompt without a folder")
+				return
+			}
+			asked = a.Cwd
+		}
+		if !insideProject(e.G.Project, asked) {
 			if a.State != "needs-owner" {
 				e.setAgent(a, "needs-owner")
-				e.ownerBlock(a, "trust prompt for a folder outside the goal's project: "+a.Cwd, o.Screen)
+				e.ownerBlock(a, "trust prompt for a folder outside the goal's project: "+asked, o.Screen)
 			}
 			return
 		}
@@ -122,6 +144,18 @@ func (e *Engine) watch(a *AgentRun) {
 	// No prompt on screen: launch check, progress, early stop, stall.
 	h := ProgressHash(o.Screen)
 	moved := h != a.LastHash
+	if a.Role == "write" {
+		if fp := worktreeFP(a.Cwd); fp != "" && fp != a.LastFP {
+			// Files changing is progress even when the screen looks the same (digits and the status
+			// block are not in the screen hash).
+			if a.LastFP != "" {
+				moved = true
+				a.LastMove = T(now)
+				a.Retries["stall"] = 0
+			}
+			a.LastFP = fp
+		}
+	}
 	if moved {
 		if a.LastHash != "" {
 			a.Begun = true
@@ -218,18 +252,70 @@ func (e *Engine) keys(a *AgentRun, keys []string, why, screen string) {
 	}
 }
 
+// riskyOption marks menu choices the engine never takes by itself.
+var riskyOption = regexp.MustCompile(`(?i)\b(delete|remove|erase|wipe|drop|push|publish|deploy|release|overwrite|force|reset|discard|purchase|pay|send|upload|share|grant|always allow|don't ask again|bypass)\b`)
+
+// choose answers a routine menu. The decider runs in the background so the watchdog keeps watching;
+// its pick is sent only if the screen is still the same menu. Without a decider, the highlighted
+// default is taken only when no option on the menu is risky; otherwise the lead (or owner) decides.
 func (e *Engine) choose(a *AgentRun, screen string, s Sight) {
+	h := screenHash(screen)
 	if e.Decide != nil {
-		keys, why, err := e.Decide(e.G, a, screen, s.Options)
+		e.mu.Lock()
+		d := e.decisions[a.Name]
+		if d == nil || d.hash != h {
+			d = &decision{hash: h}
+			if e.decisions == nil {
+				e.decisions = map[string]*decision{}
+			}
+			e.decisions[a.Name] = d
+			e.mu.Unlock()
+			g, run := e.G, *a
+			opts := append([]Option(nil), s.Options...)
+			work := func() {
+				keys, why, err := e.Decide(g, &run, screen, opts)
+				e.mu.Lock()
+				d.keys, d.why, d.err, d.done = keys, why, err, true
+				e.mu.Unlock()
+			}
+			if e.Sync {
+				work()
+			} else {
+				go work()
+			}
+			e.mu.Lock()
+		}
+		done, keys, why, err := d.done, d.keys, d.why, d.err
+		e.mu.Unlock()
+		if !done {
+			a.Retries["choice"]-- // waiting for the decider is not a retry
+			return
+		}
+		e.mu.Lock()
+		delete(e.decisions, a.Name)
+		e.mu.Unlock()
 		if err == nil && len(keys) > 0 {
 			e.keys(a, keys, "decider: "+why, screen)
 			return
 		}
 		e.event("decider-failed", a.Name, a.Task, fmt.Sprint(err))
 	}
-	// No decider: the CLI's highlighted default is the routine answer. Recorded as an assumption.
+	for _, o := range s.Options {
+		if riskyOption.MatchString(o.Text) {
+			e.escalate(a, fmt.Sprintf("menu %q has a risky option (%q); not answered by default", s.Line, o.Text), screen)
+			return
+		}
+	}
 	e.G.Assumptions = append(e.G.Assumptions, fmt.Sprintf("%s: took the default of menu %q", a.Name, s.Line))
-	e.keys(a, []string{"Enter"}, "menu default", screen)
+	e.keys(a, []string{"Enter"}, "menu default (no risky option)", screen)
+}
+
+type decision struct {
+	hash string
+	done bool
+	keys []string
+	why  string
+	err  error
 }
 
 func (e *Engine) escalate(a *AgentRun, problem, screen string) *Escalation {
@@ -253,6 +339,10 @@ func (e *Engine) ownerBlock(a *AgentRun, problem, screen string) {
 // restartOrFail restarts a broken agent in the same folder (its work is committed first). After the cap
 // it switches profile; with none left the task attempt fails.
 func (e *Engine) restartOrFail(a *AgentRun, why string) {
+	// Stop and confirm the exit first, then save: saving while the agent still writes races it.
+	if !e.endAgent(a, why) {
+		return // stop-pending: retried next tick, nothing restarted on top of a live agent
+	}
 	if t := e.G.Task(a.Task); t != nil && a.Role == "write" {
 		if saved, err := e.W.SaveWork(t, a.Name); err != nil {
 			e.event("error", a.Name, a.Task, "save work: "+err.Error())
@@ -267,7 +357,6 @@ func (e *Engine) restartOrFail(a *AgentRun, why string) {
 		e.switchModel(a, why)
 		return
 	}
-	e.endAgent(a, why)
 	next := e.startAgent(a.Role, a.Task, a.Profile, a.Account, a.Retries, "Your previous run stopped ("+why+"). Its work is committed in this folder; continue from there.")
 	if next != nil {
 		e.event("restarted", next.Name, a.Task, why)
@@ -276,11 +365,16 @@ func (e *Engine) restartOrFail(a *AgentRun, why string) {
 
 // switchModel replaces the agent with its profile's fallback, or another profile of the same role.
 func (e *Engine) switchModel(a *AgentRun, why string) {
-	e.endAgent(a, why)
+	if !a.Ended && !e.endAgent(a, why) {
+		return
+	}
 	p := e.G.Profile(a.Profile)
 	alt := ""
 	if p != nil && p.Fallback != "" && e.G.Profile(p.Fallback) != nil {
 		alt = p.Fallback
+		if t := e.G.Task(a.Task); t != nil && a.Role == "review" && e.kindOf(alt) == e.kindOf(t.Writer) {
+			alt = "" // a fallback of the writer's vendor may not review its work
+		}
 	}
 	if alt == "" {
 		exclude := ""
@@ -341,8 +435,12 @@ func (e *Engine) accountLimited(a *AgentRun, s Sight, screen string) {
 		t.Agent = "" // picked up again after the wait
 	}
 	e.G.Waiting = T(earliest)
-	e.stopAll("all accounts limited")
-	e.setState(GoalWaitingLimit, "all accounts limited; resuming at "+earliest.Format(time.RFC3339))
+	// Healthy agents on other accounts keep working; only when none is left does the goal wait.
+	if e.liveAgents("") == 0 {
+		e.setState(GoalWaitingLimit, "all accounts limited; resuming at "+earliest.Format(time.RFC3339))
+	} else {
+		e.event("task-waiting", a.Name, a.Task, "no free account for this task until "+earliest.Format(time.RFC3339)+"; other agents keep working")
+	}
 }
 
 func (e *Engine) reviewExclude(a *AgentRun) string {
@@ -396,6 +494,44 @@ func (e *Engine) kindOf(profile string) string {
 		return p.Kind
 	}
 	return ""
+}
+
+// worktreeFP fingerprints a worktree: HEAD plus the porcelain status with file sizes.
+func worktreeFP(dir string) string {
+	head, err := git(dir, "rev-parse", "HEAD")
+	if err != nil {
+		return ""
+	}
+	st, _ := git(dir, "status", "--porcelain", "--untracked-files=all")
+	var b strings.Builder
+	b.WriteString(head)
+	for _, l := range strings.Split(st, "\n") {
+		if len(l) > 3 {
+			if fi, err := os.Stat(filepath.Join(dir, l[3:])); err == nil {
+				fmt.Fprintf(&b, "\n%s %d %d", l, fi.Size(), fi.ModTime().UnixNano())
+			}
+		}
+	}
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:8])
+}
+
+var pathOnScreen = regexp.MustCompile(`(?m)^[\s│|]*((?:[A-Za-z]:[\\/]|/|~[\\/])[^\s│|"'<>]*(?: [^\s│|"'<>]+)*)[\s│|]*$`)
+
+// trustPath is the folder a trust prompt shows (the line that is only a path), "" when none.
+func trustPath(screen string) string {
+	var found string
+	for _, l := range last(nonEmptyLines(screen), 16) {
+		if m := pathOnScreen.FindStringSubmatch(l); m != nil {
+			found = strings.TrimSpace(m[1])
+		}
+	}
+	if strings.HasPrefix(found, "~") {
+		if home, err := os.UserHomeDir(); err == nil {
+			found = filepath.Join(home, found[1:])
+		}
+	}
+	return found
 }
 
 func screenHash(s string) string { return ProgressHash(s+"\n\n\n") + fmt.Sprint(len(s)) }

@@ -170,8 +170,13 @@ func (e *Engine) canStart() (bool, string) {
 	if n := e.liveAgents(""); l.MaxAgents > 0 && n >= l.MaxAgents {
 		return false, fmt.Sprintf("%d agents running (max %d)", n, l.MaxAgents)
 	}
-	if ram := e.Probe.FreeRAMMB(); ram >= 0 && ram < l.MinFreeRAMMB {
-		return false, fmt.Sprintf("free RAM %d MB < %d MB", ram, l.MinFreeRAMMB)
+	// The process budget counts everything the goal runs: lead, delegates and background jobs
+	// (checks, merges, acceptance, decider).
+	if procs := e.liveAgents("") + e.liveAgents("lead") + e.runningJobs(); l.MaxProcs > 0 && procs >= l.MaxProcs {
+		return false, fmt.Sprintf("%d goal processes running (budget %d: lead, agents and jobs)", procs, l.MaxProcs)
+	}
+	if ram := e.Probe.FreeRAMMB(); ram >= 0 && ram < l.MinFreeRAMMB+l.AgentRAMMB {
+		return false, fmt.Sprintf("free RAM %d MB < %d MB reserve + %d MB for one more agent", ram, l.MinFreeRAMMB, l.AgentRAMMB)
 	}
 	if disk := e.Probe.FreeDiskMB(e.G.Project); disk >= 0 && disk < l.MinFreeDiskMB {
 		return false, fmt.Sprintf("free disk %d MB < %d MB", disk, l.MinFreeDiskMB)
@@ -526,6 +531,18 @@ func (e *Engine) cancelJobs(match string) {
 			delete(e.jobs, k)
 		}
 	}
+}
+
+func (e *Engine) runningJobs() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	n := 0
+	for _, j := range e.jobs {
+		if !j.done {
+			n++
+		}
+	}
+	return n
 }
 
 func jobKey(kind string, t *Task) string { return fmt.Sprintf("%s:%s:%d", kind, t.ID, t.Gen) }

@@ -260,7 +260,7 @@ func TestProgressHashIgnoresTimerAndSpinner(t *testing.T) {
 func TestTrustInsideProjectIsAnswered(t *testing.T) {
 	r := newRig(t, task("T1"))
 	r.tick()
-	f := r.screen("T1", StatusBlocked, claudeTrust)
+	f := r.screen("T1", StatusBlocked, strings.Replace(claudeTrust, "/work/project", r.agentOf("T1").Cwd, 1))
 	r.tick()
 	if len(f.keys) != 1 || f.keys[0][0] != "1" {
 		t.Fatalf("keys %v, want [[1]]", f.keys)
@@ -276,7 +276,7 @@ func TestTrustOutsideProjectGoesToOwner(t *testing.T) {
 	r.tick()
 	a := r.agentOf("T1")
 	a.Cwd = t.TempDir() // not inside the project
-	f := r.screen("T1", StatusBlocked, claudeTrust)
+	f := r.screen("T1", StatusBlocked, strings.Replace(claudeTrust, "/work/project", a.Cwd, 1))
 	r.tick()
 	if len(f.keys) != 0 || len(f.sent) != 0 {
 		t.Fatalf("answered a trust prompt outside the project: %v %v", f.keys, f.sent)
@@ -334,7 +334,7 @@ func TestBackendErrorIsNotDeath(t *testing.T) {
 		r.tick()
 	}
 	r.b.err = nil
-	if r.agentOf("T1") != a || len(r.b.starts) != 1 {
+	if r.agentOf("T1") != a || len(r.b.starts) != 1 || len(r.events("agent-dead")) != 0 {
 		t.Fatalf("a Herdr error was read as a dead agent: starts %v", r.b.starts)
 	}
 }

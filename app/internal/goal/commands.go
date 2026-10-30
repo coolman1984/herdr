@@ -3,6 +3,7 @@ package goal
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -394,6 +395,8 @@ func Create(n NewGoal, probe Probes, now time.Time) (*Goal, Ledger, error) {
 	if st, _ := git(top, "status", "--porcelain", "--untracked-files=no"); st != "" {
 		return nil, Ledger{}, fmt.Errorf("%s has uncommitted changes; commit or stash them first so the goal starts from a known state", top)
 	}
+	profiles, notes := ProbeProfiles(n.Profiles, 90*time.Second)
+	n.Profiles = profiles
 	if err := Preflight(n.Profiles, n.Lead, probe); err != nil {
 		return nil, Ledger{}, err
 	}
@@ -426,6 +429,9 @@ func Create(n NewGoal, probe Probes, now time.Time) (*Goal, Ledger, error) {
 	}
 	e := &Engine{L: l, W: w, G: g, Now: func() time.Time { return now }}
 	e.event("goal-created", "", "", n.Text)
+	for _, note := range notes {
+		e.event("profile-probe", "", "", note)
+	}
 	for _, t := range n.Tasks {
 		raw, _ := json.Marshal(t)
 		if err := e.apply(Command{ID: "plan", Cmd: "task-add", By: "plan", Args: raw}); err != nil {
@@ -437,6 +443,28 @@ func Create(n NewGoal, probe Probes, now time.Time) (*Goal, Ledger, error) {
 		e.setState(GoalRunning, "plan given at creation")
 	}
 	return g, l, e.flush()
+}
+
+// ProbeProfiles runs each profile's Probe (a tiny real request) with a timeout and returns the
+// profiles that answered plus why the others were dropped. No probe = kept, marked "not probed".
+func ProbeProfiles(ps []Profile, timeout time.Duration) ([]Profile, []string) {
+	var ok []Profile
+	var notes []string
+	for _, p := range ps {
+		if len(p.Probe) == 0 {
+			ok = append(ok, p)
+			notes = append(notes, p.Name+": not probed (no probe command)")
+			continue
+		}
+		out, err, timedOut := runBounded(context.Background(), "", timeout, 8<<10, p.Probe[0], p.Probe[1:]...)
+		if err != nil || timedOut {
+			notes = append(notes, fmt.Sprintf("%s: DROPPED, probe failed (%v): %s", p.Name, err, oneLine(out, 160)))
+			continue
+		}
+		ok = append(ok, p)
+		notes = append(notes, p.Name+": probe answered")
+	}
+	return ok, notes
 }
 
 // Preflight: at least one writer and one reviewer of a different vendor must be startable.

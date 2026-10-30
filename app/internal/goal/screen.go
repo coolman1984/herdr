@@ -174,7 +174,7 @@ func TrustKeys(opts []Option) []string {
 	return nil
 }
 
-var clockRe = regexp.MustCompile(`(?i)(?:resets?|try again|available)\s*(?:at|in)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`)
+var clockRe = regexp.MustCompile(`(?i)(?:resets?|try again|available)\s*(?:at|in)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?:\s*\(([A-Za-z_]+/[A-Za-z_/+-]+|UTC)\))?`)
 var inRe = regexp.MustCompile(`(?i)(?:resets?|try again)\s+in\s+(?:(\d+)\s*h(?:ours?)?)?\s*(?:(\d+)\s*m(?:in(?:utes?)?)?)?`)
 
 // parseReset reads "resets 3pm", "try again at 15:05" or "resets in 2h 10m". Local time; a clock time
@@ -204,7 +204,14 @@ func parseReset(text string, now time.Time) time.Time {
 	if h > 23 || mi > 59 {
 		return time.Time{}
 	}
-	t := time.Date(now.Year(), now.Month(), now.Day(), h, mi, 0, 0, now.Location())
+	loc := now.Location()
+	if m[4] != "" { // "resets 3pm (Africa/Cairo)": the zone the CLI printed, not the PC's
+		if l, err := time.LoadLocation(m[4]); err == nil {
+			loc = l
+		}
+	}
+	n := now.In(loc)
+	t := time.Date(n.Year(), n.Month(), n.Day(), h, mi, 0, 0, loc)
 	if !t.After(now) {
 		t = t.Add(24 * time.Hour)
 	}
