@@ -33,6 +33,15 @@ sleep 3
 echo "== a second runner while one is alive must be refused:" | tee -a "$work/runner.log"
 herdr-goal run "$L" --interval 300ms >> "$work/runner.log" 2>&1 & pid=$!; sleep 1
 if herdr-goal run "$L" --once >> "$work/runner.log" 2>&1; then echo "SECOND RUNNER WAS ALLOWED" | tee -a "$work/runner.log"; fi
+# Cancel T6 while its agent works, then forge a late result from that agent: both must change nothing.
+for i in $(seq 1 60); do python3 -c "import json,sys;g=json.load(open('$L/goal.json'));t=[t for t in g['tasks'] if t['id']=='T6'][0];sys.exit(0 if t['state']=='running' and t.get('agent') else 1)" && break; sleep 1; done
+t6agent=$(python3 -c "import json;g=json.load(open('$L/goal.json'));print([t for t in g['tasks'] if t['id']=='T6'][0].get('agent',''))")
+echo "== owner cancels T6 (agent $t6agent) at $(date +%T)" | tee -a "$work/runner.log"
+herdr-goal task cancel "$L" --id T6 | tee -a "$work/runner.log"
+sleep 3
+msg=$(python3 -c "import json;g=json.load(open('$L/goal.json'));print(g['agents']['$t6agent']['msg'])")
+echo "{\"msg\":\"$msg\",\"status\":\"done\",\"summary\":\"late result after cancel\"}" > "$L/answers/$t6agent.json"
+echo "== forged late result for $t6agent written" | tee -a "$work/runner.log"
 code=0; wait "$pid" || code=$?
 echo "== runner exit $code at $(date +%T)" | tee -a "$work/runner.log"
 herdr-goal status "$L" > "$work/status.txt" || true
@@ -41,6 +50,15 @@ echo "== independent acceptance by the test script on goal/wordstat:"
 git -C "$proj" worktree list
 cd "$L/wt/_main" && python3 -m unittest discover -s tests -q && grep -q '## Usage' README.md && grep -q '## Install' README.md && echo ACCEPTANCE-GREEN
 git -C "$proj" log --oneline --graph goal/wordstat | head -40
+python3 - "$L" <<'PY'
+import json, sys
+g = json.load(open(sys.argv[1] + "/goal.json"))
+t6 = [t for t in g["tasks"] if t["id"] == "T6"][0]
+ok = t6["state"] == "cancelled" and not t6.get("merge")
+print("== T6 cancelled, never merged, late result ignored:", ok, t6["state"])
+sys.exit(0 if ok else 1)
+PY
+[ -f "$L/wt/_main/CHANGELOG.md" ] && echo "CANCELLED WORK REACHED THE GOAL BRANCH" && code=1
 leftover=$(for d in "$L"/proc/*/; do [ -f "$d/exit" ] || echo "$d"; done)
 echo "== agents still alive: ${leftover:-none}"
 exit $code

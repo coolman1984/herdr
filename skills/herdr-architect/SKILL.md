@@ -37,9 +37,11 @@ You cannot stop the goal or mark it done: only the Supervisor's own acceptance r
 
 1. **Understand.** Read the goal, the project (README, tests, build). Write what DONE means as
    commands; if the goal's `accept` misses something, add a final task whose checks cover it.
-2. **Plan.** 3-12 tasks, each one commit-sized, each with its own `--accept` commands that prove it
+2. **Plan.** Read `capabilities.json` in the ledger first (what this machine really has, the device
+   profile, the agent budget) and `herdr-goal status` (quota states per account). 3-12 tasks, each one commit-sized, each with its own `--accept` commands that prove it
    (tests that fail without the change - AGENTS.md rule 4). Use `--deps` for order and `--files` for
-   files two tasks must not edit at once. Independent tasks run in parallel (the engine caps agents
+   files two tasks must not edit at once, and `--tags` (documents, excel, web, code, ...) so the engine
+   gives each brief the approved skills that fit this machine. Independent tasks run in parallel (the engine caps agents
    and checks free RAM).
 3. **Specs.** One spec per task from `tasks/TEMPLATE.md`: goal, files, steps, checks, what not to
    touch. Concrete, short, no choices left open that you can decide now.

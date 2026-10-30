@@ -42,6 +42,13 @@
 | `app/internal/goal/`, `app/cmd/herdr-goal/` | Goal engine (Go standard library): ledger, inbox, intents, Watchdog with `prompts.json`, scheduler, worktrees and merges, Herdr/process backends; the `herdr-goal` command |
 | `app/tests/goalagent/`, `app/tests/goal-e2e/` | Scripted agent stand-in with fault injection; `run.sh` 5-task end-to-end with kills, `soak.sh` chaos soak, `genplan.py` random plans |
 | `app/tests/goal-mutations.py` | Breaks each Watchdog/Supervisor rule in turn; its test must fail |
+| `tools/docpipe/` | Document/data pipeline (stdlib Python): Office/PDF/CSV -> values with sources -> SQLite -> exact totals -> report, dashboard, web app; `com-extract.ps1` reads NASCA files through Office COM. README inside |
+| `skills/catalog.json` | Which skills the goal engine may give a task (approved only), with requirements and evidence |
+| `skills/herdr-documents/`, `skills/herdr-environment-preflight/` | Skills: documents with docpipe; discover-before-plan policy |
+| `skills-vendor/` | Upstream skill candidates with licenses and pins (PR #16); not active until evaluated |
+| `docs/COMPANY-ENVIRONMENT-POLICY.md` | Owner's mandatory policy: NASCA/COM, PowerShell first, no package loops, 90% quotas, research first |
+| `docs/audits/` | Independent audit of the goal engine, its CI evidence, and the response per finding |
+| `tasks/docpipe-web-shots/` | Browser screenshots of the docpipe web app (phone/desktop, light/dark) |
 | `skills/herdr-architect/` | Master copy of the Architect skill (lead of one goal) |
 | `docs/TEAM-PLAYBOOK.md` | How the lead solves hard problems with the agent team: strategies, control cards, verification ladder, loops |
 | `tests/test-batch-b.ps1` | Offline regression tests for installer, launchers, folder team model, spaces and Stop; `-SourceRoot` tests baseline copies, including the launcher binary |

@@ -13,6 +13,7 @@ herdr-goal run I:\HERDR-trials\x\.herdr-goal\x1 --backend herdr     # agents in 
 herdr-goal status <ledger>      herdr-goal events <ledger>
 herdr-goal keep <ledger> [--every 15s] [run flags]   # restarts a dead runner until the goal ends
 herdr-goal pause|resume|stop <ledger>
+herdr-goal env [--project DIR]                       # capability report
 ```
 
 - `--accept`: the goal's acceptance, the gate to DONE, run by the Supervisor itself.
@@ -27,6 +28,19 @@ herdr-goal pause|resume|stop <ledger>
   starts a detached runner whenever none holds the goal (`app/tests/goal-e2e/keep.sh`: runner killed -9
   three times, restarted three times, goal DONE). On Windows a scheduled task that starts `keep` at logon
   would make the pair self-healing (not set up: owner's call, it changes the PC).
+
+## Before planning (owner's policy, docs/COMPANY-ENVIRONMENT-POLICY.md)
+
+- `herdr-goal env [--project DIR]`: the capability report (host, container, memory/CPU after cgroup limits,
+  disk, tools with versions, PowerShell first, Python modules found without importing, Office ProgIDs,
+  proxy/DNS, the per-device `device-policy.json` profile). `new` saves it as `capabilities.json` and lowers
+  the agent count to what the machine can carry.
+- Quotas: each profile has a `provider`; limits are read per real account (Claude status-line files,
+  Codex session logs; Antigravity/Cline `unsupported`). No new work at >= 90% of any limit; a running agent
+  is moved off; unknown/stale = one agent at a time on that account. Profiles on one subscription share it.
+- Skills: `skills/catalog.json` (`HERDR_SKILLS_CATALOG`); tasks carry `--tags`; only approved skills that
+  the machine can run reach the brief (max 3), recorded per task.
+- Commands carry a token: the owner key `keys/owner` (0600) or the lead's own token; delegates have none.
 
 ## Parts
 
@@ -52,7 +66,13 @@ A secret or sign-in request (checked again right before every send, whatever ask
 typed into such a pane), a trust prompt for a folder outside the project, and tasks that failed with
 no lead to re-plan. Account limits never reach the owner: next account, next profile, then wait.
 
-## Proof (2026-10-30, Linux cloud container, see HISTORY Phase 57)
+## Proof
+
+Hardening after the independent audit: `docs/audits/goal-engine-response-20261030.md` (status of all 18
+findings), HISTORY Phases 58-62. CI (`.github/workflows/independent-goal-audit.yml`) runs every push on Linux
+and Windows with `-race`.
+
+### First proof (2026-10-30, Linux cloud container, see HISTORY Phase 57)
 
 - `go test ./internal/goal` 35 tests; `python3 app/tests/goal-mutations.py`: 24/24 rule mutations make
   their test fail.
