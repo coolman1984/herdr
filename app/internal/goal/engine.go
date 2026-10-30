@@ -49,13 +49,14 @@ type Engine struct {
 }
 
 type job struct {
-	cancel context.CancelFunc
-	main   bool
-	done   bool
-	ok     bool
-	out    string
-	sha    string
-	err    error
+	cancelled bool
+	cancel    context.CancelFunc
+	main      bool
+	done      bool
+	ok        bool
+	out       string
+	sha       string
+	err       error
 }
 
 func Open(dir string, b Backend) (*Engine, error) {

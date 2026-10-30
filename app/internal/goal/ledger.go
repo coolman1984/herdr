@@ -204,11 +204,12 @@ type Goal struct {
 	Verify      *VerifyRun           `json:"verify,omitempty"`
 	LastEvent   Time                 `json:"last_event"`
 	Waiting     Time                 `json:"waiting_until"`
-	Reverts     []string             `json:"reverts,omitempty"` // queued; run when the integration worktree is free
-	RunnerGen   int                  `json:"runner_gen"`        // bumped by each runner that takes over
-	Tokens      map[string]string    `json:"tokens"`            // token hash -> role (owner, lead)
-	InboxOff    int64                `json:"inbox_offset"`      // commands applied from inbox.jsonl
-	LeadSeen    int                  `json:"lead_seen"`         // event seq the lead was last nudged at
+	Reverts     []string             `json:"reverts,omitempty"`       // queued; run when the integration worktree is free
+	RunnerGen   int                  `json:"runner_gen"`              // bumped by each runner that takes over
+	Tokens      map[string]string    `json:"tokens"`                  // key id (public) -> role; secrets live in keys/ (0600)
+	SeenCmds    []string             `json:"seen_commands,omitempty"` // applied command ids (replay guard)
+	InboxOff    int64                `json:"inbox_offset"`            // commands applied from inbox.jsonl
+	LeadSeen    int                  `json:"lead_seen"`               // event seq the lead was last nudged at
 	LeadStarts  int                  `json:"lead_starts"`
 	LeadNews    string               `json:"lead_news"` // what the lead was last told about
 	Decider     []string             `json:"decider,omitempty"`

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -26,8 +27,27 @@ type Command struct {
 	By   string          `json:"by"`
 	At   Time            `json:"at"`
 	Args json.RawMessage `json:"args,omitempty"`
-	// Token proves the sender's role; By is only what the sender claims and is replaced at the consumer.
-	Token string `json:"token,omitempty"`
+	// Key names the sender's key (not secret); Mac is HMAC-SHA256 of the command under that key. The key
+	// itself is never written to the inbox, the ledger, a brief or an event. By is only a claim.
+	Key string `json:"key,omitempty"`
+	Mac string `json:"mac,omitempty"`
+}
+
+func commandMAC(secret string, c Command) string {
+	m := hmac.New(sha256.New, []byte(secret))
+	fmt.Fprintf(m, "%s\n%s\n%s\n%s\n", c.ID, c.Cmd, c.At.UTC().Format(time.RFC3339Nano), c.Args)
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+// keyID is the public name of a key: enough to find its file, useless to forge with.
+func keyID(secret string) string { return tokenHash(secret)[:16] }
+
+// keyFile is where the consumer keeps a key's secret: keys/ is 0700, each file 0600.
+func keyFile(dir, role, id string) string {
+	if role == "owner" {
+		return filepath.Join(dir, "keys", "owner")
+	}
+	return filepath.Join(dir, "keys", role+"-"+id)
 }
 
 // newToken makes a random capability token.
@@ -44,16 +64,17 @@ func tokenHash(t string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// senderToken is the token this process may present: the agent's own (HERDR_GOAL_TOKEN, given only to
-// the lead), else the owner key file. Delegates have none.
-func senderToken(dir string) string {
-	if t := os.Getenv("HERDR_GOAL_TOKEN"); t != "" {
-		return t
+// senderKey is the key this process may sign with: the lead's own key file (HERDR_GOAL_KEY_FILE, given
+// only to the lead), else the owner key file. Delegates have none.
+func senderKey(dir string) string {
+	path := os.Getenv("HERDR_GOAL_KEY_FILE")
+	if path == "" {
+		if os.Getenv("HERDR_GOAL_ROLE") != "" {
+			return ""
+		}
+		path = filepath.Join(dir, "keys", "owner")
 	}
-	if r := os.Getenv("HERDR_GOAL_ROLE"); r != "" {
-		return ""
-	}
-	b, _ := os.ReadFile(filepath.Join(dir, "keys", "owner"))
+	b, _ := os.ReadFile(path)
 	return strings.TrimSpace(string(b))
 }
 
@@ -68,8 +89,12 @@ func Enqueue(dir, cmd, by string, args any) (string, error) {
 		return "", err
 	}
 	id := fmt.Sprintf("c%d", time.Now().UnixNano())
-	line, _ := json.Marshal(Command{ID: id, Cmd: cmd, By: by, At: T(time.Now()), Args: raw, Token: senderToken(dir)})
-	f, err := os.OpenFile(filepath.Join(dir, "inbox.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	c := Command{ID: id, Cmd: cmd, By: by, At: T(time.Now()), Args: raw}
+	if secret := senderKey(dir); secret != "" {
+		c.Key, c.Mac = keyID(secret), commandMAC(secret, c)
+	}
+	line, _ := json.Marshal(c)
+	f, err := os.OpenFile(filepath.Join(dir, "inbox.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
 	}
@@ -78,6 +103,38 @@ func Enqueue(dir, cmd, by string, args any) (string, error) {
 		return "", err
 	}
 	return id, f.Sync()
+}
+
+// verify checks a command's signature against the key the ledger knows by that id. A replaced lead's key
+// is removed from the ledger, so its old commands no longer verify.
+func (e *Engine) verifyCommand(c Command) string {
+	role := e.G.Tokens[c.Key]
+	if role == "" || c.Mac == "" {
+		return ""
+	}
+	b, err := os.ReadFile(keyFile(e.L.Dir, role, c.Key))
+	if err != nil {
+		return ""
+	}
+	secret := strings.TrimSpace(string(b))
+	if keyID(secret) != c.Key || !hmac.Equal([]byte(commandMAC(secret, c)), []byte(c.Mac)) {
+		return ""
+	}
+	return role
+}
+
+// seen records a command id; true if it was applied before (a replayed line).
+func (g *Goal) seen(id string) bool {
+	for _, x := range g.SeenCmds {
+		if x == id {
+			return true
+		}
+	}
+	g.SeenCmds = append(g.SeenCmds, id)
+	if len(g.SeenCmds) > 2000 {
+		g.SeenCmds = g.SeenCmds[len(g.SeenCmds)-2000:]
+	}
+	return false
 }
 
 func (e *Engine) applyInbox() error {
@@ -105,10 +162,13 @@ func (e *Engine) applyInbox() error {
 			continue
 		}
 		claimed := c.By
-		c.By = e.G.Tokens[tokenHash(c.Token)] // the role the token proves; "" when none
-		c.Token = ""
+		c.By = e.verifyCommand(c) // the role the signature proves; "" when none
 		if c.By == "" {
-			e.event("command-rejected", "", "", fmt.Sprintf("%s %s claimed by %q: no valid token", c.ID, c.Cmd, claimed))
+			e.event("command-rejected", "", "", fmt.Sprintf("%s %s claimed by %q: no valid signature", c.ID, c.Cmd, claimed))
+			continue
+		}
+		if e.G.seen(c.ID) {
+			e.event("command-rejected", "", "", fmt.Sprintf("%s %s by %s: replayed command id", c.ID, c.Cmd, c.By))
 			continue
 		}
 		if err := e.apply(c); err != nil {
@@ -241,7 +301,9 @@ func (e *Engine) apply(c Command) error {
 			}
 		}
 		if t.Agent != "" && g.Agents[t.Agent] != nil && !g.Agents[t.Agent].Ended {
-			e.endAgent(g.Agents[t.Agent], c.Cmd+" by "+c.By)
+			if !e.endAgent(g.Agents[t.Agent], c.Cmd+" by "+c.By) {
+				return fmt.Errorf("the agent of %s did not confirm its stop; nothing changed, send the command again", t.ID)
+			}
 		}
 		t.Agent = ""
 		e.cancelJobs(":" + t.ID + ":")
@@ -413,7 +475,7 @@ func Create(n NewGoal, probe Probes, now time.Time) (*Goal, Ledger, error) {
 		Record: map[string]*Score{}, Decider: n.Decider}
 	l := Ledger{Dir: LedgerDir(top, n.ID)}
 	owner := newToken()
-	g.Tokens = map[string]string{tokenHash(owner): "owner"}
+	g.Tokens = map[string]string{keyID(owner): "owner"}
 	if err := l.Init(g); err != nil {
 		return nil, l, err
 	}

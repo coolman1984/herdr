@@ -259,7 +259,7 @@ func cmdNew(args []string) int {
 	// Discover first: the measured budget caps the configured one (never raises it).
 	capr := Discover(*project, DevicePolicyPath())
 	if b := capr.Budget; b.MaxAgents < n.Limits.MaxAgents {
-		n.Limits.MaxAgents = max(1, b.MaxAgents)
+		n.Limits.MaxAgents = b.MaxAgents // 0 = defer agents until the machine has room (never clamped up)
 		n.Limits.MaxProcs = min(n.Limits.MaxProcs, max(3, b.MaxProcs))
 	}
 	g, l, err := Create(n, RealProbes(), time.Now())

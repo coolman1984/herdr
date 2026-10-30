@@ -18,8 +18,13 @@ func (e *Engine) watch(a *AgentRun) {
 	}
 	now := e.Now()
 	if a.State == "stop-pending" {
-		if !e.endAgent(a, "retrying an unconfirmed stop") && e.retry(a, "stop") == false {
-			e.escalate(a, "agent cannot be stopped; it is still counted against the limits", "")
+		if e.endAgent(a, "retrying an unconfirmed stop") {
+			// Quiet now. A result written before the stop is handled only now, after confirmation.
+			if ans, err := e.readAnswer(a); err == nil && ans != nil {
+				e.finished(a, ans)
+			}
+		} else if !e.retry(a, "stop") && a.Retries["stop"] == e.G.Limits.RetryCap+1 {
+			e.escalate(a, "agent cannot be stopped; it keeps its task and is still counted against the limits", "")
 		}
 		return
 	}
@@ -425,7 +430,14 @@ func (e *Engine) accountLimited(a *AgentRun, s Sight, screen string) {
 	}
 	acc.LimitedUntil = T(until)
 	e.event("account-limited", a.Name, a.Task, fmt.Sprintf("%s limited until %s (%q)", key, until.Format(time.RFC3339), s.Line), screen)
-	e.endAgent(a, "account limit")
+	if !e.endAgent(a, "account limit") {
+		return // no replacement on top of a writer that may still be running; the account stays marked
+	}
+	if t := e.G.Task(a.Task); t != nil && a.Role == "write" {
+		if saved, err := e.W.SaveWork(t, a.Name); err == nil && saved {
+			e.event("work-saved", a.Name, a.Task, "checkpoint before the account change")
+		}
+	}
 	if prof, acct := e.freeAccount(a.Profile); prof != "" {
 		e.startAgent(a.Role, a.Task, prof, acct, nil, "The previous account hit its limit. Work so far is committed in this folder; continue.")
 		return
@@ -563,7 +575,9 @@ func (e *Engine) handoff(a *AgentRun) {
 		return
 	}
 	if !e.retry(a, "handoff-wait") {
-		e.endAgent(a, "handoff")
+		if !e.endAgent(a, "handoff") {
+			return
+		}
 		e.startAgent("lead", "", a.Profile, a.Account, nil, "You replace a lead whose context was full. Read "+e.L.path("handoff.md")+" first.")
 	}
 }

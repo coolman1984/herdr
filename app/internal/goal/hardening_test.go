@@ -13,57 +13,119 @@ import (
 	"time"
 )
 
-// Audit #3: the consumer trusts the token, never the "by" text a sender writes.
-func TestInboxRoleComesFromTokenNotClaim(t *testing.T) {
+func signed(c Command, secret string) Command {
+	if c.At.IsZero() {
+		c.At = T(time.Now())
+	}
+	c.Key, c.Mac = keyID(secret), commandMAC(secret, c)
+	return c
+}
+
+// Audit #3 (+ round 2 finding 2): the consumer trusts a signature made with a key it holds, never the
+// "by" text; the key itself is never written to the inbox.
+func TestInboxRoleComesFromSignatureNotClaim(t *testing.T) {
 	r := newRig(t, task("T1"))
 	write := func(c Command) {
 		b, _ := json.Marshal(c)
-		f, _ := os.OpenFile(filepath.Join(r.e.L.Dir, "inbox.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		f, _ := os.OpenFile(filepath.Join(r.e.L.Dir, "inbox.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		f.Write(append(b, '\n'))
 		f.Close()
 	}
-	write(Command{ID: "c1", Cmd: "stop", By: "owner"}) // forged claim, no token
+	write(Command{ID: "c1", Cmd: "stop", By: "owner"}) // forged claim, no signature
 	r.tick()
 	if r.e.G.State == GoalStopped {
 		t.Fatal("a forged owner claim stopped the goal")
 	}
-	owner, _ := os.ReadFile(filepath.Join(r.e.L.Dir, "keys", "owner"))
-	write(Command{ID: "c2", Cmd: "pause", By: "write", Token: string(owner)})
+	ownerB, _ := os.ReadFile(filepath.Join(r.e.L.Dir, "keys", "owner"))
+	owner := string(ownerB)
+	bad := signed(Command{ID: "c2", Cmd: "stop"}, owner)
+	bad.Cmd = "pause" // signature over another command
+	write(bad)
+	r.tick()
+	if r.e.G.State == GoalPaused {
+		t.Fatal("a command whose signature does not match was applied")
+	}
+	good := signed(Command{ID: "c3", Cmd: "pause", By: "write"}, owner)
+	write(good)
 	r.tick()
 	if r.e.G.State != GoalPaused {
-		t.Fatalf("owner token not honoured: %s", r.e.G.State)
+		t.Fatalf("owner signature not honoured: %s", r.e.G.State)
+	}
+	r.e.apply(Command{Cmd: "resume", By: "owner"})
+	write(good) // replay of the same signed line
+	r.tick()
+	if r.e.G.State == GoalPaused {
+		t.Fatal("a replayed command was applied twice")
 	}
 	if st, _ := os.Stat(filepath.Join(r.e.L.Dir, "keys", "owner")); runtime.GOOS != "windows" && st.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("owner key readable by others: %v", st.Mode())
 	}
 }
 
-func TestLeadTokenProvesLeadOnly(t *testing.T) {
+func TestEnqueueNeverWritesTheKey(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.e.G.Lead = "alpha"
+	r.e.G.Profiles[0].Roles = append(r.e.G.Profiles[0].Roles, "lead")
+	r.tick()
+	if _, err := Enqueue(r.e.L.Dir, "decide", "owner", map[string]string{"text": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	r.tick()
+	owner, _ := os.ReadFile(filepath.Join(r.e.L.Dir, "keys", "owner"))
+	secrets := []string{string(owner)}
+	for _, f := range r.b.agents {
+		if p := f.spec.Env["HERDR_GOAL_KEY_FILE"]; p != "" {
+			b, _ := os.ReadFile(p)
+			secrets = append(secrets, string(b))
+		}
+	}
+	if len(secrets) != 2 || len(r.events("decide")) != 1 {
+		t.Fatalf("setup: %d secrets, %d decisions", len(secrets), len(r.events("decide")))
+	}
+	_ = filepath.WalkDir(r.e.L.Dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || strings.Contains(p, string(filepath.Separator)+"keys"+string(filepath.Separator)) {
+			return nil
+		}
+		b, _ := os.ReadFile(p)
+		for _, s := range secrets {
+			if strings.Contains(string(b), s) {
+				t.Errorf("a key leaked into %s", p)
+			}
+		}
+		return nil
+	})
+	if st, _ := os.Stat(filepath.Join(r.e.L.Dir, "inbox.jsonl")); runtime.GOOS != "windows" && st.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("inbox readable by others: %v", st.Mode())
+	}
+}
+
+func TestLeadKeyProvesLeadOnly(t *testing.T) {
 	r := newRig(t, task("T1"))
 	r.e.G.Lead = "alpha"
 	r.e.G.Profiles[0].Roles = append(r.e.G.Profiles[0].Roles, "lead")
 	r.e.G.Limits.MaxAgents = 3
 	r.tick()
-	var tok string
+	var key string
 	for _, f := range r.b.agents {
-		if v := f.spec.Env["HERDR_GOAL_TOKEN"]; v != "" {
-			tok = v
+		if p := f.spec.Env["HERDR_GOAL_KEY_FILE"]; p != "" {
+			b, _ := os.ReadFile(p)
+			key = string(b)
 		}
-		if f.spec.Env["HERDR_GOAL_ROLE"] != "lead" && f.spec.Env["HERDR_GOAL_TOKEN"] != "" {
-			t.Fatal("a delegate got a command token")
+		if f.spec.Env["HERDR_GOAL_ROLE"] != "lead" && f.spec.Env["HERDR_GOAL_KEY_FILE"] != "" {
+			t.Fatal("a delegate got a command key")
 		}
 	}
-	if tok == "" {
-		t.Fatal("lead has no token")
+	if key == "" {
+		t.Fatal("lead has no key")
 	}
-	for _, c := range []Command{{ID: "a", Cmd: "stop", Token: tok}, {ID: "b", Cmd: "decide", Token: tok, Args: json.RawMessage(`{"text":"use sqlite"}`)}} {
-		b, _ := json.Marshal(c)
-		os.WriteFile(filepath.Join(r.e.L.Dir, "inbox.jsonl"), append(b, '\n'), 0o644)
+	for _, c := range []Command{{ID: "a", Cmd: "stop"}, {ID: "b", Cmd: "decide", Args: json.RawMessage(`{"text":"use sqlite"}`)}} {
+		b, _ := json.Marshal(signed(c, key))
+		os.WriteFile(filepath.Join(r.e.L.Dir, "inbox.jsonl"), append(b, '\n'), 0o600)
 		r.e.G.InboxOff = 0
 		r.tick()
 	}
 	if r.e.G.State == GoalStopped || len(r.events("decide")) != 1 {
-		t.Fatalf("lead token: state %s, decisions %d", r.e.G.State, len(r.events("decide")))
+		t.Fatalf("lead key: state %s, decisions %d", r.e.G.State, len(r.events("decide")))
 	}
 }
 

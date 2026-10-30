@@ -105,7 +105,8 @@ func newRig(t *testing.T, tasks ...Task) *rig {
 		t.Fatal(err)
 	}
 	r.e = &Engine{L: l, W: Workspace{Project: g.Project, Ledger: l}, B: r.b, P: MustPrompts(), Now: func() time.Time { return r.now },
-		Probe: probe, Sync: true, G: g, jobs: map[string]*job{}, Q: fakeQuotas(map[string]float64{})}
+		Probe: probe, Sync: true, G: g, jobs: map[string]*job{}}
+	rigQuotas(r, map[string]float64{}) // readings on the rig's own clock
 	return r
 }
 

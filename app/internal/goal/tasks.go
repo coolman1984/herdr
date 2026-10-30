@@ -64,6 +64,9 @@ func (e *Engine) schedule() {
 				e.waitNote(why)
 				return
 			}
+			if e.jobsBusy(":"+t.ID+":") > 0 {
+				continue // an old check/merge of this task is still stopping: no writer on top of it
+			}
 			if t.State == TaskRunning {
 				e.startAgent("write", t.ID, t.Writer, "", nil, "Continue this task; earlier work is committed in this folder.")
 				continue
@@ -167,7 +170,8 @@ func (e *Engine) waitNote(why string) {
 // canStart is the readiness check before every new agent: slots, free memory, free disk.
 func (e *Engine) canStart() (bool, string) {
 	l := e.G.Limits
-	if n := e.liveAgents(""); l.MaxAgents > 0 && n >= l.MaxAgents {
+	// MaxAgents 0 is a measured "no agent fits": it defers work; a negative value means no cap.
+	if n := e.liveAgents(""); l.MaxAgents >= 0 && n >= l.MaxAgents {
 		return false, fmt.Sprintf("%d agents running (max %d)", n, l.MaxAgents)
 	}
 	// The process budget counts everything the goal runs: lead, delegates and background jobs
@@ -284,14 +288,21 @@ func (e *Engine) startAgent(role, task, profile, account string, retries map[str
 	env := map[string]string{"HERDR_GOAL": e.L.Dir, "HERDR_GOAL_ROLE": role, "HERDR_GOAL_AGENT": name}
 	if role == "lead" {
 		g.LeadNews = ""   // a new lead has been told nothing yet
-		tok := newToken() // this lead's own capability; replaced leads lose theirs
+		tok := newToken() // this lead's own key; replaced leads lose theirs
 		for h, r := range g.Tokens {
 			if r == "lead" {
 				delete(g.Tokens, h)
+				os.Remove(keyFile(e.L.Dir, "lead", h))
 			}
 		}
-		g.Tokens[tokenHash(tok)] = "lead"
-		env["HERDR_GOAL_TOKEN"] = tok
+		id := keyID(tok)
+		os.MkdirAll(filepath.Join(e.L.Dir, "keys"), 0o700)
+		if err := os.WriteFile(keyFile(e.L.Dir, "lead", id), []byte(tok), 0o600); err != nil {
+			e.event("error", name, "", "lead key: "+err.Error())
+			return nil
+		}
+		g.Tokens[id] = "lead"
+		env["HERDR_GOAL_KEY_FILE"] = keyFile(e.L.Dir, "lead", id) // a path, never the key itself
 	}
 	for k, v := range p.Env {
 		env[k] = strings.NewReplacer("{account}", account, "{home}", home).Replace(v)
@@ -389,8 +400,14 @@ func (e *Engine) brief(a *AgentRun, t *Task, note string) string {
 // finished handles a result file.
 func (e *Engine) finished(a *AgentRun, ans *Answer) {
 	g := e.G
-	e.event("result", a.Name, a.Task, fmt.Sprintf("%s %s: %s", ans.Status, ans.Verdict, oneLine(ans.Summary, 200)))
-	e.endAgent(a, "finished")
+	if !a.Ended {
+		e.event("result", a.Name, a.Task, fmt.Sprintf("%s %s: %s", ans.Status, ans.Verdict, oneLine(ans.Summary, 200)))
+		if !e.endAgent(a, "finished") {
+			// Still alive: it keeps the task. Nothing is checked, reviewed or merged until its stop is
+			// confirmed (watch retries the stop and comes back here).
+			return
+		}
+	}
 	t := g.Task(a.Task)
 	if t == nil {
 		return
@@ -449,8 +466,8 @@ func (e *Engine) finished(a *AgentRun, ans *Answer) {
 // taskAttemptFailed: retry with the feedback; the last attempt goes to a different vendor; then failed.
 func (e *Engine) taskAttemptFailed(a *AgentRun, why string) {
 	g := e.G
-	if !a.Ended {
-		e.endAgent(a, why)
+	if !a.Ended && !e.endAgent(a, why) {
+		return // not confirmed stopped: it keeps the task; watch retries the stop
 	}
 	t := g.Task(a.Task)
 	if t == nil {
@@ -502,7 +519,16 @@ func (e *Engine) failTask(t *Task, why string) {
 // revert). Every job has a cancel; cancelling kills its process tree.
 func (e *Engine) startJob(key string, main bool, fn func(ctx context.Context, j *job)) *job {
 	e.mu.Lock()
+	for k, o := range e.jobs { // forget cancelled jobs once they have really finished
+		if o.cancelled && o.done {
+			delete(e.jobs, k)
+		}
+	}
 	j := e.jobs[key]
+	if j != nil && j.cancelled {
+		e.mu.Unlock()
+		return nil // still winding down; a new job with this key starts after it has finished
+	}
 	if j == nil {
 		if main {
 			for k, o := range e.jobs {
@@ -540,15 +566,30 @@ func (e *Engine) startJob(key string, main bool, fn func(ctx context.Context, j 
 
 // cancelJobs cancels running jobs whose key contains match ("" = all) and forgets them: a result that
 // arrives later is never applied.
+// cancelJobs cancels jobs whose key contains match ("" = all). A cancelled job stays owned and counted
+// (worktree owner, process budget) until it has really finished; its result is never applied.
 func (e *Engine) cancelJobs(match string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for k, j := range e.jobs {
 		if match == "" || strings.Contains(k, match) {
 			j.cancel()
-			delete(e.jobs, k)
+			j.cancelled = true
 		}
 	}
+}
+
+// jobsBusy counts unfinished jobs (cancelled ones included) whose key contains match.
+func (e *Engine) jobsBusy(match string) int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	n := 0
+	for k, j := range e.jobs {
+		if !j.done && (match == "" || strings.Contains(k, match)) {
+			n++
+		}
+	}
+	return n
 }
 
 func (e *Engine) runningJobs() int {

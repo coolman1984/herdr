@@ -63,36 +63,46 @@ func Judge(r QuotaReading, now time.Time) Verdict {
 	case QuotaUnknown, QuotaUnsupported:
 		return Verdict{Eligible: true, LowTrust: true, Reason: r.State + ": " + r.Note}
 	}
-	if r.State == QuotaStale || now.Sub(r.Observed) > QuotaMaxAge {
-		v := Verdict{Eligible: true, LowTrust: true, Reason: fmt.Sprintf("stale reading from %s", r.Observed.Format(time.RFC3339))}
-		// A stale reading that already shows a limit reached still blocks until its reset.
-		for _, l := range r.Limits {
-			if l.UsedPct != nil && *l.UsedPct >= QuotaThreshold && l.ResetsAt.After(now) {
-				return Verdict{Until: l.ResetsAt, Reason: v.Reason + " at " + l.Kind, Breaching: l.Kind}
-			}
-		}
-		return v
-	}
-	v := Verdict{Eligible: true}
-	for _, l := range r.Limits {
-		if l.UsedPct == nil {
-			continue
-		}
-		used := *l.UsedPct
-		if !l.ResetsAt.IsZero() && !l.ResetsAt.After(now) {
-			used = 0 // the window has reset since the reading
-		}
-		if used >= QuotaThreshold {
-			v.Eligible = false
-			v.Breaching = l.Kind
-			v.Reason = fmt.Sprintf("%s at %.1f%% (>= %.0f%%)", l.Kind, used, QuotaThreshold)
-			if l.ResetsAt.After(v.Until) {
-				v.Until = l.ResetsAt
-			}
-		}
+	stale := r.State == QuotaStale || now.Sub(r.Observed) > QuotaMaxAge || r.Observed.After(now.Add(5*time.Minute))
+	v := Verdict{Eligible: true, LowTrust: stale}
+	if stale {
+		v.Reason = fmt.Sprintf("stale reading from %s", r.Observed.Format(time.RFC3339))
 	}
 	if len(r.Limits) == 0 {
 		return Verdict{Eligible: true, LowTrust: true, Reason: "reading has no limits"}
+	}
+	for _, l := range r.Limits {
+		resetPassed := !l.ResetsAt.IsZero() && !l.ResetsAt.After(now)
+		switch {
+		case l.UsedPct != nil && (*l.UsedPct < 0 || *l.UsedPct > 100.0001):
+			v.LowTrust = true // out of range: not a measurement
+			v.Reason += fmt.Sprintf("; %s usage %.1f%% out of range", l.Kind, *l.UsedPct)
+		case l.UsedPct != nil && *l.UsedPct >= QuotaThreshold && !resetPassed:
+			// Exhausted (>= 90%). Age alone never reopens it: only a reset time that has passed or a
+			// fresh reading below 90% does.
+			v.Eligible = false
+			v.Breaching = l.Kind
+			v.Reason = fmt.Sprintf("%s at %.1f%% (>= %.0f%%)", l.Kind, *l.UsedPct, QuotaThreshold)
+			if l.ResetsAt.After(v.Until) {
+				v.Until = l.ResetsAt
+			}
+		case l.Left != nil && *l.Left <= 0 && !resetPassed:
+			v.Eligible = false
+			v.Breaching = l.Kind
+			v.Reason = fmt.Sprintf("%s: %g %s left", l.Kind, *l.Left, l.Unit)
+			if l.ResetsAt.After(v.Until) {
+				v.Until = l.ResetsAt
+			}
+		case l.Left != nil && l.Unit == "":
+			v.LowTrust = true // a remaining amount without its unit cannot be compared
+		case l.UsedPct == nil && l.Left == nil:
+			v.LowTrust = true // a named window with no value is unknown, never a trusted 0%
+		case resetPassed:
+			v.LowTrust = true // reset since the reading: plausibly free, but not measured
+		}
+	}
+	if !v.Eligible {
+		v.LowTrust = false
 	}
 	return v
 }

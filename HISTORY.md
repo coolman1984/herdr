@@ -1631,3 +1631,24 @@ top of an open owner question. The goal then ends needs-owner with all other wor
 final soak before the fix: rounds 1-10 DONE (acceptance re-run green by the script each time; 2-3 runner
 kill -9 and 3-6 agent kill -9 per round, 0 agents left), round 11 showed the bug; secret-only rerun after
 the fix: see the commit's report (`tasks/goal-engine-report.md`).
+
+## Phase 64 - Round-2 audit (PR #17): one writer per task, quotas that never read unknown as free, signed commands (2026-10-30)
+
+**Baseline:** `docs/audits/round2-baseline.md` - all 6 new Go and 7 new docpipe regressions fail on 13b468b.
+**G5/G6 and every similar path (P0):** a result, a failed attempt, an account change, a handoff, a task update or
+cancel only releases or advances a task after the old agent's stop is confirmed. An unconfirmed stop leaves the
+run `stop-pending`, still owning its task and counted; the watchdog retries the stop and only then handles a
+result written before it. update/cancel are refused (nothing changed) while the agent has not stopped. A writer
+is not restarted while a cancelled check/merge job of its task still runs; cancelled jobs stay owned and counted
+(integration worktree, process budget) until they have finished.
+**G1-G3:** `Judge`: >= 90% never reopens on age alone (only a passed reset or a fresh reading); `Left <= 0` blocks;
+a window with no value, a remaining amount without a unit, an out-of-range percentage or a passed reset are low
+trust (one agent per account), never a trusted 0%. Readings from the future count as stale.
+**G4:** `max_agents` 0 means zero (defer), negative means no cap; the CLI no longer raises a measured 0 to 1.
+**Finding 2 (bearer key on disk):** commands carry a public key id and an HMAC-SHA256 over id, command, time and
+arguments; secrets stay in `keys/` (0700, files 0600); the lead gets a key file path, not the key (so no key in
+intents, briefs or pane command lines); `inbox.jsonl` is 0600; replayed command ids are refused; a replaced
+lead's key is deleted.
+**Proof:** the 6 round-2 Go tests pass; new tests: every release path with a stop that never confirms, result
+handled only after the confirmed stop, cancelled job owned until joined, signature/forgery/replay, a walk of the
+whole ledger finding no key outside `keys/`. Fixture fix: the fake quota source now uses the test clock.
