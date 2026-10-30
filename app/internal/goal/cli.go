@@ -181,6 +181,7 @@ func cmdTask(args []string) int {
 	files := fs.String("files", "", "")
 	fs.StringVar(&t.Writer, "writer", "", "")
 	fs.StringVar(&t.Reviewer, "reviewer", "", "")
+	tags := fs.String("tags", "", "")
 	feedback := fs.String("feedback", "", "")
 	fs.Var(&accept, "accept", "")
 	if fs.Parse(args[2:]) != nil || t.ID == "" {
@@ -193,7 +194,7 @@ func cmdTask(args []string) int {
 		}
 		t.Spec = string(b)
 	}
-	t.Deps, t.Files, t.Accept = splitList(*deps), splitList(*files), accept
+	t.Deps, t.Files, t.Accept, t.Tags = splitList(*deps), splitList(*files), accept, splitList(*tags)
 	switch sub {
 	case "add":
 		return enqueue(dir, "task-add", t)
@@ -360,6 +361,19 @@ func cmdRun(args []string) int {
 		e.Log = func(s string) { fmt.Println(s) }
 	}
 	e.Q = DefaultQuotas()
+	if c, err := os.ReadFile(filepath.Join(dir, "capabilities.json")); err == nil {
+		var r CapReport
+		if json.Unmarshal(c, &r) == nil {
+			e.Caps = &r
+		}
+	}
+	if cat := os.Getenv("HERDR_SKILLS_CATALOG"); cat != "" {
+		if sc, err := LoadSkillCatalog(cat); err == nil {
+			e.Skills = sc
+		} else {
+			fmt.Fprintln(os.Stderr, "skills catalog:", err)
+		}
+	}
 	if len(e.G.Decider) > 0 {
 		e.Decide = CommandDecider(e.G.Decider)
 	}

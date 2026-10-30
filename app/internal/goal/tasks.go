@@ -353,6 +353,24 @@ func (e *Engine) brief(a *AgentRun, t *Task, note string) string {
 		}
 		b.WriteString("Verdict \"pass\" only if the change does the task correctly; else \"fail\" with concrete notes the writer can act on.\n")
 	}
+	if t != nil && e.Skills != nil && a.Role != "lead" {
+		tools, profile := map[string]Fact{}, "unknown"
+		if e.Caps != nil {
+			tools, profile = e.Caps.Tools, e.Caps.Policy.Profile
+		}
+		chosen, skipped := e.Skills.Select(t.Tags, tools, profile)
+		t.Skills = nil
+		if len(chosen) > 0 {
+			b.WriteString("\nSkills for this task (read each before you start; they are tested for this project):\n")
+			for _, s := range chosen {
+				fmt.Fprintf(&b, "- %s: %s\n", s.Name, s.Path)
+				t.Skills = append(t.Skills, s.Name+"@"+s.Hash)
+			}
+		}
+		if len(chosen)+len(skipped) > 0 {
+			e.event("skills", a.Name, t.ID, fmt.Sprintf("chosen %v; left out %v", t.Skills, skipped))
+		}
+	}
 	if note != "" {
 		fmt.Fprintf(&b, "\nNote: %s\n", note)
 	}

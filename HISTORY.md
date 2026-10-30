@@ -1603,3 +1603,17 @@ keyboard-only journey, search under a 1.2 s network delay and an aborted request
 English/LTR, reduced motion, 4x CPU slowdown with 20,000 records: ready in ~0.5-0.8 s, 77 DOM nodes, file
 pages paged. Screenshots: `tasks/docpipe-web-shots/`. Also `__pycache__` removed from the last commit and
 ignored.
+
+## Phase 62 - Skill selection wired into the briefs (2026-10-30)
+
+**Symptom:** PR #16 ships five upstream skill candidates and a policy; the engine had no selection, so a
+skill was either ignored or would have been loaded everywhere.
+**Fix:** `skills/catalog.json` + `skills.go`: a task carries `tags` (`herdr-goal task add --tags excel,totals`);
+only `approved` skills are chosen (candidates are listed as left out, never activated), filtered by the
+machine's capability report (`requires`: python3|python|py ...) and the device profile, ranked by matching
+tags, at most 3. The brief lists the chosen skill files; the task records `name@hash` of each; every choice
+and every skill left out is an event. Approved now: `herdr-documents` (backed by docpipe's tests) and
+`herdr-environment-preflight` (the owner's policy). The five upstream candidates stay
+`candidate-not-evaluated`: their with/without-skill evaluation needs real agents.
+**Proof:** tests: an unevaluated candidate is never chosen; a skill needing Python is not chosen on a machine
+without it; an unrelated task gets none; the brief carries the chosen skill and the task records it.

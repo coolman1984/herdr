@@ -12,12 +12,12 @@ func TestBudgetFollowsTheMeasuredMachine(t *testing.T) {
 		cpus   float64
 		agents int
 	}{
-		{15000, 4, 2},  // strong: the ceiling
-		{4200, 4, 2},   // (4200-2636)/600 = 2
-		{3500, 4, 1},   // one agent
-		{2600, 8, 0},   // too little: defer
-		{-1, 4, 1},     // unknown RAM: one agent, never "unlimited"
-		{15000, 1, 1},  // one CPU: one agent
+		{15000, 4, 2}, // strong: the ceiling
+		{4200, 4, 2},  // (4200-2636)/600 = 2
+		{3500, 4, 1},  // one agent
+		{2600, 8, 0},  // too little: defer
+		{-1, 4, 1},    // unknown RAM: one agent, never "unlimited"
+		{15000, 1, 1}, // one CPU: one agent
 	}
 	for _, c := range cases {
 		b := DeriveBudget(c.free, c.cpus, 2)

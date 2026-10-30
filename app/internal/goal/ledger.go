@@ -97,6 +97,8 @@ type Task struct {
 	Deps       []string `json:"deps,omitempty"`
 	Accept     []string `json:"accept,omitempty"` // task acceptance, run by the Supervisor in the worktree
 	Files      []string `json:"files,omitempty"`  // reserved while the task runs
+	Tags       []string `json:"tags,omitempty"`   // kind of work: documents, web, code ... (skill choice)
+	Skills     []string `json:"skills,omitempty"` // skills given to the last brief, name@hash
 	Writer     string   `json:"writer,omitempty"` // profile; empty = chosen by record
 	Reviewer   string   `json:"reviewer,omitempty"`
 	State      string   `json:"state"`

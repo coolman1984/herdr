@@ -1,0 +1,23 @@
+{
+  "_comment": "Skill catalog for the goal engine (skills-vendor/POLICY.md). Only state 'approved' is ever injected into a brief; candidates are never activated automatically. requires: tool names from the capability report, '|' = any of. profiles: device profiles where the skill may be used (empty = all). tags: task tags it serves. evidence: what approval rests on.",
+  "skills": [
+    {"name": "herdr-documents", "path": "skills/herdr-documents/SKILL.md", "state": "approved", "license": "project",
+     "tags": ["documents", "excel", "word", "powerpoint", "pdf", "extract", "totals", "report", "dashboard", "data"],
+     "requires": ["python3|python|py"], "profiles": [],
+     "evidence": "tooling: tools/docpipe tests (14 unit, 8 browser) green on Linux; Windows CI runs the unit tests. Not a with/without-skill model evaluation."},
+    {"name": "herdr-environment-preflight", "path": "skills/herdr-environment-preflight/SKILL.md", "state": "approved", "license": "project",
+     "tags": ["plan", "lead", "environment", "quota"], "requires": [], "profiles": [],
+     "evidence": "owner's mandatory policy (PR #16); backed by herdr-goal env and quota tests"},
+    {"name": "systematic-debugging", "path": "skills-vendor/obra/superpowers/skills/systematic-debugging/SKILL.md", "state": "candidate-not-evaluated", "license": "MIT",
+     "tags": ["debug", "bug", "fix"], "requires": [], "profiles": [], "evidence": "none yet: needs a with/without evaluation on real agents"},
+    {"name": "test-driven-development", "path": "skills-vendor/obra/superpowers/skills/test-driven-development/SKILL.md", "state": "candidate-not-evaluated", "license": "MIT",
+     "tags": ["code", "feature", "tests"], "requires": [], "profiles": [], "evidence": "none yet"},
+    {"name": "verification-before-completion", "path": "skills-vendor/obra/superpowers/skills/verification-before-completion/SKILL.md", "state": "candidate-not-evaluated", "license": "MIT",
+     "tags": ["code", "review", "done"], "requires": [], "profiles": [], "evidence": "none yet"},
+    {"name": "frontend-design", "path": "skills-vendor/anthropics/skills/skills/frontend-design/SKILL.md", "state": "candidate-not-evaluated", "license": "Apache-2.0",
+     "tags": ["web", "design", "ui"], "requires": [], "profiles": [], "evidence": "none yet"},
+    {"name": "webapp-testing", "path": "skills-vendor/anthropics/skills/skills/webapp-testing/SKILL.md", "state": "candidate-not-evaluated", "license": "Apache-2.0",
+     "tags": ["web", "test", "browser"], "requires": ["python3|python|py"], "profiles": ["personal"],
+     "evidence": "none yet; adaptation required: wait on app-ready markers, not networkidle (POLICY.md)"}
+  ]
+}

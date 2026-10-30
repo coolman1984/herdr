@@ -36,8 +36,10 @@ type Engine struct {
 	Probe     Probes
 	Decide    Decider
 	Q         *Quotas // account quotas; nil = every account unknown (low trust)
-	Sync      bool    // run checks and merges inside the tick (tests); else in the background
-	Gen       int     // this runner's generation; a newer one on disk means this runner must stop writing
+	Skills    *SkillCatalog
+	Caps      *CapReport // the machine's capability report (skills and budgets use it)
+	Sync      bool       // run checks and merges inside the tick (tests); else in the background
+	Gen       int        // this runner's generation; a newer one on disk means this runner must stop writing
 	G         *Goal
 	Log       func(string)
 	mu        sync.Mutex
