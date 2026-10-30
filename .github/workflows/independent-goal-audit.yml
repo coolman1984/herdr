@@ -1,7 +1,7 @@
 name: Independent goal engine audit
 on:
   push:
-    branches: [codex/goal-audit-20261030, ccr-efd59209-8jk5t6]
+    branches: [codex/goal-audit-20261030, codex/goal-audit-round2-20261030, ccr-efd59209-8jk5t6]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
         run: |
           cd app
           result=0
-          go test -race -timeout 4m -count=1 -v ./internal/goal -skip IndependentAudit > original-tests.txt 2>&1 || result=$?
+          go test -race -timeout 4m -count=1 -v ./internal/goal -skip 'Independent(Audit|Round2)' > original-tests.txt 2>&1 || result=$?
           cat original-tests.txt
           exit $result
       - name: New behavioral regressions
@@ -38,7 +38,7 @@ jobs:
         run: |
           cd app
           result=0
-          go test -race -timeout 4m -count=1 -v ./internal/goal -run IndependentAudit > audit-tests.txt 2>&1 || result=$?
+          go test -race -timeout 4m -count=1 -v ./internal/goal -run 'Independent(Audit|Round2)' > audit-tests.txt 2>&1 || result=$?
           cat audit-tests.txt
           exit $result
       - name: Build real goal executable
@@ -93,3 +93,4 @@ jobs:
         run: |
           echo "A behavioral suite failed. Read the evidence artifacts; this is not a passing product certification."
           exit 1
+
