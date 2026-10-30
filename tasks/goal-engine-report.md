@@ -71,3 +71,15 @@ Evidence per item: `docs/audits/goal-engine-response-20261030.md`; HISTORY Phase
 | 5. multi-format documents -> DB -> report/dashboard with reference totals; big data under a memory bound | done (synthetic data) | `tools/docpipe`: 14 tests cross-checked with openpyxl/python-docx/python-pptx/pdftotext and a LibreOffice PDF; 300,000 rows in 63 s, peak 56 MB under a 300 MB bound, totals exact |
 | 6. responsive site, full journey, browser test, screenshots, accessibility, performance | done | `node --test tools/docpipe/tests/web/journey.test.mjs` 8/8 in Chromium; screenshots `tasks/docpipe-web-shots/` |
 | Policy: discover first, NASCA/COM, PowerShell first, no package loops, 90% quotas | done in code; **NASCA/Office unproven** | `herdr-goal env`, `capabilities.json`, measured budget; quota adapters + 90% rule tests; docpipe never parses office bytes under company_nasca (test); COM worker untested against real Office |
+
+### Final soak (engine at 35fd557, then 11ae995)
+
+30 minutes, 11 goals back to back, 8 tasks each, two scripted agent kinds, random faults (trust, crash,
+idle, account limit, capacity, menu, review rejection) and chaos: runner kill -9 every 40-90 s restarted
+by a keeper loop, a random agent kill -9 every 20-50 s.
+- Rounds 1-10: DONE, acceptance re-run green by the script each time, 1-3 runner kills and 3-6 agent kills
+  per round, 109-242 s per goal, 0 agents left, 0 human inputs.
+- Round 11 (planted secret request): nothing was typed into it, but chaos killed that agent and a restart
+  finished the task past the open question -> fixed (Phase 63, test fails before / passes after).
+- Secret round rerun on 11ae995: chaos killed exactly the agent showing the secret; task stayed blocked,
+  goal ended `needs-owner`, every other task done and kept, nothing sent to the prompt.
