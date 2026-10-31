@@ -539,3 +539,9 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     screen messages, uses available usage resets next, and otherwise remembers one hour.
     Missing data is unknown, not proof that every account is blocked. Reset labels use local
     time; expired saved limits are free. A non-waited prompt still needs startup read-back.
+
+106. **Every Herdr pane on this PC is "busy" for `agent start`** (2026-10-31, Herdr 0.9.5; the goal-engine
+    branch found the cause as its #103): Scoop's `pwsh` shim keeps the real `pwsh.exe` as a child, and Herdr
+    treats a pane whose shell has a child as not an available shell (`agent_pane_busy`). Fallback that
+    works, now in `herdr-agents start`: `herdr pane run <pane> "<cli> <args>"`, then
+    `herdr agent rename <pane> <name>` once Herdr has detected the agent (it needs a few seconds).

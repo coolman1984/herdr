@@ -1542,3 +1542,19 @@ template tells the next lead to continue with `start next`. Only the chain knows
 the lead moves with `switch`. Not changed here, because the per-project task was editing the handoff
 writer at the same time: `tasks\HANDOFF-TEMPLATE.md` section 0 and `New-LeaderHandoff`.
 **Lesson:** none - a policy change in data, not a new property of Herdr or a CLI.
+
+## Phase 61 - `start` survives Herdr's "pane busy" refusal; the lead runs on account 2040 (2026-10-31)
+
+**Symptom:** `herdr-agents start 2040 -Pane w3:p3 -Lead` printed `NOT READY ... agent_pane_busy: agent target
+pane w3:p3 is not an available shell` on a fresh pane; no lead could start on another Claude account.
+**Cause:** known on the goal-engine branch (its LESSONS #103), never fixed on main: the panes run Scoop's
+`scoop\shims\pwsh.exe`, which keeps the real `pwsh.exe` as a child, and Herdr 0.9.5 counts a pane with a
+child process as busy, so `agent start` refuses every pane. Deck already falls back to `pane run`.
+**Fix:** on `agent_pane_busy`, `start` types the agent's command line into the pane (`pane run`), then
+names the agent Herdr detects (`agent rename <pane> <name>`, retried up to 60 s), and continues as a
+normal start (state, `-Lead`). `switch` uses the same path.
+**Proof:** live: the same command then printed `STARTED name=claude-2040 ... account=2040`; the pane shows
+Claude Code `Opus 5.5 · Claude Pro`, status idle, no dialog; `leaders` shows `2040 ... CURRENT`, `NEXT: 1984`.
+New test `start falls back to pane run + agent rename on agent_pane_busy`: passes (58/58); on HEAD the
+test run stops with exit 2 (the old NOT READY exit). All test scripts and `check.ps1` pass.
+**Lesson:** #106.

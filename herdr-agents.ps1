@@ -875,6 +875,21 @@ switch ($Command) {
         $startArgs = @("agent", "start", $Name, "--kind", $a.kind, "--pane", $pane, "--timeout", "120000")
         if ($agentArgs.Count -gt 0) { $startArgs += @("--") + $agentArgs }
         $started = Invoke-Herdr $startArgs
+        if (-not $started.Ok -and $started.Text -match 'agent_pane_busy') {
+            # Scoop's pwsh shim keeps a child process, so Herdr never sees the pane as a free shell
+            # (LESSONS #106). Type the command into the pane, then name the agent Herdr detects.
+            $quoted = @($agentArgs | ForEach-Object { if ($_ -match '^[\w./:=@+-]+$') { $_ } else { "'" + ([string]$_).Replace("'", "''") + "'" } })
+            $commandLine = (@($a.command) + $quoted) -join ' '
+            Write-Output "Pane $pane is not a free shell for Herdr (agent_pane_busy); typing: $commandLine"
+            $ran = Invoke-Herdr @("pane", "run", $pane, $commandLine)
+            if (-not $ran.Ok) { Fail "Could not run the agent in pane ${pane}: $($ran.Text)" }
+            $deadline = (Get-Date).AddSeconds(60); $renamed = $null
+            do {
+                Start-Sleep -Seconds 2
+                $renamed = Invoke-Herdr @("agent", "rename", $pane, $Name)
+            } while (-not $renamed.Ok -and (Get-Date) -lt $deadline)
+            $started = if ($renamed.Ok) { $renamed } else { [PSCustomObject]@{ Ok = $false; Text = "agent typed into pane, but Herdr did not detect it within 60 s: $($renamed.Text)" } }
+        }
 
         $recordPane = $createdPane -or $started.Ok
         if (-not $recordPane -and $Pane) {

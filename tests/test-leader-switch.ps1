@@ -133,6 +133,31 @@ Check "start next without usage starts and records the first free chain Claude (
 }
 }
 
+# Scoop's pwsh shim makes Herdr refuse every pane (agent_pane_busy): start types the command and names the agent.
+Check 'start falls back to pane run + agent rename on agent_pane_busy' {
+    $Target = '2040'; $Cwd = $SourceRoot; $Name = ''; $Account = ''; $Pane = ''; $Worktree = ''; $Effort = ''; $Model = ''; $Provider = ''; $Direction = 'right'; $Lead = $false
+    $script:started = $null; $script:calls = @()
+    function Get-LiveAgents { @() }; function Get-State { @() }; function Get-ServerIdentity { 'fixture' }
+    function Save-State($Items) { $script:started = $Items }
+    function Get-EnvArgs { @() }; function Start-Sleep { }
+    function Get-Account($Entry, $AccountName) { [pscustomobject]@{ Name = $AccountName; Tool = 'claude'; Dir = "fixture-$AccountName"; Env = @{}; Args = @(); Login = '' } }
+    function Invoke-Herdr($Arguments) {
+        $script:calls += , @($Arguments)
+        if ($Arguments[0] -eq 'agent' -and $Arguments[1] -eq 'start') { return [pscustomobject]@{ Ok = $false; Text = '{"error":{"code":"agent_pane_busy"}}' } }
+        [pscustomobject]@{ Ok = $true; Text = ''; Json = @{ result = @{ pane = @{ pane_id = 'new' } } } }
+    }
+    $previous = $env:HERDR_ENV; $previousPane = $env:HERDR_PANE_ID
+    try {
+        $env:HERDR_ENV = '1'; $env:HERDR_PANE_ID = 'old'
+        $out = @(& $startBody)
+        $run = $script:calls | Where-Object { $_[0] -eq 'pane' -and $_[1] -eq 'run' } | Select-Object -First 1
+        $rename = $script:calls | Where-Object { $_[0] -eq 'agent' -and $_[1] -eq 'rename' } | Select-Object -First 1
+        $run -and $run[2] -eq 'new' -and $run[3] -match '^claude .*--model claude-opus-5-5' -and
+            $rename -and $rename[2] -eq 'new' -and $rename[3] -eq 'claude-2040' -and
+            ($out -join "`n") -match 'STARTED name=claude-2040' -and $script:started[0].name -eq 'claude-2040'
+    } finally { $env:HERDR_ENV = $previous; $env:HERDR_PANE_ID = $previousPane }
+}
+
 function Run-SwitchFixture([string]$Mode) {
     $script:writes = @{}; $script:prompts = @(); $script:handoffs = 0; $script:startedCount = 0; $script:fixtureMode = $Mode
     $Cwd = $SourceRoot; $To = ''; $TaskFile = ''
