@@ -1650,3 +1650,30 @@ The key pair is made on the device; the private key never leaves it.
 **Not verified:** the write to the real admin file over an SSH password session (expected elevated for an
 administrator) and a key login from the phone - the owner runs it.
 **Lesson:** none yet.
+
+## Phase 66 - Orca and Herdr stay on all the time; the PC never sleeps (2026-10-31)
+
+**Symptom:** the owner works on this PC from outside as a work server. Someone at home can quit Orca from
+the tray or close Herdr, and then the owner loses it until they are home. Sleep would cut it off too.
+**Owner's rule:** people at home may shut down or restart normally; the PC must never sleep; Orca and
+Herdr must come back by themselves.
+**Fix:** `herdr-keepalive.ps1` run by the task **Herdr Keepalive** (at sign-in + every minute, hidden,
+`-Install` registers it, no admin; it replaces Phase 64's Startup shortcut, which `-Install` removes).
+Orca desktop missing -> start `Orca.exe`; Herdr server missing -> `herdr-boot.ps1`. An app is restarted
+on the second check that finds it down (an update or restart may be under way), at once on the first
+check of a new sign-in; never while Orca's updater runs; one run at a time (mutex); `-Pause <min> [-App]`
+/ `-Resume` for the owner. `herdr-stop.ps1` now pauses Herdr for only 15 minutes after a stop, so a stop
+by someone else does not last. With automatic Windows sign-in (AutoAdminLogon = 1) the first run locks
+the PC after starting the apps. `setup-nosleep.ps1` (owner, admin, `-Undo`, backup
+`%APPDATA%\herdr\nosleep-backup.json`): sleep/hibernate never on mains, Start-menu power button = Shut
+down (it was Sleep), Sleep/Hibernate hidden from the power menu, no automatic Windows Update restart
+while someone is signed in. Shutdown and restart are NOT limited (owner's correction mid-task: an
+earlier draft that limited shutdown to administrators was deleted unused).
+**Proof:** isolated test folder with a fake Orca path and no Herdr server: run 1 (new sign-in) acts on
+both at once; run 2 only notes them; run 3 acts; `-Pause 30 -App herdr` skips Herdr and `-Status` shows
+the pause; `-Resume` clears it. On the real PC `-DryRun` and `-Status`: Orca running, Herdr server
+running, no action. All three scripts parse with 0 errors; `check.ps1` passes.
+**Not verified:** the task itself (Claude Code's safety check refused to register a lasting task, so the
+owner runs `-Install`); a real Orca restart (stopping Orca would end this Claude session);
+`setup-nosleep.ps1` (needs admin); the lock after automatic sign-in (no automatic sign-in yet).
+**Lesson:** #109.

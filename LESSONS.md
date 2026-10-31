@@ -555,3 +555,10 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     started by `herdr --session lab server`, it already has workspace w1 "herdr"; a workspace created
     next is w2. Read ids from `workspace create` JSON (`result.root_pane.pane_id`), never assume w1.
     Herdr 0.9.5 also has `herdr --remote <ssh-target>` to attach to another PC's server over SSH.
+109. **Orca on this PC** (2026-10-31, Orca 1.4.245): the desktop app's runtime listens on
+    `ws://0.0.0.0:6768` (`%APPDATA%\orca\orca-runtime.json`) and the firewall allows Orca.exe inbound, so
+    remote Orca clients pair with it (pairing code / `orca environment add`); `orca serve` (headless)
+    refuses with exit 3 while the desktop app serves the profile. Its settings (e.g.
+    `minimizeToTrayOnClose`) live in `profiles\local-default\profile-state.db`, which the running app
+    owns - change them in Orca's Settings, never in the file. On this desktop `powercfg` exposes no
+    power/sleep-button setting, and the Start-menu power button (`UIBUTTON_ACTION`) defaulted to Sleep.

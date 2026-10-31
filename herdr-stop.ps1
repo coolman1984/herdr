@@ -57,7 +57,13 @@ if ($working) { $text += "`n$($working.Count) agent(s) are still WORKING or wait
 $text += "`nYour layout is saved and comes back next time; Claude and Codex resume their conversations, the task that was running must be sent again.`n`n(To just close the window and keep everything running, close it normally or press Ctrl+B then Q.)"
 $answer = [System.Windows.Forms.MessageBox]::Show($owner, $text, "Stop Herdr", "YesNo", "Warning", "Button2")
 if ($answer -ne "Yes") { exit 0 }
-try { Stop-HerdrServer } catch {
+try {
+    Stop-HerdrServer
+    # herdr-keepalive.ps1 would start Herdr again within 2 minutes; keep it stopped for 15 minutes only,
+    # so a stop by someone else at home does not last (owner: herdr-keepalive -Pause <min> -App herdr).
+    $keepalive = Join-Path $PSScriptRoot "herdr-keepalive.ps1"
+    if (Test-Path -LiteralPath $keepalive) { & (Get-Command pwsh).Source -NoProfile -File $keepalive -Pause 15 -App herdr | Out-Null }
+} catch {
     [System.Windows.Forms.MessageBox]::Show($owner, $_.Exception.Message, "Stop Herdr", "OK", "Error") | Out-Null
     exit 1
 } finally { $owner.Dispose() }

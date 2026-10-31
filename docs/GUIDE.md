@@ -524,3 +524,23 @@ Not proven yet: an SSH login and `herdr --remote` from another device (needs the
 `cat ~/.ssh/id_ed25519.pub | ssh mflma@fawzy "pwsh -NoProfile -File I:/herdr/add-ssh-key.ps1"` (your
 password one last time). After that `ssh mflma@fawzy` logs in with no password. `add-ssh-key.ps1 -Key "<.pub line>"`
 does the same on this PC.
+
+### 13.22 Keep Orca and Herdr on all the time (work server)
+
+People at home may shut down or restart the PC normally; it never sleeps, and Orca and Herdr come back
+by themselves.
+
+1. `pwsh -File I:\herdr\herdr-keepalive.ps1 -Install` (once, no admin): the task **Herdr Keepalive**
+   checks every minute. Orca closed from the tray or crashed -> started again; Herdr server gone -> the
+   server, a lead and the watcher start again (`herdr-boot.ps1`). Down twice in a row before a restart,
+   so updates are not disturbed. `-Status` shows what runs; `-Pause 120` (minutes) stops the guard for you,
+   `-App orca|herdr` for one app, `-Resume` ends it. "Stop Herdr" keeps Herdr stopped for 15 minutes only.
+2. `pwsh -File I:\herdr\setup-nosleep.ps1` (once, asks for admin rights; `-Undo`): no sleep or hibernate,
+   the Start menu power button shuts down, Sleep is gone from the power menu, and Windows Update does not
+   restart the PC by itself while someone is signed in.
+3. Automatic Windows sign-in (owner, needs the password, e.g. Sysinternals Autologon): after a shutdown
+   or power cut the PC signs in, the task starts both apps and then LOCKS the PC.
+4. Optional, in the PC's firmware (BIOS/UEFI) setup: "Restore on AC power loss" = Power On, so the PC
+   starts again by itself after a power cut.
+5. Better for the family: a separate standard Windows account for the children (Settings > Accounts >
+   Other users). Your apps keep running in your locked account while they use theirs.

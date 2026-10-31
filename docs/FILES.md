@@ -23,6 +23,8 @@
 | `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
 | `herdr-boot.ps1` | at sign-in: headless Herdr server, a lead in workspace Lead, the watcher (GUIDE 13.21) |
+| `herdr-keepalive.ps1` | task "Herdr Keepalive": every minute restarts Orca / the Herdr server when closed; `-Install`, `-Status`, `-Pause` |
+| `setup-nosleep.ps1` | owner runs once as admin: never sleep, power button shuts down, no auto update restart; `-Undo` |
 | `add-ssh-key.ps1` | adds one device's SSH public key (admin key file + its permissions); refuses private keys |
 | `setup-remote.ps1` | owner runs once as admin: SSH server at boot, Tailscale-only firewall, pwsh shell; `-Undo` |
 | `herdr-autosync.ps1` | Owner-authorized GitHub main sync loop; status/dry-run modes, bounded log and conflict stop (maintained separately from Deck) |
@@ -70,7 +72,9 @@
 | `%APPDATA%\herdr\autoswitch.log` | timestamped watcher actions and errors; newest lines kept below 200 KB |
 | `%APPDATA%\herdr\boot.log` | `herdr-boot.ps1` steps at sign-in; newest lines kept below 100 KB |
 | `%APPDATA%\herdr\openssh-defaultshell.bak.txt` | old OpenSSH DefaultShell value, saved by `setup-remote.ps1` |
-| Startup folder `Herdr Boot.lnk` | runs `herdr-boot.ps1` via `conhost.exe --headless` at sign-in |
+| Task Scheduler `Herdr Keepalive` | runs `herdr-keepalive.ps1` at sign-in and every minute (replaced Startup `Herdr Boot.lnk`) |
+| `%APPDATA%\herdr\keepalive-state.json`, `keepalive.log` | guard state (down counts, pauses, last run, locked sign-in); log below 100 KB |
+| `%APPDATA%\herdr\nosleep-backup.json` | old power and policy values saved by `setup-nosleep.ps1` |
 | `<project>\.herdr\handoffs\` | handoffs for other projects; `.herdr/` added once to the local git exclude file, never `.gitignore`; Herdr itself keeps `tasks\` |
 | `%APPDATA%\herdr\herdr-agents-panes.json` | panes started by `herdr-agents` |
 | `%APPDATA%\herdr\layout-last.json` | last layout chosen in the layout builder |

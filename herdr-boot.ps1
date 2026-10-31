@@ -1,6 +1,8 @@
 # herdr-boot.ps1 - at Windows sign-in: Herdr server (headless), a lead for the home project, the lead watcher.
 #
-# Started by the Startup shortcut "Herdr Boot.lnk" (conhost.exe --headless, no window; CLAUDE.md).
+# Started by herdr-keepalive.ps1 (task "Herdr Keepalive", at sign-in and whenever the server is gone;
+# conhost.exe --headless, no window; CLAUDE.md). Phase 64's Startup shortcut "Herdr Boot.lnk" is removed
+# by `herdr-keepalive -Install`.
 # - Server not running: start it headless, open a workspace "Lead" in -Cwd and run
 #   `herdr-agents start next -Lead` there (first free leader of agents.json leaders.order; it also starts
 #   the watcher). Clients (Windows Terminal, `herdr --remote <pc>` over SSH) attach to this server later.
