@@ -142,11 +142,14 @@ DeepSeek does Y ..."), ALWAYS run this routine:
 
 ## Switching the lead
 
+Leaders are remembered per project (git root, else folder); use `switch -Cwd <folder>` / `leaders -Cwd <folder>`; other projects keep handoffs in `.herdr/handoffs`, and account limits stay global.
+
 Run `herdr-agents leaders` to see the ordered choices in `agents.json` `leaders.order`.
 When the lead hits its limit, `herdr-agents switch` (Ctrl+B Shift+C) remembers its reset,
 writes a handoff including its screen, starts the next free leader beside the focused pane,
 and sends the takeover prompt without waiting for an answer. Claude accounts come first,
-then Codex and Gemini. `switch -To codex` forces a chain item (warns if limited).
+then Codex and Gemini. The lead runs on another Claude account (2040, then 1984), never the main
+sign-in 2030 by default (owner's decision, 2026-10-31); `switch -To codex` forces a chain item (warns if limited).
 `start 2040 -Lead` records who leads. Startup dialogs print BLOCKED; the owner answers.
 The old pane stays open. The new lead reads the handoff and fills its TODOs before continuing.
 Usage numbers are optional: the owner's current status line does not write our usage files.

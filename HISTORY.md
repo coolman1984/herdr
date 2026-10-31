@@ -1493,3 +1493,52 @@ headless key otherwise fails silently. All 8 test scripts pass (190/190). The le
 `%APPDATA%\herdr\config.toml` (`config.toml.20261031-092550.bak`), applied the new Shift+C line
 and ran `sync-skills.ps1`; `check.ps1` passes (one old warning: Startup HUD shortcut).
 **Lesson:** #105. A key command runs headless: give it a visible result, or a failure is silent.
+
+## Phase 59 - Leader switching follows the project (2026-10-31)
+
+**Symptom:** two projects shared one current leader, and handoffs for other repos landed in
+Herdr's tasks folder with Herdr-only rules and relative takeover paths.
+**Cause:** the state file and handoff destination were global; the prompt assumed this repo.
+**Fix:** project = git root, else selected folder. Explicit Cwd wins, then the focused pane's
+folder, then the current folder. Each project has a named, path-hashed JSON record under
+`%APPDATA%\herdr\leaders`; the saved project identity must match. Limits remain global.
+Other projects use `.herdr\handoffs`, exclude `.herdr/` locally once without changing tracked
+ignore files, and list only present project rules. Takeovers use absolute file paths and
+start at the project root. Herdr keeps its tasks folder and existing template wording.
+The legacy global leader is read only for a project containing its cwd; migration is deferred
+until a replacement record is saved successfully, then the old file is removed. An exhausted
+chain or failed write leaves the old file intact; another project's legacy file is untouched.
+**Proof:** offline leader tests: 57/57 pass, including 22 new project tests. Against HEAD:
+35/57 pass, all 22 project tests fail. No live takeover or outside-project writes exercised.
+Seven other test scripts pass (155/155). `leaders -Cwd I:\herdr` prints the project and chain.
+`check.ps1` reports one failure (App Path missing/broken) and two warnings (Startup HUD shortcut,
+user PATH) in the implementer's environment; outside setup repair is not part of this delta.
+**Lead review (Claude):** `start <item> -Lead` without `-Cwd` failed "Folder not found" (it read
+the project from `$Cwd` only); it now uses the focused pane's folder like `switch` (57/57 pass).
+On the lead's PC all 8 test scripts pass (212/212) and `check.ps1` passes (one old HUD warning).
+**Lesson:** select the project before reading remembered leader state; account limits and
+project ownership have different scopes.
+
+## Phase 60 - The lead works on another Claude account, never the main sign-in (2026-10-31)
+
+**Symptom:** every leader switch and every `herdr-agents leaders` NEXT pointed at 2030, the owner's
+main sign-in, so the lead worked on the account the owner uses himself.
+**Cause:** `agents.json` `leaders.order` listed `2030` first, from when the lead ran on the main
+sign-in; `switch` takes the first chain item that is installed, is not the current lead and is not
+limited, and `Get-NextClaudeLeader` (the no-usage fallback of `start next`) does the same. The order
+was data, not code, so no script had to change.
+**Fix (owner's decision, 2026-10-31):** `leaders.order` is now `2040, 1984, 2030, codex, gemini`. The
+lead starts on another Claude account (2040 first, then 1984); the main sign-in 2030 is the last
+Claude item - a fallback only - and `switch -To 2030` still forces it. Docs updated: GUIDE 13.20,
+README, DELEGATION, skills/herdr-team/SKILL.md (then synced), CLAUDE.md section 0.
+**Proof:** `herdr-agents leaders` before: `NEXT: 2030`; after: `NEXT: 2040` (all five items
+installed=yes). `tests/test-leader-switch.ps1`: 57/57 pass; the same file against a source root with
+HEAD's `agents.json`: 53/57, the 4 failures being exactly the chain/lead-account assertions. The
+other seven scripts: 155/155. `check.ps1`: 0 FAIL (1 WARN, the known Startup HUD shortcut). No agent
+was started, so the live takeover on 2040 is not exercised.
+**Found on the way:** `start next` still takes the account with the lowest 5-hour use
+(`Get-ClaudeNextAccount`), which can be the main sign-in or the lead's own account, and the handoff
+template tells the next lead to continue with `start next`. Only the chain knows the owner's rule, so
+the lead moves with `switch`. Not changed here, because the per-project task was editing the handoff
+writer at the same time: `tasks\HANDOFF-TEMPLATE.md` section 0 and `New-LeaderHandoff`.
+**Lesson:** none - a policy change in data, not a new property of Herdr or a CLI.

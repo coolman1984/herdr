@@ -29,7 +29,7 @@ merged worktrees and its temp copies.
 
 **Claude helpers and research (owner's rules, 2026-10-24):** the lead never uses subagents of
 its own Claude session. Claude helpers run on the owner's OTHER Claude accounts (`-Account 1984`
-/ `2040`, `start next`) in panes beside the lead, so each account's usage stays separate.
+/ `2040`, `start next`) in panes beside the lead, so each account's usage stays separate. The lead's OWN account is the owner's choice (2026-10-31): the lead runs on another Claude account (2040 first, then 1984), never the main sign-in 2030 by default (`agents.json` `leaders.order`; `switch -To 2030` forces it).
 Research is done headless by Codex GPT-6.1-Sol medium and Gemini 4 Argon High (results in
 files); the lead searches in parallel and adjusts its decisions when their results arrive.
 

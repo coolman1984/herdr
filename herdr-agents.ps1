@@ -374,7 +374,7 @@ function Get-LimitFromScreen([string]$Screen, [datetime]$Now) {
     $null
 }
 
-function Read-LeaderJson([string]$Path) {
+function Read-LeaderJson([string]$Path, [string]$ExpectedProject) {
     if (-not (Test-Path -LiteralPath $Path)) { return @{} }
     try {
         $value = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable
@@ -385,9 +385,12 @@ function Read-LeaderJson([string]$Path) {
                 if (-not $entry.until -or $entry.source -notin @('screen','usage','default') -or -not $entry.seen) { throw "Invalid limit entry '$key'." }
                 $null = [datetime]$entry.until; $null = [datetime]$entry.seen
             }
-        } elseif ($Path.EndsWith('leader.json')) {
+        } elseif ($Path.EndsWith('leader.json') -or $ExpectedProject) {
             if (-not $value.item -or -not $value.name -or -not $value.pane_id -or -not $value.cwd -or -not $value.since) { throw 'Missing current leader fields.' }
             $null = [datetime]$value.since
+            if ($ExpectedProject -and (-not $value.project -or -not [string]::Equals([string]$value.project, $ExpectedProject, [StringComparison]::OrdinalIgnoreCase))) {
+                throw "Project mismatch: expected '$ExpectedProject', found '$($value.project)'."
+            }
         }
         return $value
     } catch { Fail "Cannot read leader state ${Path}: $($_.Exception.Message)" }
@@ -400,6 +403,96 @@ function Save-LeaderJson([string]$Path, $Value) {
         ConvertTo-Json -InputObject $Value -Depth 8 | Set-Content -LiteralPath $temp -Encoding utf8
         Move-Item -LiteralPath $temp -Destination $Path -Force
     } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp } }
+}
+
+# Resolve context before reading leader state: a remembered lead must not choose the project.
+function Get-LeaderFolder([string]$Folder) {
+    if ($Folder) { return $Folder }
+    if ($env:HERDR_ACTIVE_PANE_CWD) { return $env:HERDR_ACTIVE_PANE_CWD }
+    $focused = if ($env:HERDR_PANE_ID) { $env:HERDR_PANE_ID } else { $env:HERDR_ACTIVE_PANE_ID }
+    if ($focused) {
+        $paneResult = Invoke-Herdr @('pane','get',$focused)
+        if (-not $paneResult.Ok -or -not $paneResult.Json.result.pane.cwd) { Fail "Could not read focused folder: $($paneResult.Text)" }
+        return [string]$paneResult.Json.result.pane.cwd
+    }
+    (Get-Location).ProviderPath
+}
+
+function Get-LeaderProject([string]$Folder) {
+    if (-not $Folder -or -not (Test-Path -LiteralPath $Folder -PathType Container)) { Fail "Folder not found: $Folder" }
+    $full = (Resolve-Path -LiteralPath $Folder).ProviderPath
+    $top = Invoke-Git $full @('rev-parse','--show-toplevel')
+    if ($top.Ok) { $full = [IO.Path]::GetFullPath($top.Text) }
+    [IO.Path]::TrimEndingDirectorySeparator($full)
+}
+
+function Get-LeaderStatePath([string]$Project) {
+    $full = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($Project))
+    $name = (Split-Path -Leaf $full).ToLowerInvariant() -replace '[^a-z0-9_-]', '-'
+    if (-not $name) { $name = 'project' }
+    $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($full.ToLowerInvariant()))).Substring(0,8).ToLowerInvariant()
+    Join-Path $env:APPDATA "herdr\leaders\$name-$hash.json"
+}
+
+function Test-LeaderProjectFolder([string]$Folder, [string]$Project) {
+    $full = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($Folder))
+    $root = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($Project))
+    [string]::Equals($full, $root, [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith($root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Read-ProjectLeader([string]$Project) {
+    $path = Get-LeaderStatePath $Project
+    if (Test-Path -LiteralPath $path) { return (Read-LeaderJson $path $Project) }
+    $legacy = Read-LeaderJson (Join-Path $env:APPDATA 'herdr\leader.json')
+    if ($legacy.cwd -and (Test-LeaderProjectFolder $legacy.cwd $Project)) { return $legacy }
+    @{}
+}
+
+function Save-ProjectLeader([string]$Project, $Value) {
+    $path = Get-LeaderStatePath $Project
+    # Validate an existing project's identity before overwriting it.
+    if (Test-Path -LiteralPath $path) { $null = Read-LeaderJson $path $Project }
+    $record = $Value | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
+    $record.project = $Project
+    Save-LeaderJson $path $record
+    # Deferred migration: a failed write or exhausted chain never removes the old record.
+    $legacyPath = Join-Path $env:APPDATA 'herdr\leader.json'
+    if (Test-Path -LiteralPath $legacyPath) {
+        $legacy = Read-LeaderJson $legacyPath
+        if ($legacy.cwd -and (Test-LeaderProjectFolder $legacy.cwd $Project)) { Remove-Item -LiteralPath $legacyPath }
+    }
+}
+
+function Get-LeaderRules([string]$Project) {
+    foreach ($file in @('CLAUDE.md','AGENTS.md','README.md','HISTORY.md','CHANGELOG.md')) {
+        $path = Join-Path $Project $file
+        if (Test-Path -LiteralPath $path -PathType Leaf) { $path }
+    }
+}
+
+function Get-LeaderHandoffFolder([string]$Project, [switch]$Prepare) {
+    $folder = if ([string]::Equals($Project, [IO.Path]::TrimEndingDirectorySeparator($PSScriptRoot), [StringComparison]::OrdinalIgnoreCase)) {
+        Join-Path $Project 'tasks'
+    } else { Join-Path $Project '.herdr\handoffs' }
+    if ($Prepare) {
+        $null = New-Item -ItemType Directory -Path $folder -Force
+        $gitEntry = Join-Path $Project '.git'
+        if ($folder -ne (Join-Path $Project 'tasks') -and (Test-Path -LiteralPath $gitEntry)) {
+            $exclude = Join-Path $gitEntry 'info\exclude'
+            if (Test-Path -LiteralPath $gitEntry -PathType Leaf) {
+                $gitPath = Invoke-Git $Project @('rev-parse','--git-path','info/exclude')
+                if (-not $gitPath.Ok) { Fail "Cannot locate project git exclude: $($gitPath.Text)" }
+                $exclude = [IO.Path]::GetFullPath($gitPath.Text, $Project)
+            }
+            $content = if (Test-Path -LiteralPath $exclude) { [IO.File]::ReadAllText($exclude) } else { '' }
+            if (@($content -split '\r?\n' | Where-Object { $_.Trim() -eq '.herdr/' }).Count -eq 0) {
+                $null = New-Item -ItemType Directory -Path (Split-Path -Parent $exclude) -Force
+                $prefix = if ($content -and -not $content.EndsWith("`n")) { "`n" } else { '' }
+                [IO.File]::AppendAllText($exclude, $prefix + ".herdr/`n", [Text.UTF8Encoding]::new($false))
+            }
+        }
+    }
+    $folder
 }
 
 function Get-LeaderChoices($KnownLimits, [datetime]$Now) {
@@ -454,9 +547,9 @@ function Get-NextClaudeLeader($KnownLimits, [datetime]$Now) {
 
 function Switch-Leader {
     $now = Get-Date
-    $leaderPath = Join-Path $env:APPDATA 'herdr\leader.json'
+    $project = Get-LeaderProject (Get-LeaderFolder $Cwd)
     $limitsPath = Join-Path $env:APPDATA 'herdr\leader-limits.json'
-    $old = Read-LeaderJson $leaderPath
+    $old = Read-ProjectLeader $project
     $known = Read-LeaderJson $limitsPath
     $live = @(Get-LiveAgents)
     $sameServer = -not $old.server -or $old.server -eq (Get-ServerIdentity)
@@ -478,13 +571,7 @@ function Switch-Leader {
         if ($candidates.Count -ne 1) { Fail 'Cannot identify focused leader account; record it with start <item> -Lead.' }
         $old = @{ item = $candidates[0].Item; name = $oldAgent.name; pane_id = $oldAgent.pane_id; cwd = $oldAgent.cwd }
     }
-    $folder = if ($Cwd) { $Cwd } elseif ($old.cwd) { $old.cwd } else { $env:HERDR_ACTIVE_PANE_CWD }
-    if (-not $folder) {
-        $p = Invoke-Herdr @('pane','get',$focused)
-        if (-not $p.Ok) { Fail "Could not read focused folder: $($p.Text)" }
-        $folder = $p.Json.result.pane.cwd
-    }
-    if (-not $folder -or -not (Test-Path -LiteralPath $folder -PathType Container)) { Fail "Folder not found: $folder" }
+    Write-Output "Project: $project"
     Write-Output "OLD leader: $($old.item) (pane $($old.pane_id))"
     $screen = Invoke-Herdr @('agent','read',$old.name,'--source','recent')
     if (-not $screen.Ok) { Fail "Could not read old leader: $($screen.Text)" }
@@ -501,7 +588,7 @@ function Switch-Leader {
     if ($next.Until) { Write-Output "WARNING: requested leader $($next.Item) is limited until $($next.Until)." }
     Save-LeaderJson $limitsPath $known
     Write-Output "LIMIT: $($old.item) until $($until.ToString('ddd HH:mm')) ($source)"
-    $Cwd = $folder
+    $Cwd = $project
     New-LeaderHandoff $old.item $next.Item $screen.Text
     $handoff = $script:lastHandoff
     $Target = $next.Item; $Name = ''; $Account = ''; $Model = ''; $Effort = ''; $Provider = ''; $Pane = ''; $Worktree = ''; $Lead = $false
@@ -513,8 +600,12 @@ function Switch-Leader {
     if (-not $read.Ok) { Fail "Cannot inspect new leader: $($read.Text)" }
     if (Get-AgentDialog $read.Text) { Write-Output "BLOCKED: $($new.name)`n$(Format-Screen $read.Text)"; return 3 }
     # Record the new lead before the prompt, so a slow takeover read-back cannot lose it.
-    Save-LeaderJson $leaderPath $new
-    $prompt = "You are now the LEAD of this Herdr setup (not a delegate), taking over from $($old.item), which hit its limit. Read $handoff first, then CLAUDE.md, the last 3 phases of HISTORY.md and docs/TEAM-PLAYBOOK.md. Fill the TODOs in the handoff from git, HISTORY and herdr-agents history, then continue the work. Use herdr-agents to lead the other agents."
+    Save-ProjectLeader $project $new
+    $rules = @(Get-LeaderRules $project)
+    $rulesText = if ($rules.Count) { $rules -join ', ' } else { '(none present)' }
+    $playbook = Join-Path $PSScriptRoot 'docs\TEAM-PLAYBOOK.md'
+    $delegation = Join-Path $PSScriptRoot 'docs\DELEGATION.md'
+    $prompt = "You are now the LEAD of this project (not a delegate), taking over from $($old.item), which hit its limit. Work in $project. Read $handoff first, then the project's rules files that exist: $rulesText. Read $playbook and $delegation for how to lead with herdr-agents. Fill the TODOs in the handoff from git, the project's history and herdr-agents history, then continue the work. Use herdr-agents to lead the other agents."
     $sent = Invoke-Herdr @('agent','prompt',$new.name,$prompt)
     if (-not $sent.Ok) { Fail "Could not send takeover prompt (do not resend blindly): $($sent.Text)" }
     $deadline = (Get-Date).AddSeconds(30); $began = $false
@@ -552,8 +643,9 @@ function New-LeaderHandoff([string]$FromItem, [string]$ToItem, [string]$OldScree
         # A lead -> lead handoff file (tasks\HANDOFF-TEMPLATE.md) with the facts filled in;
         # the writer fills the TODO sections. Never overwrites a file.
         $template = Join-Path $PSScriptRoot "tasks\HANDOFF-TEMPLATE.md"
-        $folder = if ($Cwd) { $Cwd } else { (Get-Location).ProviderPath }
-        $out = if ($TaskFile) { $TaskFile } else { Join-Path $PSScriptRoot ("tasks\handoff-{0}-{1}.md" -f (Get-Date -Format "yyyyMMdd-HHmmss"), [guid]::NewGuid().ToString("N").Substring(0,8)) }
+        $folder = Get-LeaderProject (Get-LeaderFolder $Cwd)
+        $handoffFolder = Get-LeaderHandoffFolder $folder -Prepare
+        $out = if ($TaskFile) { [IO.Path]::GetFullPath($TaskFile) } else { Join-Path $handoffFolder ("handoff-{0}-{1}.md" -f (Get-Date -Format "yyyyMMdd-HHmmss"), [guid]::NewGuid().ToString("N").Substring(0,8)) }
         if (Test-Path -LiteralPath $out) { Fail "Exists already, not overwritten: $out" }
         $limits = @(Get-ClaudeLimits)
         $me = Get-ClaudeAccountOf $env:CLAUDE_CONFIG_DIR (Get-ClaudeAccountNames)
@@ -566,12 +658,23 @@ function New-LeaderHandoff([string]$FromItem, [string]$ToItem, [string]$OldScree
         $gitText = if ($git.Ok) { "Last commit: " + (Invoke-Git $folder @("log", "-1", "--oneline")).Text + "`n`n" + '```' + "`n" + $git.Text + "`n" + '```' } else { "(not a git folder)" }
         $hist = Join-Path $folder "HISTORY.md"
         $lastPhase = if (Test-Path -LiteralPath $hist) { (Select-String -LiteralPath $hist -Pattern '^## Phase' | Select-Object -Last 1).Line -replace '^## ', '' } else { "TODO" }
-        $text = (Get-Content -LiteralPath $template -Raw).
+        $templateText = Get-Content -LiteralPath $template -Raw
+        if (-not [string]::Equals($folder, [IO.Path]::TrimEndingDirectorySeparator($PSScriptRoot), [StringComparison]::OrdinalIgnoreCase)) {
+            $rules = @(Get-LeaderRules $folder)
+            $rulesText = if ($rules.Count) { $rules -join ', ' } else { '(none present)' }
+            $reading = "## 1. Read first (in this order)`nRead the project's rules files that exist: $rulesText`nTODO: specs, test files and other documents for this work (absolute paths).`n`n"
+            $templateText = [regex]::Replace($templateText, '(?ms)^## 1\. Read first.*?(?=^## 2\.)', [Text.RegularExpressions.MatchEvaluator]{ param($match) $reading })
+            $templateText = $templateText.Replace(' PowerShell only.', '').
+                Replace('- Tests never open windows; use an isolated Herdr session (CLAUDE.md section 3).', '- Follow the project rules above; use an isolated session when testing Herdr.').
+                Replace('- Every behaviour change: HISTORY entry + `pwsh -File check.ps1` + commit.', '- Follow the project documentation and verification rules.').
+                Replace('- [ ] `pwsh -File check.ps1` -> no FAIL; committed with a HISTORY entry.', '- [ ] TODO: project checks pass; document the results.')
+        }
+        $text = $templateText.
             Replace("{{FROM}}", $(if ($FromItem) { $FromItem } else { "Claude $me" })).Replace("{{TO}}", $(if ($ToItem) { $ToItem } elseif ($next) { "Claude $($next.Account)" } else { "the next lead" })).
             Replace("{{TIME}}", (Get-Date -Format "yyyy-MM-dd HH:mm")).Replace("{{FOLDER}}", $folder).Replace("{{WHY}}", $why).
             Replace("{{LAST_PHASE}}", $lastPhase).Replace("{{AGENTS}}", $agentsText).Replace("{{GIT}}", $gitText).
             Replace("{{USAGE}}", ('```' + "`n" + ((Format-ClaudeLimits $limits) -join "`n") + "`n" + '```'))
-        $earlier = Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'tasks') -Filter 'handoff-*.md' | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+        $earlier = Get-ChildItem -LiteralPath $handoffFolder -Filter 'handoff-*.md' | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
         if ($FromItem) {
             $text = $text.Replace('You are Claude Code taking over as LEAD', 'You are taking over as LEAD').
                 Replace('Continue on the account named under NEXT in section 3 (`herdr-agents start next`).', "Continue as leader $ToItem; fill the TODOs from git, HISTORY and herdr-agents history.")
@@ -602,8 +705,10 @@ switch ($Command) {
         if ($script:switchExitCode) { exit $script:switchExitCode }
     }
     "leaders" {
+        $project = Get-LeaderProject (Get-LeaderFolder $Cwd)
+        Write-Output "Project: $project"
         $known = Read-LeaderJson (Join-Path $env:APPDATA 'herdr\leader-limits.json')
-        $current = Read-LeaderJson (Join-Path $env:APPDATA 'herdr\leader.json')
+        $current = Read-ProjectLeader $project
         $choices = @(Get-LeaderChoices $known (Get-Date))
         foreach ($row in $choices) {
             $state = if (-not $row.Installed) { 'not installed' } elseif ($current.item -eq $row.Item) { 'CURRENT' }
@@ -638,7 +743,6 @@ switch ($Command) {
         }
         $leaderItem = $Target
         $script:agentStartFailed = $false
-        if ($Lead) { $null = Read-LeaderJson (Join-Path $env:APPDATA 'herdr\leader.json') }
         $explicitName = [bool]$Name
         # Short names (agents.json "aliases"): e.g. "2040" = profile claude on account 2040.
         $aliases = (Get-Content -LiteralPath $registryPath -Raw | ConvertFrom-Json).aliases
@@ -700,6 +804,11 @@ switch ($Command) {
             $Cwd = (Get-Location).ProviderPath
             if (-not (Test-Path -LiteralPath $Cwd -PathType Container)) { Fail "Folder not found: $Cwd" }
             $Cwd = (Resolve-Path -LiteralPath $Cwd).ProviderPath
+        }
+
+        if ($Lead -and -not $Worktree) {
+            $leadProject = Get-LeaderProject (Get-LeaderFolder $Cwd)
+            $null = Read-ProjectLeader $leadProject
         }
 
         $agentArgs = @($a.args)
@@ -796,7 +905,10 @@ switch ($Command) {
         if ($acc) { $where += " account=$($acc.Name)" }
         Write-Output "STARTED name=$Name agent=$Target kind=$($a.kind) pane=$pane model=$(if ($mdl) { $mdl } else { '(CLI default)' }) cwd=$Cwd$where"
         $script:lastStartedLeader = [pscustomobject]@{ item = $leaderItem; name = $Name; pane_id = $pane; cwd = $Cwd; since = (Get-Date).ToString('o'); server = (Get-ServerIdentity) }
-        if ($Lead) { Save-LeaderJson (Join-Path $env:APPDATA 'herdr\leader.json') $script:lastStartedLeader }
+        if ($Lead) {
+            if ($Worktree) { $leadProject = Get-LeaderProject (Get-LeaderFolder $Cwd) }
+            Save-ProjectLeader $leadProject $script:lastStartedLeader
+        }
     }
 
     "ask" {

@@ -450,16 +450,32 @@ Grok / OpenCode subscription (another email) has its own limits.
    and sends the takeover prompt. It checks that the new leader began, without waiting for its answer.
    From the key, the result (SWITCHED / BLOCKED / ERROR) shows in a message box (`switch -Notify`).
    Focus the old leader's pane before pressing the key, the first time (later it remembers).
-3. The default order in `agents.json` `leaders.order` is 2030 (main Claude), 2040, 1984,
-   Codex GPT-6.1-Sol, Gemini. Reorder or replace these aliases/profile names to choose your leaders.
+3. The default order in `agents.json` `leaders.order` is 2040, 1984, 2030, Codex GPT-6.1-Sol,
+   Gemini. The lead works on another Claude account (2040, then 1984) and never on the main sign-in
+   2030 by default (owner's decision, 2026-10-31): 2030 is the last Claude fallback in the chain and
+   stays reachable with `switch -To 2030`. Reorder or replace these aliases/profile names to choose
+   your leaders.
 4. `herdr-agents start 2040 -Lead` records the lead explicitly; otherwise switch uses the focused agent.
    `switch -To codex` chooses that chain item, even if limited (with a warning).
 5. The old pane stays open. A sign-in or trust dialog prints BLOCKED: answer it in that pane.
    An exhausted chain reports the earliest reset and changes no state or handoff files.
 
+Each project remembers its own leader. `leaders -Cwd <folder>` shows that project's CURRENT
+leader and prints its project path first. `switch -Cwd <folder>` selects that project;
+without it, the focused pane's folder is used, then the current folder. A folder inside a
+git repo uses the repo root; a non-git folder is its own project. `start -Lead` records the
+project of the started agent's folder. Account limits remain shared across projects.
+
+Herdr's own handoffs stay in `I:\herdr\tasks`. Other projects keep them in
+`<project>\.herdr\handoffs`; `.herdr/` is added once to the local git exclude file, without
+changing `.gitignore`. A takeover starts at the project root and names the handoff and
+existing project rules by absolute path, plus Herdr's team playbook and delegation guide.
+The old shared leader record is used only when its folder belongs to this project; it is
+removed only after the replacement project record is saved successfully.
+
 `herdr-agents usage` still shows Claude percentages when available. The owner's current Orca
 status line sends data to Orca only, so opening Claude does not guarantee usage data here.
 Switch reads limit messages from the screen; without a reset time it remembers one hour.
 Time-zone labels are ignored; reset times use local time. `start next` uses the first free
-Claude in the chain when no eligible usage account is available.
+Claude in the chain when no eligible usage account is available. With usage data `start next` takes the least-used account, which can be the main sign-in - to move the lead use `switch` (the chain), not `start next`.
 The new leader reads the handoff, fills its TODOs from history and continues the work.

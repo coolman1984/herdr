@@ -18,7 +18,7 @@ Herdr itself is the **official 0.9.5 build**, unmodified. Everything here is bui
 
 All three run `launcher\HerdrLauncher.exe` - no console window flashes (`Herdr.cmd` is the fallback).
 **Leader switching:** `herdr-agents leaders` shows the chain; `Ctrl+B` `Shift+C` (or
-`herdr-agents switch`) saves a handoff and starts the next free leader. Claude usage numbers
+`herdr-agents switch`) saves a handoff and starts the next free leader - another Claude account (2040, then 1984), never the main sign-in. Claude usage numbers
 are optional; limits are learned from the screen (docs/GUIDE.md 13.20).
 
 Close the window any time: the agents keep running (Herdr's server runs on its own).

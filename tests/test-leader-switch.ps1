@@ -35,12 +35,18 @@ function Get-Command { param($Name, $ErrorAction) if ($Name -ne 'missing') { [ps
 function Get-ClaudeLimits { @() }
 $script:ClaudeLimitThreshold = 95
 function Rows { @(Get-LeaderChoices @{} $now) }
-Check 'configured chain and no-data Claude fallback' { $r = Rows; (($r | ForEach-Object { $_.Item }) -join ',') -eq '2030,2040,1984,codex,gemini' -and (Get-NextClaudeLeader @{} $now).Item -eq '2030' }
+# Owner's decision 2026-10-31: the lead starts on another Claude account, never the main sign-in.
+Check 'configured chain leads with another Claude account, not the main sign-in' {
+    $r = Rows
+    $main = (Get-Content -LiteralPath $registryPath -Raw | ConvertFrom-Json).accountNames.claude
+    (($r | ForEach-Object { $_.Item }) -join ',') -eq '2040,1984,2030,codex,gemini' -and
+        $r[0].Item -ne $main -and (Select-Leader $r '').Item -eq '2040' -and (Get-NextClaudeLeader @{} $now).Item -eq '2040'
+}
 Check 'skip current and limited' { $limits = @{ '2040' = @{ until = $now.AddHours(1).ToString('o'); source = 'screen' } }; (Select-Leader (Get-LeaderChoices $limits $now) '2030').Item -eq '1984' }
 Check 'expired limit is free' { (Select-Leader (Get-LeaderChoices @{ '2040' = @{ until = $now.AddMinutes(-1).ToString('o'); source = 'screen' } } $now) '2030').Item -eq '2040' }
 Check 'explicit target wins even limited' { (Select-Leader (Get-LeaderChoices @{ codex = @{ until = $now.AddHours(1).ToString('o'); source = 'screen' } } $now) '2030' 'codex').Item -eq 'codex' }
 Check 'reject target outside chain' { try { $null = Select-Leader (Rows) '2030' 'unknown'; $false } catch { $_ -match 'chain' } }
-Check 'uninstalled choice skipped' { $r = Rows; $r[1].Installed = $false; (Select-Leader $r '2030').Item -eq '1984' }
+Check 'uninstalled choice skipped' { $r = Rows; $r[0].Installed = $false; (Select-Leader $r '2030').Item -eq '1984' }
 Check 'explicit missing tool fails' { $r = Rows; $r[3].Installed = $false; try { $null = Select-Leader $r '2030' 'codex'; $false } catch { $_ -match 'not installed' } }
 Check 'usage LIMIT skipped' {
     function Get-ClaudeLimits { [pscustomobject]@{ Account = '2040'; HasData = $true; Limit = $true; FiveHour = 99; FiveResets = $now.AddHours(2); SevenDay = 0 } }
@@ -77,7 +83,7 @@ try {
         $PSScriptRoot = $SourceRoot; $Cwd = $SourceRoot; $TaskFile = Join-Path $scratch 'handoff.md'
         function Get-ClaudeAccountNames { @() }; function Get-ClaudeAccountOf { '2030' }; function Get-ClaudeNextAccount { $null }
         function Format-ClaudeLimits { 'no data' }; function Get-LiveAgents { @() }
-        function Invoke-Git { [pscustomobject]@{ Ok = $true; Text = 'fixture git state' } }
+        function Invoke-Git($Dir, $Arguments) { [pscustomobject]@{ Ok = $true; Text = $(if ($Arguments[0] -eq 'rev-parse') { $SourceRoot } else { 'fixture git state' }) } }
         function Get-ChildItem { [pscustomobject]@{ FullName = 'I:\herdr\tasks\handoff-earlier.md'; LastWriteTimeUtc = $now } }
         $screen = ((1..100 | ForEach-Object { "screen-line-$_" }) -join "`n")
         $null = New-LeaderHandoff '2040' 'codex' $screen
@@ -103,14 +109,18 @@ $startClause = $dispatch.Clauses | Where-Object { $_.Item1.Value -eq 'start' }
 $startText = $startClause.Item2.Extent.Text
 $startBody = [scriptblock]::Create($startText.Substring(1, $startText.Length - 2))
 foreach ($startMode in 'command', 'shared') {
-Check "start next without usage starts and records main Claude ($startMode)" {
+Check "start next without usage starts and records the first free chain Claude ($startMode)" {
     $Target = 'next'; $Cwd = $SourceRoot; $Name = ''; $Account = ''; $Pane = ''; $Worktree = ''; $Effort = ''; $Model = ''; $Provider = ''; $Direction = 'right'; $Lead = $true
     $script:started = $null; $script:leadSaved = $null
     function Get-ClaudeNextAccount { $null }; function Get-LiveAgents { @() }; function Get-State { @() }
     function Read-LeaderJson { @{} }; function Get-ServerIdentity { 'fixture' }
+    function Get-LeaderProject($Folder) { $Folder }; function Read-ProjectLeader { @{} }
+    function Save-ProjectLeader($Project, $Value) { $script:leadSaved = $Value }
     function Save-LeaderJson($Path, $Value) { $script:leadSaved = $Value }
     function Save-State($Items) { $script:started = $Items }
     function Get-EnvArgs { @() }
+    # 2040 is an alias WITH an account folder, so the real Get-Account would touch %USERPROFILE%.
+    function Get-Account($Entry, $AccountName) { [pscustomobject]@{ Name = $AccountName; Tool = 'claude'; Dir = "fixture-$AccountName"; Env = @{}; Args = @(); Login = '' } }
     function Invoke-Herdr($Arguments) {
         [pscustomobject]@{ Ok = $true; Text = ''; Json = @{ result = @{ pane = @{ pane_id = 'new' } } } }
     }
@@ -118,7 +128,7 @@ Check "start next without usage starts and records main Claude ($startMode)" {
     try {
         $env:HERDR_ENV = '1'; $env:HERDR_PANE_ID = 'old'
         if ($startMode -eq 'shared') { $null = Start-Agent } else { $null = & $startBody }
-        $script:started[0].name -eq 'claude-2030' -and $script:leadSaved.item -eq '2030' -and $script:leadSaved.pane_id -eq 'new'
+        $script:started[0].name -eq 'claude-2040' -and $script:leadSaved.item -eq '2040' -and $script:leadSaved.pane_id -eq 'new'
     } finally { $env:HERDR_ENV = $previous; $env:HERDR_PANE_ID = $previousPane }
 }
 }
@@ -127,6 +137,9 @@ function Run-SwitchFixture([string]$Mode) {
     $script:writes = @{}; $script:prompts = @(); $script:handoffs = 0; $script:startedCount = 0; $script:fixtureMode = $Mode
     $Cwd = $SourceRoot; $To = ''; $TaskFile = ''
     function Get-Date { $now }
+    function Get-LeaderProject($Folder) { $Folder }
+    function Read-ProjectLeader { Read-LeaderJson 'fixture-leader.json' }
+    function Save-ProjectLeader($Project, $Value) { Save-LeaderJson 'fixture-project.json' $Value }
     function Read-LeaderJson($Path) {
         if ($Path.EndsWith('leader.json')) { return @{ item = '2030'; name = 'claude-2030'; pane_id = 'old'; cwd = $SourceRoot; since = $now.ToString('o') } }
         $limits = @{}
@@ -168,5 +181,168 @@ Check 'startup dialog sends nothing and returns BLOCKED 3' {
     $r = Run-SwitchFixture dialog
     $r.Error -eq '' -and $r.Output[-1] -eq 3 -and ($r.Output -join "`n") -match 'BLOCKED' -and $r.Prompts.Count -eq 0 -and $r.Writes.Count -eq 1
 }
+# Per-project delta: real temporary files and fake Herdr/git only.
+$deltaStart = $pass + $failed; $deltaFailedStart = $failed
+& {
+    $projectScratch = Join-Path $PSScriptRoot ('leader-project-' + [guid]::NewGuid().ToString('N'))
+    $priorAppData = $env:APPDATA
+    $priorPane = $env:HERDR_PANE_ID; $priorActiveCwd = $env:HERDR_ACTIVE_PANE_CWD
+    $priorActivePane = $env:HERDR_ACTIVE_PANE_ID; $priorHerdrEnv = $env:HERDR_ENV
+    $env:APPDATA = Join-Path $projectScratch 'state'
+    $projectA = Join-Path $projectScratch 'project-a'; $projectB = Join-Path $projectScratch 'project-b'
+    $plain = Join-Path $projectScratch 'plain'
+    $null = New-Item -ItemType Directory -Path $projectA,$projectB,$plain,(Join-Path $projectA 'src'),(Join-Path $projectA '.git\info'),(Join-Path $projectB '.git\info') -Force
+    Set-Content -LiteralPath (Join-Path $projectA 'README.md') -Value '# Project A'
+    Set-Content -LiteralPath (Join-Path $projectB 'AGENTS.md') -Value '# Project B rules'
+    Set-Content -LiteralPath (Join-Path $projectA '.gitignore') -Value 'original-ignore'
+    function Invoke-Git($Dir, $Arguments) {
+        if ($Arguments[0] -eq 'rev-parse') {
+            if ($Dir -eq $plain -or $Dir.StartsWith($plain + '\', [StringComparison]::OrdinalIgnoreCase)) {
+                return [pscustomobject]@{ Ok = $false; Text = 'not a git repository' }
+            }
+            foreach ($root in @($projectA,$projectB,$SourceRoot)) {
+                if ($Dir -eq $root -or $Dir.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) {
+                    return [pscustomobject]@{ Ok = $true; Text = $root.Replace('\','/') }
+                }
+            }
+            return [pscustomobject]@{ Ok = $false; Text = 'not a git repository' }
+        }
+        [pscustomobject]@{ Ok = $true; Text = 'fixture git facts' }
+    }
+    function Record($Item, $Project, $AgentName, $PaneId) {
+        @{ item = $Item; name = $AgentName; pane_id = $PaneId; cwd = $Project; since = $now.ToString('o'); project = $Project }
+    }
+    function Get-ClaudeAccountNames { @() }; function Get-ClaudeAccountOf { '2030' }; function Get-ClaudeNextAccount { $null }
+    function Format-ClaudeLimits { 'no data' }; function Get-State { @() }
+    $script:projectCurrent = Record '2030' $projectA 'claude-2030' 'pane-a'
+    function Get-LiveAgents { [pscustomobject]@{ name = $script:projectCurrent.name; pane_id = $script:projectCurrent.pane_id; cwd = $projectA } }
+    function Start-Agent {
+        $script:agentStartFailed = $false
+        $script:projectCurrent = Record $Target $Cwd ($Target + '-a') 'new-a'
+        $script:lastStartedLeader = [pscustomobject]$script:projectCurrent
+    }
+    function Invoke-Herdr($Arguments) {
+        if ($Arguments[1] -eq 'prompt') { $script:projectPrompt = $Arguments[3] }
+        [pscustomobject]@{ Ok = $true; Text = "You've hit your limit - resets 3pm"; Json = @{ result = @{ agent = @{ agent_status = 'working' }; pane = @{ cwd = $projectB } } } }
+    }
+    $Cwd = $projectA; $To = 'codex'; $TaskFile = ''; $env:HERDR_PANE_ID = 'pane-a'
+    try {
+        Check 'project: repo subfolder resolves to top-level' { (Get-LeaderProject (Join-Path $projectA 'src')) -eq $projectA }
+        Check 'project: non-git folder resolves to itself' { (Get-LeaderProject $plain) -eq $plain }
+        Check 'project: same repo shares a stable hashed state path' {
+            $one = Get-LeaderStatePath (Get-LeaderProject $projectA)
+            $two = Get-LeaderStatePath (Get-LeaderProject (Join-Path $projectA 'src'))
+            $one -eq $two -and $one -match 'leaders\\project-a-[a-f0-9]{8}\.json$'
+        }
+        Check 'project: case-insensitive paths hash to the same file' {
+            (Get-LeaderStatePath $projectA) -eq (Get-LeaderStatePath $projectA.ToUpperInvariant())
+        }
+        Check 'project: switch A preserves B state and starts in A root' {
+            Save-ProjectLeader $projectA $script:projectCurrent
+            Save-ProjectLeader $projectB (Record 'gemini' $projectB 'gemini-b' 'pane-b')
+            $pathB = Get-LeaderStatePath $projectB; $before = [IO.File]::ReadAllText($pathB)
+            $Cwd = Join-Path $projectA 'src'
+            $null = Switch-Leader
+            $afterA = Read-ProjectLeader $projectA
+            [IO.File]::ReadAllText($pathB) -ceq $before -and $afterA.item -eq 'codex' -and $afterA.cwd -eq $projectA -and $afterA.project -eq $projectA
+        }
+        Check 'project: leaders Cwd B shows B CURRENT and project first' {
+            $clause = $dispatch.Clauses | Where-Object { $_.Item1.Value -eq 'leaders' }
+            $text = $clause.Item2.Extent.Text; $Cwd = $projectB
+            $output = @(& ([scriptblock]::Create($text.Substring(1,$text.Length-2))))
+            $output[0] -eq "Project: $projectB" -and ($output -join "`n") -match 'gemini.*CURRENT' -and ($output -join "`n") -notmatch 'codex.*CURRENT'
+        }
+        Check 'project: two handoffs stay local and exclude is added exactly once' {
+            $null = Get-LeaderProject $projectA
+            $Cwd = $projectA; $To = 'gemini'; $null = Switch-Leader
+            $location = Join-Path $projectA '.herdr\handoffs'
+            $files = @(Get-ChildItem -LiteralPath $location -Filter 'handoff-*.md')
+            $exclude = @(Get-Content -LiteralPath (Join-Path $projectA '.git\info\exclude'))
+            $latest = Get-Content -LiteralPath $script:lastHandoff -Raw
+            $files.Count -eq 2 -and @($exclude | Where-Object { $_ -eq '.herdr/' }).Count -eq 1 -and (Get-Content -LiteralPath (Join-Path $projectA '.gitignore') -Raw).Trim() -eq 'original-ignore' -and @($files | Where-Object { $_.FullName -ne $script:lastHandoff -and $latest.Contains($_.FullName) }).Count -eq 1
+        }
+        Check 'project: existing exclude text survives without a trailing newline' {
+            $path = Join-Path $projectB '.git\info\exclude'; [IO.File]::WriteAllText($path, '# existing exclusion')
+            $null = Get-LeaderHandoffFolder $projectB -Prepare
+            $null = Get-LeaderHandoffFolder $projectB -Prepare
+            [IO.File]::ReadAllText($path) -ceq "# existing exclusion`n.herdr/`n" -and -not (Test-Path -LiteralPath (Join-Path $projectB '.gitignore'))
+        }
+        Check 'project: foreign template names only existing rules and drops shell rule' {
+            $text = Get-Content -LiteralPath $script:lastHandoff -Raw
+            $text.Contains((Join-Path $projectA 'README.md')) -and -not $text.Contains('CLAUDE.md') -and -not $text.Contains('LESSONS.md') -and -not $text.Contains('PowerShell only')
+        }
+        Check 'project: takeover paths are absolute and missing rules are absent' {
+            $script:projectPrompt.Contains((Join-Path $projectA 'README.md')) -and $script:projectPrompt.Contains($script:lastHandoff) -and $script:projectPrompt.Contains((Join-Path $SourceRoot 'docs\TEAM-PLAYBOOK.md')) -and $script:projectPrompt.Contains((Join-Path $SourceRoot 'docs\DELEGATION.md')) -and $script:projectPrompt.Contains("Work in $projectA.") -and -not $script:projectPrompt.Contains('CLAUDE.md')
+        }
+        Check 'project: Herdr still uses tasks' { (Get-LeaderHandoffFolder $SourceRoot) -eq (Join-Path $SourceRoot 'tasks') }
+        Check 'project: plain handoff uses non-git local folder without creating git metadata' {
+            $null = Get-LeaderHandoffFolder $plain
+            $Cwd = $plain; $null = New-LeaderHandoff
+            $script:lastHandoff.StartsWith((Join-Path $plain '.herdr\handoffs') + '\') -and -not (Test-Path -LiteralPath (Join-Path $plain '.git'))
+        }
+        Check 'project: focused folder wins over a remembered old cwd' {
+            $env:HERDR_ACTIVE_PANE_CWD = $projectB
+            (Get-LeaderFolder '') -eq $projectB -and (Get-LeaderFolder $projectA) -eq $projectA
+        }
+        Check 'project: pane get supplies folder when key cwd is absent' {
+            $env:HERDR_ACTIVE_PANE_CWD = ''
+            (Get-LeaderFolder '') -eq $projectB
+        }
+        Check 'project: current location is used outside Herdr' {
+            $env:HERDR_ACTIVE_PANE_CWD = ''; $env:HERDR_PANE_ID = ''; $env:HERDR_ACTIVE_PANE_ID = ''
+            Push-Location -LiteralPath $plain
+            try { (Get-LeaderFolder '') -eq $plain } finally { Pop-Location }
+        }
+        Check 'project: legacy containment does not confuse neighbouring names' {
+            -not (Test-LeaderProjectFolder ($projectA + 'b\src') $projectA)
+        }
+        Check 'project: mismatched project field fails clearly' {
+            Save-LeaderJson (Get-LeaderStatePath $projectA) (Record 'codex' $projectB 'wrong' 'wrong-pane')
+            try { $null = Read-ProjectLeader $projectA; $false } catch { $_ -match 'project.*mismatch|mismatch.*project' }
+        }
+        $legacy = Join-Path $env:APPDATA 'herdr\leader.json'
+        Check 'project: foreign legacy file is left alone' {
+            Save-LeaderJson $legacy (Record '2030' $projectB 'legacy-b' 'legacy-pane')
+            $null = Read-ProjectLeader $plain
+            Save-ProjectLeader $plain (Record 'codex' $plain 'plain-lead' 'plain-pane')
+            (Test-Path -LiteralPath $legacy) -and (Read-LeaderJson $legacy).name -eq 'legacy-b'
+        }
+        Check 'project: legacy leader is read without deleting before successful write' {
+            $legacyFolder = Join-Path $plain 'child'; $null = New-Item -ItemType Directory -Path $legacyFolder -Force
+            Remove-Item -LiteralPath (Get-LeaderStatePath $plain)
+            Save-LeaderJson $legacy (Record '2040' $legacyFolder 'legacy-a' 'legacy-pane')
+            $value = Read-ProjectLeader $plain
+            $value.item -eq '2040' -and (Test-Path -LiteralPath $legacy) -and -not (Test-Path -LiteralPath (Get-LeaderStatePath $plain))
+        }
+        Check 'project: failed migration write keeps legacy intact' {
+            function Save-LeaderJson { throw 'fixture write denied' }
+            try { Save-ProjectLeader $plain (Record 'codex' $plain 'new' 'new-pane'); $false }
+            catch { $_ -match 'write denied' -and (Test-Path -LiteralPath $legacy) }
+        }
+        Check 'project: successful migration removes legacy only after new write' {
+            $script:projectCurrent = Record '2040' (Join-Path $plain 'child') 'legacy-a' 'legacy-pane'
+            $env:HERDR_PANE_ID = 'legacy-pane'
+            $Cwd = $plain; $To = '1984'; $null = Switch-Leader
+            -not (Test-Path -LiteralPath $legacy) -and (Read-ProjectLeader $plain).item -eq '1984'
+        }
+        Check 'project: start Lead from a subfolder records the repo project' {
+            $subfolder = Join-Path $projectB 'src'; $null = New-Item -ItemType Directory -Path $subfolder
+            $Target = 'codex'; $Name = 'starter-b'; $Account = ''; $Pane = ''; $Worktree = ''; $Effort = ''; $Model = ''; $Provider = ''; $Direction = 'right'; $Lead = $true; $Cwd = $subfolder
+            $env:HERDR_ENV = '1'; $env:HERDR_PANE_ID = 'caller'
+            function Save-State { }
+            function Invoke-Herdr { [pscustomobject]@{ Ok = $true; Text = ''; Json = @{ result = @{ pane = @{ pane_id = 'started-b' } } } } }
+            $null = & $startBody
+            $value = Read-ProjectLeader $projectB
+            $value.project -eq $projectB -and $value.cwd -eq $subfolder -and $value.item -eq 'codex' -and $value.name -eq 'starter-b'
+        }
+    } finally {
+        $env:APPDATA = $priorAppData; $env:HERDR_PANE_ID = $priorPane; $env:HERDR_ACTIVE_PANE_CWD = $priorActiveCwd
+        $env:HERDR_ACTIVE_PANE_ID = $priorActivePane; $env:HERDR_ENV = $priorHerdrEnv
+        $resolved = [IO.Path]::GetFullPath($projectScratch)
+        if (-not $resolved.StartsWith([IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\') + '\leader-project-', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe project fixture cleanup' }
+        Remove-Item -LiteralPath $resolved -Recurse -Force
+    }
+}
+Write-Output "PROJECT DELTA: $($failed - $deltaFailedStart) failed / $(($pass + $failed) - $deltaStart) tests"
 Write-Output "PASS $pass/$($pass + $failed); FAIL $failed"
 if ($failed) { exit 1 }

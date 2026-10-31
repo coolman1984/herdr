@@ -290,8 +290,8 @@
     }
   },
   "leaders": {
-    "_comment": "Who leads, in order. herdr-agents switch takes the first one that is installed, not the current leader and not limited. Each item is an alias or a profile name. Reorder to change the choice.",
-    "order": ["2030", "2040", "1984", "codex", "gemini"]
+    "_comment": "Who leads, in order. herdr-agents switch takes the first one that is installed, not the current leader and not limited. Each item is an alias or a profile name. Reorder to change the choice. Owner's decision 2026-10-31: the lead works on another Claude account (2040 first, then 1984) and never on the main sign-in 2030 by default; 2030 stays the last Claude item as a fallback and 'switch -To 2030' still forces it.",
+    "order": ["2040", "1984", "2030", "codex", "gemini"]
   },
   "accountNames": {
     "claude": "2030"

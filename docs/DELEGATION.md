@@ -143,7 +143,7 @@ its last 80 screen lines and the previous handoff path, starts the next free ite
 `agents.json` `leaders.order`, and sends a lead takeover prompt without waiting for its answer.
 The next agent is the LEAD and follows CLAUDE.md lead rules. It fills the handoff TODOs from
 git, HISTORY and `herdr-agents history`. The old pane remains open. Startup dialogs are BLOCKED.
-`herdr-agents leaders` shows availability; `start 2040 -Lead` sets the current lead;
+`herdr-agents leaders` shows availability; `start 2040 -Lead` sets the current lead; the lead runs on another Claude account (2040 first, then 1984), never the main sign-in 2030 by default (owner's decision, 2026-10-31), and `switch -To 2030` forces it;
 `switch -To codex` overrides the choice (must be in the chain and installed).
 Screen limits work without status-line usage data. State is in `leader.json` and
 `leader-limits.json` under `%APPDATA%\herdr`, saved by atomic replacement.
