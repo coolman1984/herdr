@@ -361,11 +361,15 @@ func cmdRun(args []string) int {
 		e.Log = func(s string) { fmt.Println(s) }
 	}
 	e.Q = DefaultQuotas()
-	if c, err := os.ReadFile(filepath.Join(dir, "capabilities.json")); err == nil {
-		var r CapReport
-		if json.Unmarshal(c, &r) == nil {
-			e.Caps = &r
-		}
+	// Facts can change between runs (another machine, a new tool, less memory): measure again on every
+	// takeover, keep the new report, and never raise the goal's agent cap above what this machine carries.
+	capr := Discover(e.G.Project, DevicePolicyPath())
+	if err := WriteReport(capr, filepath.Join(dir, "capabilities.json")); err != nil {
+		return fail(err)
+	}
+	e.Caps = &capr
+	if b := capr.Budget; e.G.Limits.MaxAgents < 0 || b.MaxAgents < e.G.Limits.MaxAgents {
+		e.G.Limits.MaxAgents = b.MaxAgents
 	}
 	if cat := os.Getenv("HERDR_SKILLS_CATALOG"); cat != "" {
 		if sc, err := LoadSkillCatalog(cat); err == nil {

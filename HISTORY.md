@@ -1690,3 +1690,15 @@ handling, reconciliation, reference checks, export gate) for a PC with Office bu
 **Proof:** the 7 independent docpipe regressions pass; 19 new tests (`tests/test_round2_fixes.py`), all
 earlier tests, the 8 browser journeys; bench 300,000 xlsx rows 54 MB peak, totals exact.
 **Not proven:** Office/NASCA itself (no Office on CI or here: the PowerShell run uses recorded records).
+
+## Phase 66 - Live capability facts; unknown device profile is strict (2026-10-31)
+
+**Finding 12:** runtime RAM admission now uses the container's own cgroup memory (memory.max - current) when
+lower than the host figure; every runner takeover re-measures the machine, rewrites `capabilities.json`, and
+lowers (never raises) the agent cap; agents receive `DOCPIPE_BATCH_ROWS` (measured batch size) and
+`HERDR_DEVICE_PROFILE`.
+**Policy:** a device whose profile was never recorded (`unknown`) is handled like `company_nasca` by docpipe
+(authorized application only, no value export without approval) - never like a free personal PC.
+**Bug found:** two processes opening a new SQLite database at once could fail with "database is locked"
+while switching to WAL (SQLite does not always wait for that lock); `connect` now retries for up to 30 s.
+Test `test_concurrent_migration_applies_once` (6 threads) and `test_unknown_device_profile_is_strict`.

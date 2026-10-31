@@ -64,11 +64,23 @@ def connect(path):
             __import__("os").chmod(p, 0o600)  # derived company data: owner only (ACLs on Windows)
         except OSError:
             pass
-    db.execute("PRAGMA journal_mode=WAL")  # local disk only: never a shared network file (see README)
-    db.execute("PRAGMA synchronous=FULL")
-    db.execute("PRAGMA foreign_keys=ON")
-    migrate(db)
-    return db
+    # Switching to WAL needs a moment of exclusive access and SQLite does not always wait for it, so a
+    # second process opening the same new database retries for a bounded time instead of failing.
+    deadline = time.time() + 30
+    while True:
+        try:
+            db.execute("PRAGMA journal_mode=WAL")  # local disk only: never a shared network file (see README)
+            db.execute("PRAGMA synchronous=FULL")
+            db.execute("PRAGMA foreign_keys=ON")
+            migrate(db)
+            return db
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e) or time.time() > deadline:
+                db.close()
+                raise
+            if db.in_transaction:
+                db.execute("ROLLBACK")
+            time.sleep(0.05)
 
 
 def migrate(db):

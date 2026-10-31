@@ -286,6 +286,11 @@ func (e *Engine) startAgent(role, task, profile, account string, retries map[str
 	}
 	home, _ := os.UserHomeDir()
 	env := map[string]string{"HERDR_GOAL": e.L.Dir, "HERDR_GOAL_ROLE": role, "HERDR_GOAL_AGENT": name}
+	if e.Caps != nil {
+		// Workers size their batches from this machine's measured budget, and know the device profile.
+		env["DOCPIPE_BATCH_ROWS"] = fmt.Sprint(e.Caps.Budget.BatchRows)
+		env["HERDR_DEVICE_PROFILE"] = e.Caps.Policy.Profile
+	}
 	if role == "lead" {
 		g.LeadNews = ""   // a new lead has been told nothing yet
 		tok := newToken() // this lead's own key; replaced leads lose theirs

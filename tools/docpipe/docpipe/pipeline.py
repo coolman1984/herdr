@@ -249,7 +249,7 @@ def _kill_owned_office(pidfile):
 def _identity(path, profile):
     """(identity, content_sha or None, stat). company_nasca: metadata only (no content read)."""
     st = os.stat(path)
-    if profile == "company_nasca":
+    if profile != "personal":
         ident = f"meta|{os.path.abspath(path)}|{st.st_size}|{st.st_mtime_ns}|{profile}|{PARSER_VERSION}"
         return _sha(ident), None, st
     content = sniff.sha256_file(path)

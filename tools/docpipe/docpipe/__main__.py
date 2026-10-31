@@ -67,7 +67,7 @@ def main(argv=None):
     for ref in a.reference:
         k, v = ref.rsplit("=", 1)
         refs[k.strip()] = v.strip()
-    if a.profile == "company_nasca" and not a.export_approved:
+    if a.profile != "personal" and not a.export_approved:
         # Company policy: totals and checks only; no report, CSV or dashboard values leave the database.
         res = {"cards": [], "checks": [], "quality": [], "issues": 0, "export": "not approved under company_nasca"}
         for f in a.field:

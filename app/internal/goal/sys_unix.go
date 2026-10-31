@@ -39,8 +39,35 @@ func processAlive(pid int) bool {
 	return true
 }
 
-// FreeRAMMB reads MemAvailable from /proc/meminfo; -1 when unknown.
+// FreeRAMMB is the memory this process can still use: MemAvailable, lowered to the container's own
+// cgroup limit (memory.max - memory.current) when there is one; -1 when unknown.
 func FreeRAMMB() int {
+	host := hostFreeRAMMB()
+	if lim, ok := cgroupInt("/sys/fs/cgroup/memory.max"); ok && lim > 0 {
+		if used, ok := cgroupInt("/sys/fs/cgroup/memory.current"); ok {
+			left := int((lim - used) >> 20)
+			if host < 0 || left < host {
+				return left
+			}
+		}
+	}
+	return host
+}
+
+func cgroupInt(path string) (int64, bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	s := strings.TrimSpace(string(b))
+	if s == "max" {
+		return -1, true
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	return n, err == nil
+}
+
+func hostFreeRAMMB() int {
 	b, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		return -1

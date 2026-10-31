@@ -264,3 +264,17 @@ class Exports(Base):
         from docpipe import web
         with self.assertRaises(SystemExit):
             web.serve(str(self.root / "w.db"), host="0.0.0.0", port=0)
+
+
+class UnknownProfile(Base):
+    def test_unknown_device_profile_is_strict(self):
+        p = self.write("x.csv", "A\n1\n")
+        real_open = builtins.open
+
+        def guarded(file, *a, **k):
+            if str(file) == p:
+                raise PermissionError("raw read")
+            return real_open(file, *a, **k)
+        with mock.patch("builtins.open", side_effect=guarded), mock.patch.object(pipeline, "com_extract", return_value=(None, "no COM")):
+            _, st = pipeline.import_file(self.db, p, profile="unknown")
+        self.assertEqual(st, "needs-authorized-app")

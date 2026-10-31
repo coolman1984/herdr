@@ -56,8 +56,10 @@ def policy_route(path, profile):
     """Decide the route from the file's NAME ONLY when a policy requires it - before any byte is read.
     company_nasca: every file goes to an authorized application; a type with no authorized reader is a
     documented blocked capability, never a raw-parser fallback. Returns (route, why) or (None, '')."""
-    if profile != "company_nasca":
+    if profile == "personal":
         return None, ""
+    # company_nasca, and also any profile not known to be personal ("unknown"): the strict path. A device
+    # whose policy was never recorded is treated like a company PC, never like a free one.
     ext = os.path.splitext(path)[1].lower()
     if ext in COM_EXT:
         return "com", "company_nasca: authorized Office application over COM (PowerShell bridge)"
@@ -79,7 +81,7 @@ def route(path, kind, profile):
     company_nasca: every Office/PDF file goes to the authorized application (COM) whatever its bytes look
     like - a protected file may be a wrapper, and a parser failing on it does not mean it is damaged.
     Elsewhere: our own stdlib readers; a CFB file (legacy binary or encrypted) needs the application."""
-    if profile == "company_nasca":
+    if profile != "personal":
         return policy_route(path, profile)
     if kind in ("xlsx", "docx", "pptx", "pdf", "csv", "txt"):
         return "native", "stdlib reader"
