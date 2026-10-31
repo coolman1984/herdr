@@ -1620,4 +1620,7 @@ exit 0. Live run on the owner's server: "server already running; starting only t
 still one watcher process (pid 29976). Both scripts parse with 0 errors; `check.ps1` passes.
 **Not verified:** a real reboot; the lead start at sign-in; `setup-remote.ps1` (needs admin);
 SSH / `herdr --remote` from another device (needs the owner's Tailscale sign-ins).
+**Follow-up:** the owner ran `setup-remote.ps1` in a normal window and it stopped with "Run this in an
+administrator PowerShell". It now asks Windows for admin rights itself (`Start-Process -Verb RunAs`)
+and continues in a new window that stays open; a refused prompt changes nothing.
 **Lesson:** #108.

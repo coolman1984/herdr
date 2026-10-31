@@ -10,7 +10,14 @@
 param([switch]$Undo)
 $ErrorActionPreference = 'Stop'
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $isAdmin) { Write-Error "Run this in an administrator PowerShell (right-click Terminal -> Run as administrator)."; exit 1 }
+if (-not $isAdmin) {
+    # Ask Windows for admin rights (the owner clicks Yes) and run again in a window that stays open.
+    $relaunch = @('-NoProfile', '-NoExit', '-File', "`"$PSCommandPath`"") + $(if ($Undo) { @('-Undo') })
+    try { Start-Process -FilePath (Get-Command pwsh).Source -ArgumentList $relaunch -Verb RunAs }
+    catch { Write-Error "Admin rights were refused, nothing changed: $($_.Exception.Message)"; exit 1 }
+    Write-Output "Continuing in the new administrator window."
+    exit 0
+}
 
 $key = 'HKLM:\SOFTWARE\OpenSSH'
 $backup = Join-Path $env:APPDATA 'herdr\openssh-defaultshell.bak.txt'
