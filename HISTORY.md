@@ -1558,3 +1558,18 @@ Claude Code `Opus 5.5 · Claude Pro`, status idle, no dialog; `leaders` shows `2
 New test `start falls back to pane run + agent rename on agent_pane_busy`: passes (58/58); on HEAD the
 test run stops with exit 2 (the old NOT READY exit). All test scripts and `check.ps1` pass.
 **Lesson:** #106.
+
+## Phase 62 - Claude accounts signed in as the same email are caught (2026-10-31)
+
+**Symptom:** the owner opened the new lead "on account 2040", ran `/status`, and saw 2030.
+**Cause (lead verified, emails only, no secrets read):** the lead DID run in the 2040 folder (its
+`history.jsonl` changed at the owner's `/status`), but that folder's sign-in was rewritten at 07:51
+today as mflma2030@gmail.com; the 1984 folder is also mflma2030, like the main sign-in. Three chain
+items were one account with one limit, so a switch between them changed nothing - and nothing said so.
+**Fix:** `Get-ClaudeSignIn` reads `oauthAccount.emailAddress` from each folder's `.claude.json`;
+`leaders` prints `signed-in=<email>` and a WARNING naming the items that share an email; `switch` /
+NEXT skip items signed in as the current leader's email (here: NEXT is codex, not 1984).
+**Proof:** `leaders` on this PC shows all three Claude items as mflma2030 with the WARNING and
+`NEXT: codex`. Two new tests: 60/60 pass; on HEAD 58/60 (both new ones fail). All scripts and
+`check.ps1` pass.
+**Lesson:** #107.

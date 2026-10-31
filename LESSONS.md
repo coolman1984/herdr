@@ -545,3 +545,9 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     treats a pane whose shell has a child as not an available shell (`agent_pane_busy`). Fallback that
     works, now in `herdr-agents start`: `herdr pane run <pane> "<cli> <args>"`, then
     `herdr agent rename <pane> <name>` once Herdr has detected the agent (it needs a few seconds).
+
+107. **A Claude account folder can silently hold another account's sign-in** (2026-10-31): `/login` in a
+    pane writes whatever account the browser is signed in to, so `.herdr-accounts\claude\2040` held
+    mflma2030. The folder name proves nothing; `oauthAccount.emailAddress` in its `.claude.json` (no
+    secret) does, and `herdr-agents leaders` now shows it. Sign a folder in with the browser on the
+    right account (or a private window), then check `leaders` / `/status`.

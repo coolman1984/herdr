@@ -520,8 +520,24 @@ function Get-LeaderChoices($KnownLimits, [datetime]$Now) {
             if (-not $until -or $reset -gt $until) { $until = $reset; $source = 'usage' }
         }
         [pscustomobject]@{ Order = $index; Item = [string]$item; Profile = $key; Kind = $agentProfile.kind; Model = $agentProfile.model
-            Installed = [bool](Get-Command $agentProfile.command -ErrorAction SilentlyContinue); Until = $until; Source = $source; Usage = $row }
+            Installed = [bool](Get-Command $agentProfile.command -ErrorAction SilentlyContinue); Until = $until; Source = $source; Usage = $row
+            Email = $(if ($agentProfile.kind -eq 'claude') { Get-ClaudeSignIn $accountName (-not ($alias -and $alias.Value.account)) } else { $null }) }
     }
+}
+
+# The email a Claude account folder is signed in with (.claude.json oauthAccount; no secrets read).
+# Two chain items on the same email share one limit, so switching between them changes nothing.
+function Get-ClaudeSignIn([string]$AccountName, [bool]$Main) {
+    $file = if ($Main) { Join-Path $env:USERPROFILE ".claude.json" } else { Join-Path $accountsRoot "claude\$AccountName\.claude.json" }
+    if (-not (Test-Path -LiteralPath $file)) { return $null }
+    try { [string](Get-Content -LiteralPath $file -Raw | ConvertFrom-Json -AsHashtable).oauthAccount.emailAddress }
+    catch { "unreadable: $($_.Exception.Message)" }
+}
+
+# Free successors: installed, not the current item, not limited, not signed in as the current item.
+function Get-FreeLeaders($Choices, [string]$Current) {
+    $currentEmail = ($Choices | Where-Object Item -eq $Current | Select-Object -First 1).Email
+    $Choices | Where-Object { $_.Installed -and $_.Item -ne $Current -and -not $_.Until -and -not ($currentEmail -and $_.Email -eq $currentEmail) }
 }
 
 function Get-LeaderUnavailableMessage($Choices) {
@@ -536,7 +552,7 @@ function Select-Leader($Choices, [string]$Current, [string]$Requested) {
         if (-not $chosen.Installed) { Fail "Leader '$Requested' is not installed." }
         return $chosen
     }
-    $chosen = $Choices | Where-Object { $_.Installed -and $_.Item -ne $Current -and -not $_.Until } | Select-Object -First 1
+    $chosen = Get-FreeLeaders $Choices $Current | Select-Object -First 1
     if (-not $chosen) { Fail (Get-LeaderUnavailableMessage $Choices) }
     $chosen
 }
@@ -714,9 +730,13 @@ switch ($Command) {
             $state = if (-not $row.Installed) { 'not installed' } elseif ($current.item -eq $row.Item) { 'CURRENT' }
                 elseif ($row.Until) { "limited until $($row.Until.ToString('ddd HH:mm')) ($($row.Source))" } else { 'free' }
             $percent = if ($row.Usage -and $null -ne $row.Usage.FiveHour) { " 5h=$($row.Usage.FiveHour)%" } else { '' }
-            Write-Output "$($row.Order). $($row.Item) $($row.Kind) $($row.Model) installed=$(if ($row.Installed) { 'yes' } else { 'no' }) $state$percent"
+            $email = if ($row.Email) { " signed-in=$($row.Email)" } elseif ($row.Kind -eq 'claude') { ' signed-in=(none)' } else { '' }
+            Write-Output "$($row.Order). $($row.Item) $($row.Kind) $($row.Model) installed=$(if ($row.Installed) { 'yes' } else { 'no' }) $state$percent$email"
         }
-        $next = $choices | Where-Object { $_.Installed -and -not $_.Until -and $_.Item -ne $current.item } | Select-Object -First 1
+        foreach ($group in @($choices | Where-Object { $_.Email -and $_.Email -notlike 'unreadable*' } | Group-Object Email | Where-Object Count -gt 1)) {
+            Write-Output "WARNING: $(($group.Group | ForEach-Object Item) -join ', ') are all signed in as $($group.Name) - one account, one limit; switch skips the copies. Sign a folder in with its own account: herdr-agents login claude -Account <item> (you type the sign-in)."
+        }
+        $next = Get-FreeLeaders $choices $current.item | Select-Object -First 1
         Write-Output "NEXT: $(if ($next) { $next.Item } else { Get-LeaderUnavailableMessage $choices })"
     }
     "tools" {

@@ -13,6 +13,9 @@ foreach ($def in $ast.FindAll({ param($n) $n -is [System.Management.Automation.L
     . ([scriptblock]::Create($def.Extent.Text.Replace('$PSScriptRoot', "'" + $SourceRoot.Replace("'", "''") + "'")))
 }
 function Fail([string]$Message) { throw "ERROR: $Message" }
+# Never read the owner's real Claude sign-ins: every account is signed in separately unless a test says not.
+$script:signIns = @{}
+function Get-ClaudeSignIn([string]$AccountName, [bool]$Main) { $script:signIns[$(if ($Main) { 'main' } else { $AccountName })] }
 $now = [datetime]'2026-10-31T14:00:00'
 foreach ($phrase in @("You've hit your limit", 'usage limit', 'limit reached')) {
     Check "no reset: $phrase" { (Get-LimitFromScreen $phrase $now).Until -eq $now.AddHours(1) }
@@ -43,6 +46,14 @@ Check 'configured chain leads with another Claude account, not the main sign-in'
         $r[0].Item -ne $main -and (Select-Leader $r '').Item -eq '2040' -and (Get-NextClaudeLeader @{} $now).Item -eq '2040'
 }
 Check 'skip current and limited' { $limits = @{ '2040' = @{ until = $now.AddHours(1).ToString('o'); source = 'screen' } }; (Select-Leader (Get-LeaderChoices $limits $now) '2030').Item -eq '1984' }
+Check 'a copy signed in as the same email as the current leader is skipped' {
+    $script:signIns = @{ '2040' = 'a@x'; '1984' = 'a@x'; 'main' = 'b@x' }
+    try { (Select-Leader (Get-LeaderChoices @{} $now) '2040').Item -eq '2030' } finally { $script:signIns = @{} }
+}
+Check 'every Claude on one email: the switch moves to codex' {
+    $script:signIns = @{ '2040' = 'a@x'; '1984' = 'a@x'; 'main' = 'a@x' }
+    try { (Select-Leader (Get-LeaderChoices @{} $now) '2040').Item -eq 'codex' } finally { $script:signIns = @{} }
+}
 Check 'expired limit is free' { (Select-Leader (Get-LeaderChoices @{ '2040' = @{ until = $now.AddMinutes(-1).ToString('o'); source = 'screen' } } $now) '2030').Item -eq '2040' }
 Check 'explicit target wins even limited' { (Select-Leader (Get-LeaderChoices @{ codex = @{ until = $now.AddHours(1).ToString('o'); source = 'screen' } } $now) '2030' 'codex').Item -eq 'codex' }
 Check 'reject target outside chain' { try { $null = Select-Leader (Rows) '2030' 'unknown'; $false } catch { $_ -match 'chain' } }
