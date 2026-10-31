@@ -1632,3 +1632,21 @@ unattended mode (`ForceDaemon` missing); `tailscale set --unattended` (no admin)
 `ssh mflma@100.106.192.41` from this PC reached sshd over Tailscale (answer: Permission denied without a
 password, as expected). Not verified yet: a password login and `herdr` from the phone.
 **Lesson:** #108.
+
+## Phase 65 - SSH key login for the owner's devices (2026-10-31)
+
+**Symptom:** each SSH login from the phone needs the Windows password typed.
+**Cause:** no authorized key. The owner is in Administrators, so sshd reads only
+`C:\ProgramData\ssh\administrators_authorized_keys` (sshd_config `Match Group administrators`), which
+did not exist; sshd ignores that file unless only Administrators and SYSTEM may write it.
+**Fix (owner asked):** `add-ssh-key.ps1` takes one PUBLIC key line (argument or piped in), refuses private
+keys and non-key text, skips a key already present, appends to the right file (admin file for members of
+Administrators, else `~\.ssh\authorized_keys`) and sets the admin file to Administrators + SYSTEM only
+(`icacls /inheritance:r`). Without admin rights in a window it asks Windows for them (`-Verb RunAs`).
+The key pair is made on the device; the private key never leaves it.
+**Proof:** against a scratch file (`-Path`): a fresh ed25519 .pub piped in -> added, exit 0; again ->
+"already allowed", exit 0; the private key -> refused, exit 1; "hello world" -> refused, exit 1; no input
+-> exit 1; the file holds 1 line. Test key deleted.
+**Not verified:** the write to the real admin file over an SSH password session (expected elevated for an
+administrator) and a key login from the phone - the owner runs it.
+**Lesson:** none yet.

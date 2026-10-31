@@ -23,6 +23,7 @@
 | `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
 | `herdr-boot.ps1` | at sign-in: headless Herdr server, a lead in workspace Lead, the watcher (GUIDE 13.21) |
+| `add-ssh-key.ps1` | adds one device's SSH public key (admin key file + its permissions); refuses private keys |
 | `setup-remote.ps1` | owner runs once as admin: SSH server at boot, Tailscale-only firewall, pwsh shell; `-Undo` |
 | `herdr-autosync.ps1` | Owner-authorized GitHub main sync loop; status/dry-run modes, bounded log and conflict stop (maintained separately from Deck) |
 | `herdr-headless.ps1` | Run a Cline profile headless (no pane): waits, saves the JSONL log, prints DONE/FAILED, answer and tokens |

@@ -518,3 +518,9 @@ The PC never sleeps on AC power. Three parts make Herdr run day and night and an
      Termux works on Android.
 
 Not proven yet: an SSH login and `herdr --remote` from another device (needs the two Tailscale sign-ins).
+
+**Key login (no password):** on the phone (Termux) run `pkg install openssh`, then `ssh-keygen -t ed25519`
+(Enter for the questions), then
+`cat ~/.ssh/id_ed25519.pub | ssh mflma@fawzy "pwsh -NoProfile -File I:/herdr/add-ssh-key.ps1"` (your
+password one last time). After that `ssh mflma@fawzy` logs in with no password. `add-ssh-key.ps1 -Key "<.pub line>"`
+does the same on this PC.
