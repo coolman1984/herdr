@@ -1625,4 +1625,6 @@ administrator PowerShell". It now asks Windows for admin rights itself (`Start-P
 and continues in a new window that stays open; a refused prompt changes nothing.
 The owner then ran it as admin: sshd Running/Automatic, port 22 listening, the one OpenSSH firewall rule
 allows 100.64.0.0/255.192.0.0 only, DefaultShell = Scoop pwsh (old value empty). Tailscale still not signed in.
+A second run saved the script's own pwsh value as the backup, so `-Undo` would have kept pwsh. Now the
+first backup is kept; the owner's backup file was reset to the real old value (empty).
 **Lesson:** #108.

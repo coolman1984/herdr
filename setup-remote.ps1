@@ -50,7 +50,9 @@ if (-not $rules) {
 $pwsh = (Get-Command pwsh).Source
 $old = (Get-ItemProperty -Path $key -Name DefaultShell -ErrorAction SilentlyContinue).DefaultShell
 $null = New-Item -ItemType Directory -Path (Split-Path -Parent $backup) -Force
-Set-Content -LiteralPath $backup -Value ([string]$old) -Encoding utf8
+# Keep the first backup: a second run would otherwise save our own pwsh value as the "old" one.
+if (Test-Path -LiteralPath $backup) { $old = (Get-Content -LiteralPath $backup -Raw).Trim() }
+else { Set-Content -LiteralPath $backup -Value ([string]$old) -Encoding utf8 }
 New-ItemProperty -Path $key -Name DefaultShell -Value $pwsh -PropertyType String -Force | Out-Null
 Write-Output "ssh shell: $pwsh (old value '$old' saved in $backup)"
 Write-Output "Done. Next: 'tailscale up --unattended' here (your sign-in), then from the phone: ssh $env:USERNAME@<pc name in Tailscale>"
