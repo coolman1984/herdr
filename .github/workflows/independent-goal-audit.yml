@@ -72,7 +72,7 @@ jobs:
         shell: pwsh
         run: |
           $bad = 0
-          foreach ($f in @('tools/docpipe/com-extract.ps1', 'tools/docpipe/docpipe.ps1', 'tools/docpipe/tests/ps/run-docpipe-ps.ps1')) {
+          foreach ($f in @('tools/docpipe/com-extract.ps1', 'tools/docpipe/docpipe.ps1', 'tools/docpipe/tests/ps/run-docpipe-ps.ps1', 'tools/device-harness/run-device-gates.ps1')) {
             $errs = $null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errs)
             if ($errs) { Write-Output "PARSE ERROR $f : $($errs[0].Message)"; $bad++ } else { Write-Output "parses (pwsh 7): $f" }
           }
