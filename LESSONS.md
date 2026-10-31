@@ -579,3 +579,6 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     1900-02-29 at serial 60 (serials 1-59 are one day off from a naive 1899-12-30 epoch), and fractional
     serials that carry the time. Python's Decimal default precision (28 digits) silently rounds big sums -
     set the precision and trap `Inexact`.
+119. **Content hashes of text files differ between Windows and Linux checkouts** (2026-10-31, CI): Git for
+    Windows writes CRLF. Pin text by its LF-normalised content and fix the line ends with .gitattributes;
+    only Windows CI showed it.

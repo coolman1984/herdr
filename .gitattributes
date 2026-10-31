@@ -1,0 +1,3 @@
+# Skill files are pinned by content hash (skills/catalog.json): keep LF on every checkout.
+skills/** text eol=lf
+skills-vendor/** text eol=lf

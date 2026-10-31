@@ -125,3 +125,22 @@ func TestSkillPathsMustStayInsideTheCatalog(t *testing.T) {
 		t.Fatalf("a skill outside the catalog was used: %+v %v", got, skipped)
 	}
 }
+
+// Windows CI (run 41171161928): a CRLF checkout of an unchanged skill must still match its pin.
+func TestPinnedHashSurvivesCRLFCheckout(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "skills", "s"), 0o755)
+	lf := []byte("line one\nline two\n")
+	sum := sha256.Sum256(lf)
+	os.WriteFile(filepath.Join(root, "skills", "s", "SKILL.md"), []byte("line one\r\nline two\r\n"), 0o644)
+	cat := filepath.Join(root, "skills", "catalog.json")
+	os.WriteFile(cat, []byte(`{"skills":[{"name":"s","path":"skills/s/SKILL.md","state":"approved","tags":["a"],"sha256":"`+hex.EncodeToString(sum[:])+`"}]}`), 0o644)
+	c, _ := LoadSkillCatalog(cat)
+	if got, skipped := c.Select([]string{"a"}, map[string]Fact{}, "personal"); len(got) != 1 {
+		t.Fatalf("CRLF copy of an unchanged skill refused: %v", skipped)
+	}
+	os.WriteFile(filepath.Join(root, "skills", "s", "SKILL.md"), []byte("line one\r\nline 2\r\n"), 0o644)
+	if got, _ := c.Select([]string{"a"}, map[string]Fact{}, "personal"); len(got) != 0 {
+		t.Fatal("a changed skill was accepted")
+	}
+}

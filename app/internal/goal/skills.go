@@ -1,6 +1,7 @@
 package goal
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -105,7 +106,9 @@ func (c *SkillCatalog) verified(e SkillEntry) (string, []byte, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	sum := sha256.Sum256(b)
+	// Hash the text with LF line ends: a Windows checkout (core.autocrlf) turns LF into CRLF and must not
+	// make an unchanged skill look tampered with. Any other change still breaks the pin.
+	sum := sha256.Sum256(bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")))
 	if e.SHA256 == "" || hex.EncodeToString(sum[:]) != e.SHA256 {
 		return "", nil, fmt.Errorf("content does not match its pinned sha256 (changed or unpinned): not used")
 	}

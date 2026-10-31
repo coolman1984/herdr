@@ -1748,3 +1748,12 @@ On Linux an open file can be deleted, so the leak was invisible here.
 **Fix:** `run`, `check` and `backup` close every connection in `finally`. Checked locally that no
 SQLite connection stays open after `main()`; CI re-runs on Windows. The same run showed the
 PowerShell-only pipeline passing every check in Windows PowerShell 5.1 and 7.
+
+## Phase 70 - Pinned skill hashes on a Windows checkout (2026-10-31)
+
+**Symptom (CI run 41171161928, windows-latest):** every skill was refused "content does not match its pinned
+sha256" - Git for Windows checks text files out with CRLF, so the bytes differ from the LF content that was
+pinned. Linux passed.
+**Fix:** the pin is over the text with LF line ends (CRLF normalised before hashing; any other change still
+breaks it) and `.gitattributes` keeps `skills/**` and `skills-vendor/**` LF on checkout.
+**Test:** `TestPinnedHashSurvivesCRLFCheckout` (a CRLF copy matches; a changed line does not).
