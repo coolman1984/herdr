@@ -1627,4 +1627,8 @@ The owner then ran it as admin: sshd Running/Automatic, port 22 listening, the o
 allows 100.64.0.0/255.192.0.0 only, DefaultShell = Scoop pwsh (old value empty). Tailscale still not signed in.
 A second run saved the script's own pwsh value as the backup, so `-Undo` would have kept pwsh. Now the
 first backup is kept; the owner's backup file was reset to the real old value (empty).
+The owner signed in to Tailscale: PC `fawzy` 100.106.192.41, phone `mohameds-a56` online. The sign-in had no
+unattended mode (`ForceDaemon` missing); `tailscale set --unattended` (no admin) set `ForceDaemon: true`.
+`ssh mflma@100.106.192.41` from this PC reached sshd over Tailscale (answer: Permission denied without a
+password, as expected). Not verified yet: a password login and `herdr` from the phone.
 **Lesson:** #108.
