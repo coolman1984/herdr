@@ -290,7 +290,7 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     event subscription is a different surface; output-match subscriptions fire on match
     transitions, not every screen update. `pane read` CLI emits terminal text directly,
     while the socket returns `result.read.text`. Preserve this distinction in adapters.
-66. **A PowerShell function must never share its name with the program it wraps:** `function Git { & git ... }`
+66a. **A PowerShell function must never share its name with the program it wraps:** `function Git { & git ... }`
     resolves `git` to the function itself (names ignore case, functions beat programs) and loops forever
     with no error - the first autosync dry run hung for 2 minutes. Name wrappers `Invoke-Git`.
 
@@ -520,3 +520,14 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
 102. **A lab Herdr session restores its panes on the next start** (2026-10-29): `server stop` saves
     `sessions\lab\session.json`, so a script that splits a pane adds one more pane on every run. Delete
     the lab session folder (in an isolated APPDATA) before a run that needs a known layout.
+
+103. **A duplicate number in LESSONS or HISTORY gets a letter, never a renumber** (2026-10-31): two
+    agents writing at once left two lesson 66s and two Phase 43s, and `check.ps1` failed for a week while
+    task specs listed it as "known" - a known failure hides new ones. The later entry takes the letter
+    (`66a.`, `## Phase 43a`); `check.ps1` skips lettered entries, so all other numbers keep their meaning.
+    Fix a failing check, do not carve it out in specs.
+
+104. **Claude Code's auto mode blocks some steps even when the owner asked for them** (2026-10-31): it
+    refused a Startup-folder shortcut ("Unauthorized Persistence", as in Phase 43a) and a plain delete
+    ("Irreversible Local Destruction"), and one blocked step stops the whole command. Run such a step
+    alone. Give the owner the `!` command for Startup items; send approved deletes to the Recycle Bin.

@@ -16,8 +16,8 @@ These handoff blocks supersede older design notes below them.
   second-instance reopen and stopped/started recovery. Evidence: tests/evidence/lab-results.txt,
   state.json and sse-sample.txt. Actual paid AI-agent startup/sign-in remains NOT VERIFIED.
 - **DONE:** seven existing PowerShell suites **155/155**. **PARTIAL:** check.ps1 exits 1:
-  missing/broken external App Path; concurrent docs contain duplicate Phase 43 and lesson 66.
-  Those other-agent additions were preserved. External repairs were not attempted.
+  missing/broken external App Path; concurrent docs contained duplicate Phase 43 and lesson 66
+  (renamed 43a and 66a in HISTORY Phase 57). External repairs were not attempted.
 - **PARTIAL:** parity/toolkit endpoints and the ten BUILD NOW safeguards exist in varying
   states; API.md lists each. R19–R24 still need wire-format completion. Research routes have
   no verified adapter. Main-account normalization and named-session launcher need review.

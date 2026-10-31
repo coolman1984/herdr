@@ -1055,7 +1055,7 @@ Left tests/.review-old-32db5c5becec4590a36494f1668372b5 and tests/.review-baseli
 lead cleanup; no further deletion method was attempted. Final review-fixes run: 25/25;
 final check.ps1: 5 FAIL (the external issues listed above).
 
-## Phase 43 - AutoSync to GitHub main (2026-10-24)
+## Phase 43a - AutoSync to GitHub main (2026-10-24)
 
 **Symptom:** the owner wants this folder kept in sync with `main` all the time, automatically.
 **Fix:** new `herdr-autosync.ps1`: every 5 minutes (one instance, mutex) it stages changed files, skips
@@ -1066,7 +1066,7 @@ Log: `%APPDATA%\herdr\autosync.log`. `-Once -DryRun` prints what it would commit
 **Proof:** dry run listed 97 files; first real pass committed 97 files and pushed (`986d77bb`),
 `git log origin/main..HEAD` = 0. Auto-start at sign-in is NOT installed: Claude Code's auto-mode
 blocked creating the Startup shortcut and the hidden background loop (persistence) - the owner starts it.
-**Lesson:** #66 (a function named `Git` calls itself: PowerShell names ignore case).
+**Lesson:** #66a (a function named `Git` calls itself: PowerShell names ignore case).
 
 ## Phase 44 - Shutdown handoff for the web/phone session (2026-10-24)
 
@@ -1456,3 +1456,16 @@ hello JSON, the exact resize bytes, no frame for an unchanged size, a refusal an
 `node --test` 42/42 (4 new in `herdrsize.test.mjs`); both new test files cannot run on the phase-1
 commit (`sizer.go`, `herdrsize.js` missing).
 **Lesson:** #95 (rewritten), #102.
+
+## Phase 57 - Setup check repairs: duplicate numbers, shortcuts, old Deck backups (2026-10-31)
+
+**Symptom:** `check.ps1` had 2 FAIL (duplicate lesson 66, duplicate Phase 43) and 2 WARN (Desktop
+`Herdr.lnk`, Startup `Herdr HUD.lnk` missing). `app/` held two untracked old Deck programs.
+**Cause:** the duplicates came from autosync commit `fa45374c` (two agents, 2026-10-24). Why the two
+shortcuts vanished after Phase 42 is not known.
+**Fix (owner's decision):** the later entries became lesson 66a and Phase 43a, no other number changed;
+`check.ps1` phase pattern now ends in `\b` so lettered phases are skipped. Desktop `Herdr.lnk` copied from
+the Start-menu link. `HerdrDeck.old.exe` and `HerdrDeck.r4-oct24.exe` went to the Recycle Bin (auto mode
+blocked a permanent delete). The Startup HUD shortcut was blocked by auto mode, so the owner creates it.
+**Proof:** `check.ps1` exit 0, 0 FAIL, 1 WARN (the Startup shortcut), 57 phases, 104 lessons; pattern test: `## Phase 43a` no match, `## Phase 43` match.
+**Lesson:** #103, #104.

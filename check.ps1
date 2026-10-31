@@ -172,7 +172,7 @@ foreach ($doc in $referencing) {
     }
 }
 $history = Get-Content -LiteralPath (Join-Path $root "HISTORY.md") -Raw
-$phases = [regex]::Matches($history, '(?m)^## Phase (\d+)') | ForEach-Object { [int]$_.Groups[1].Value }
+$phases = [regex]::Matches($history, '(?m)^## Phase (\d+)\b') | ForEach-Object { [int]$_.Groups[1].Value }
 for ($i = 0; $i -lt $phases.Count; $i++) {
     if ($phases[$i] -ne $i + 1) { Bad "HISTORY.md phase numbering breaks at Phase $($phases[$i])"; break }
 }
