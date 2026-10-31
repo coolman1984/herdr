@@ -60,6 +60,8 @@
 | `%APPDATA%\herdr\side-by-side.json` | which panes "Separate again" sends back to which space (removed after separating) |
 | `~\.herdr\worktrees\<repo>\<branch>` | worktrees made by `herdr-agents start -Worktree` (removed by the owner after merging) |
 | `%APPDATA%\herdr\open-folder-last.txt` | last folder picked |
+| `%APPDATA%\herdr\leader.json` | current leader item, name, pane, folder, start time and server; atomic write |
+| `%APPDATA%\herdr\leader-limits.json` | per-item reset, source (screen/usage/default) and observation time; expired entries are free; atomic write |
 | `%APPDATA%\herdr\herdr-agents-panes.json` | panes started by `herdr-agents` |
 | `%APPDATA%\herdr\layout-last.json` | last layout chosen in the layout builder |
 | Desktop + Start menu `Herdr.lnk` | one-click start -> `launcher\HerdrLauncher.exe` (backup as above) |

@@ -135,3 +135,15 @@ the pane that opens); `start <profile> -Account <name>` runs an agent on it; `ac
 them; team plans and the layout builder take an account too. How each CLI is separated is
 in `agents.json` (`account`: env vars / args with `{dir}`, the login command, settings to
 copy) and LESSONS #38. Antigravity has no account support.
+
+## When the lead reaches its limit
+
+`herdr-agents switch` (Ctrl+B Shift+C) marks the old lead limited, writes a handoff with
+its last 80 screen lines and the previous handoff path, starts the next free item in
+`agents.json` `leaders.order`, and sends a lead takeover prompt without waiting for its answer.
+The next agent is the LEAD and follows CLAUDE.md lead rules. It fills the handoff TODOs from
+git, HISTORY and `herdr-agents history`. The old pane remains open. Startup dialogs are BLOCKED.
+`herdr-agents leaders` shows availability; `start 2040 -Lead` sets the current lead;
+`switch -To codex` overrides the choice (must be in the chain and installed).
+Screen limits work without status-line usage data. State is in `leader.json` and
+`leader-limits.json` under `%APPDATA%\herdr`, saved by atomic replacement.

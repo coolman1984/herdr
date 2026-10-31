@@ -289,6 +289,10 @@
       }
     }
   },
+  "leaders": {
+    "_comment": "Who leads, in order. herdr-agents switch takes the first one that is installed, not the current leader and not limited. Each item is an alias or a profile name. Reorder to change the choice.",
+    "order": ["2030", "2040", "1984", "codex", "gemini"]
+  },
   "accountNames": {
     "claude": "2030"
   },

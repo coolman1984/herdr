@@ -35,3 +35,6 @@ these rules apply.
    report what blocks you and the one question that would unblock you.
 9. **Answer exactly in the spec's format**, findings first and ordered by severity for reviews,
    and list anything you could not verify under "doubts". Be brief.
+
+If your first prompt says you are the LEAD (from `herdr-agents switch`),
+the lead rules in CLAUDE.md apply to you, not the delegate rules above.

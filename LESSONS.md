@@ -531,3 +531,11 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     refused a Startup-folder shortcut ("Unauthorized Persistence", as in Phase 43a) and a plain delete
     ("Irreversible Local Destruction"), and one blocked step stops the whole command. Run such a step
     alone. Give the owner the `!` command for Startup items; send approved deletes to the Recycle Bin.
+
+105. **Opening Claude no longer guarantees Herdr usage data** (2026-10-31, lead verified):
+    `~/.claude/statusline.js` is absent, the main status line runs Orca's `claude-statusline.cmd`
+    (reports limits only to Orca), and accounts 2040/1984 have no status line. Do not change
+    the owner's Claude settings to repair this. Leader switching learns the reset from recent
+    screen messages, uses available usage resets next, and otherwise remembers one hour.
+    Missing data is unknown, not proof that every account is blocked. Reset labels use local
+    time; expired saved limits are free. A non-waited prompt still needs startup read-back.

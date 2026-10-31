@@ -57,7 +57,7 @@ Press `Ctrl+B`, let go, then the key. `Ctrl+B` `?` shows them inside the app.
 | `Shift+S` | **Spaces side by side** / separate again (section 4) |
 | `I` | **All shortcuts** (type to filter) and this guide in one window |
 | `Shift+Q` | **Stop Herdr for real** (asks first): every agent and pane stops. Same as the Desktop icon **Stop Herdr** |
-| `Shift+C` | **Claude on the NEXT account**: the Claude account with the least 5-hour use (section 13.20) |
+| `Shift+C` | **Switch the lead**: next free choice in agents.json (section 13.20) |
 
 ### Herdr's own
 
@@ -442,20 +442,24 @@ Grok / OpenCode subscription (another email) has its own limits.
   Grok. Not for Antigravity (its sign-in cannot be separated).
 - Check each provider's terms for using several accounts.
 
-### 13.20 Claude's usage limits and switching accounts (2030 / 2040 / 1984)
-Claude accounts have names: **2030** = your main sign-in, **2040** and **1984** = the separate
-accounts. Each has its own 5-hour and weekly limit.
-1. See them: `herdr-agents usage` - per account the 5-hour %, weekly %, reset times,
-   session cost (updated today) and how old the numbers are. This cost adds the cumulative
-   costs of sessions whose status-line files were updated today, including their earlier
-   days; it is not today's spending. `LIMIT` = 95% or more; last line `NEXT: <account>` = the
-   one with the least 5-hour use. "no data (open it once)": start Claude on it once.
-2. The border of every Claude pane shows `5h N%` and `account <name>`.
-3. At 95%, Herdr shows one notification: "<account> at 96% - switch: Ctrl+B Shift+C".
-4. Switch: `Ctrl+B` `Shift+C` (or `herdr-agents start next`) opens Claude on NEXT beside the
-   focused pane. A conversation cannot move between accounts, so the lead first writes a
-   handoff: `herdr-agents handoff` makes `tasks\handoff-<time>.md` with the limits, live agents
-   and git state filled in; it fills every TODO, and the new Claude starts by reading it.
-- A particular account: `herdr-agents start 2030`, `start 2040`, `start 1984`.
-- The numbers come from Claude Code's status line (`~\.claude\statusline.js`), so an account
-  only has data after a Claude on it has drawn its status line once.
+### 13.20 Usage limits and switching the lead
+
+1. `herdr-agents leaders` shows the ordered choices, installed tools, remembered limits and NEXT.
+2. Press `Ctrl+B` `Shift+C`, or run `herdr-agents switch`. It remembers the old lead's reset,
+   writes a handoff with git facts and its last 80 screen lines, opens the next free leader,
+   and sends the takeover prompt. It checks that the new leader began, without waiting for its answer.
+   From the key, the result (SWITCHED / BLOCKED / ERROR) shows in a message box (`switch -Notify`).
+   Focus the old leader's pane before pressing the key, the first time (later it remembers).
+3. The default order in `agents.json` `leaders.order` is 2030 (main Claude), 2040, 1984,
+   Codex GPT-6.1-Sol, Gemini. Reorder or replace these aliases/profile names to choose your leaders.
+4. `herdr-agents start 2040 -Lead` records the lead explicitly; otherwise switch uses the focused agent.
+   `switch -To codex` chooses that chain item, even if limited (with a warning).
+5. The old pane stays open. A sign-in or trust dialog prints BLOCKED: answer it in that pane.
+   An exhausted chain reports the earliest reset and changes no state or handoff files.
+
+`herdr-agents usage` still shows Claude percentages when available. The owner's current Orca
+status line sends data to Orca only, so opening Claude does not guarantee usage data here.
+Switch reads limit messages from the screen; without a reset time it remembers one hour.
+Time-zone labels are ignored; reset times use local time. `start next` uses the first free
+Claude in the chain when no eligible usage account is available.
+The new leader reads the handoff, fills its TODOs from history and continues the work.

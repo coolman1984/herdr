@@ -1469,3 +1469,27 @@ the Start-menu link. `HerdrDeck.old.exe` and `HerdrDeck.r4-oct24.exe` went to th
 blocked a permanent delete). The Startup HUD shortcut was blocked by auto mode, so the owner creates it.
 **Proof:** `check.ps1` exit 0, 0 FAIL, 1 WARN (the Startup shortcut), 57 phases, 104 lessons; pattern test: `## Phase 43a` no match, `## Phase 43` match.
 **Lesson:** #103, #104.
+
+## Phase 58 - One-step leader switching (2026-10-31)
+
+**Symptom:** usage shows no data and choosing the next Claude account can refuse; a lead
+change required several manual steps.
+**Cause (lead verified):** the old `~/.claude/statusline.js` is absent; the main account uses
+Orca's status line, which reports only to Orca, and separate accounts have no status line.
+**Fix:** `leaders.order` chooses Claude accounts then Codex/Gemini. `leaders` displays the
+chain; `switch` learns resets from recent screen messages (usage or one hour as fallbacks),
+creates a handoff, starts through the shared start path, sends the takeover prompt without
+waiting for its answer, reads back the startup, and records the new lead. `start -Lead`
+sets the lead; `start next` falls back to free Claude chain items without usage data.
+No available successor means no state or handoff writes. Old panes remain open.
+**Proof:** `tests/test-leader-switch.ps1`: 33/33 pass; the same tests against HEAD copies:
+0/33 pass (33 fail). Seven existing test scripts: 155/155 pass. `leaders` lists all five
+tools installed on this PC. Live takeover is not exercised yet (no leader was at its limit).
+**Lead review (Claude):** the limit regex missed "Claude usage limit reached ... reset at 3pm"
+and "5-hour limit reached" lines (fixed, 2 tests added: 35/35); `leader.json` is now written
+before the takeover prompt, so a slow read-back cannot lose who leads; the Shift+C key runs
+`switch -Notify`, which shows the result (SWITCHED / BLOCKED / ERROR) in a message box - a
+headless key otherwise fails silently. All 8 test scripts pass (190/190). The lead backed up
+`%APPDATA%\herdr\config.toml` (`config.toml.20261031-092550.bak`), applied the new Shift+C line
+and ran `sync-skills.ps1`; `check.ps1` passes (one old warning: Startup HUD shortcut).
+**Lesson:** #105. A key command runs headless: give it a visible result, or a failure is silent.

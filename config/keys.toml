@@ -58,8 +58,8 @@ key = "prefix+shift+q"
 type = "shell"
 command = 'conhost.exe --headless pwsh -NoProfile -STA -File "I:\herdr\herdr-stop.ps1"'
 
-# Claude on the NEXT account: ctrl+b then shift+c -> Claude Code on the account with the least 5-hour use (herdr-agents usage), next to the focused pane.
+# Switch the lead: ctrl+b then shift+c -> handoff, next free leader (agents.json leaders) beside the focused pane; the result shows in a message box.
 [[keys.command]]
 key = "prefix+shift+c"
 type = "shell"
-command = 'conhost.exe --headless pwsh -NoProfile -File "I:\herdr\herdr-agents.ps1" start next'
+command = 'conhost.exe --headless pwsh -NoProfile -File "I:\herdr\herdr-agents.ps1" switch -Notify'

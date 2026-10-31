@@ -17,8 +17,9 @@ Herdr itself is the **official 0.9.5 build**, unmodified. Everything here is bui
 | `Win + R` -> `herdr` | Herdr opens in the GitHub folder |
 
 All three run `launcher\HerdrLauncher.exe` - no console window flashes (`Herdr.cmd` is the fallback).
-**Claude limits:** `herdr-agents usage` (accounts 2030 / 2040 / 1984, `NEXT:`); `Ctrl+B` `Shift+C`
-starts Claude on the account with the least 5-hour use (docs/GUIDE.md 13.20).
+**Leader switching:** `herdr-agents leaders` shows the chain; `Ctrl+B` `Shift+C` (or
+`herdr-agents switch`) saves a handoff and starts the next free leader. Claude usage numbers
+are optional; limits are learned from the screen (docs/GUIDE.md 13.20).
 
 Close the window any time: the agents keep running (Herdr's server runs on its own).
 Open Herdr again and they are still working. **Stop everything for real:** `Ctrl+B`

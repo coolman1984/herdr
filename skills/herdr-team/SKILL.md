@@ -139,3 +139,14 @@ DeepSeek does Y ..."), ALWAYS run this routine:
 - `stop` only closes agents this tool started; never close other panes, tabs or
   workspaces, never run `herdr server stop`.
 - Run one heavy task per agent at a time; check `status` before giving more work.
+
+## Switching the lead
+
+Run `herdr-agents leaders` to see the ordered choices in `agents.json` `leaders.order`.
+When the lead hits its limit, `herdr-agents switch` (Ctrl+B Shift+C) remembers its reset,
+writes a handoff including its screen, starts the next free leader beside the focused pane,
+and sends the takeover prompt without waiting for an answer. Claude accounts come first,
+then Codex and Gemini. `switch -To codex` forces a chain item (warns if limited).
+`start 2040 -Lead` records who leads. Startup dialogs print BLOCKED; the owner answers.
+The old pane stays open. The new lead reads the handoff and fills its TODOs before continuing.
+Usage numbers are optional: the owner's current status line does not write our usage files.
