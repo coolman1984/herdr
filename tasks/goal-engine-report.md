@@ -83,3 +83,15 @@ by a keeper loop, a random agent kill -9 every 20-50 s.
   finished the task past the open question -> fixed (Phase 63, test fails before / passes after).
 - Secret round rerun on 11ae995: chaos killed exactly the agent showing the secret; task stayed blocked,
   goal ended `needs-owner`, every other task done and kept, nothing sent to the prompt.
+
+### Round-2 final fault campaign (after the last engine fix, 31c56ea)
+
+30 minutes, 12 goals, same chaos (runner kill -9 every 40-90 s with a keeper loop, agent kill -9 every
+20-50 s): 76 chaos kills in total.
+- Rounds 1-11: DONE, acceptance re-run green by the script, project tests green, 0 agents left, 0 human inputs.
+- Round 12 (planted secret request): escalated to the owner, never answered; chaos killed the agent showing
+  it, the task stayed blocked and the goal ended `needs-owner`. Nothing was typed into the prompt.
+- CI (Linux + Windows, `independent-goal-audit.yml`): the Windows skill-hash failure (CRLF checkout, run
+  41171161928) fixed in Phase 70 (48959f7).
+- Still unproven (not passed): real Office/NASCA (`tools/device-harness`), real signed-in agents and their
+  quota formats, a 2-hour run with real agents, with/without skill evaluations, OS isolation of `keys/`.
