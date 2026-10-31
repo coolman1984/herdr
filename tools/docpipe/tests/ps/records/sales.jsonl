@@ -11,3 +11,4 @@
 {"loc":"S!C3","sheet":"S","row":3,"col":3,"raw":0.2,"kind":"n"}
 {"loc":"S!E3","sheet":"S","row":3,"col":5,"raw":"orphan","kind":"s"}
 {"loc":"S!B4","sheet":"S","row":4,"col":2,"raw":46325,"kind":"n","is_date":true,"date1904":false}
+{"loc":"S!B5","sheet":"S","row":5,"col":2,"raw":1350.75,"kind":"n","formula":true}

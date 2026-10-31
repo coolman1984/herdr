@@ -20,11 +20,12 @@ def build(db, out_html, out_csv, title, fields, references=None, lang="ar"):
     files = db.execute("SELECT id, path, kind, route, status, records, note FROM files ORDER BY id").fetchall()
     issues = db.execute("SELECT file_id, loc, level, note FROM issues ORDER BY id").fetchall()
     quality = pipeline.quality(db)
-    cards, checks, prov = [], [], {}
+    cards, checks, prov, formulas = [], [], {}, {}
     for f in fields:
         for cur, t in sorted(pipeline.totals(db, f).items()):
             key = f"{f} ({cur})" if cur != "-" else f
             cards.append((key, t["total"], t["count"]))
+            formulas[key] = t.get("formulas", 0)
             prov[key] = [loc for _, loc in t["sources"][:500]]
             ref = references.get(key)
             if ref is not None:
@@ -38,11 +39,11 @@ def build(db, out_html, out_csv, title, fields, references=None, lang="ar"):
         "ar": dict(files="الملفات", status="الحالة", totals="المجاميع", check="مطابقة المجاميع المرجعية", src="المصدر",
                    issues="ملاحظات الجودة", rows="الصفوف لكل ورقة", none="لا يوجد", ok="مطابق", bad="غير مطابق",
                    ref="المرجع", got="المحسوب", count="عدد القيم", kind="النوع", route="المسار", recs="القيم",
-                   skip="انتقل إلى المحتوى", show="اعرض المصادر"),
+                   skip="انتقل إلى المحتوى", show="اعرض المصادر", formulas="{} خلية معادلة (إجمالي) لم تُجمع مرة أخرى"),
         "en": dict(files="Files", status="Status", totals="Totals", check="Reference totals", src="Source",
                    issues="Quality notes", rows="Rows per sheet", none="None", ok="matches", bad="MISMATCH",
                    ref="Reference", got="Computed", count="Values", kind="Kind", route="Route", recs="Values",
-                   skip="Skip to content", show="Show sources"),
+                   skip="Skip to content", show="Show sources", formulas="{} formula (total) cells not added again"),
     }[lang]
     e = html.escape
     parts = [f"""<!doctype html><html lang="{lang}" dir="{'rtl' if rtl else 'ltr'}"><head><meta charset="utf-8">
@@ -68,7 +69,7 @@ code{{direction:ltr;unicode-bidi:isolate}}
 <h1>{e(title)}</h1><section aria-labelledby="h-totals"><h2 id="h-totals">{t['totals']}</h2><div class="cards">"""]
     for key, total, n in cards:
         parts.append(f"""<div class="card" data-field="{e(key)}"><span class="k">{e(key)}</span><span class="v" data-total="{total}">{_fmt(total)}</span>
-<span class="k">{t['count']}: {n}</span><details><summary>{t['show']}</summary><code>{e(', '.join(prov[key][:50]))}{' …' if len(prov[key]) > 50 else ''}</code></details></div>""")
+<span class="k">{t['count']}: {n}{(" · " + t['formulas'].format(formulas[key])) if formulas.get(key) else ""}</span><details><summary>{t['show']}</summary><code>{e(', '.join(prov[key][:50]))}{' …' if len(prov[key]) > 50 else ''}</code></details></div>""")
     if not cards:
         parts.append(f"<p>{t['none']}</p>")
     parts.append("</div></section>")

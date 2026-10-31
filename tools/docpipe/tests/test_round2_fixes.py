@@ -278,3 +278,12 @@ class UnknownProfile(Base):
         with mock.patch("builtins.open", side_effect=guarded), mock.patch.object(pipeline, "com_extract", return_value=(None, "no COM")):
             _, st = pipeline.import_file(self.db, p, profile="unknown")
         self.assertEqual(st, "needs-authorized-app")
+
+
+class Subtotals(Base):
+    def test_formula_total_row_is_not_added_again(self):
+        p = str(self.root / "s.xlsx")
+        F.make_xlsx(p, {"S": [["Amount"], [100], [50], [("n", "150")]]}, formulas={("S", "A4"): "SUM(A2:A3)"})
+        pipeline.import_file(self.db, p)
+        t = pipeline.totals(self.db, "Amount")["-"]
+        self.assertEqual((t["total"], t["count"], t["formulas"]), (Decimal("150"), 2, 1))

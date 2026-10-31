@@ -129,6 +129,43 @@ func Main(args []string) int {
 		return 0
 	case "task":
 		return cmdTask(rest)
+	case "quota":
+		fs := flag.NewFlagSet("quota", flag.ContinueOnError)
+		profiles := fs.String("profiles", "", "")
+		if fs.Parse(rest) != nil || *profiles == "" {
+			fmt.Println("quota --profiles FILE   readings and the 90% verdict per real account")
+			return 2
+		}
+		var cfg GoalConfig
+		b, err := os.ReadFile(*profiles)
+		if err != nil {
+			return fail(err)
+		}
+		if err := json.Unmarshal(b, &cfg); err != nil {
+			return fail(err)
+		}
+		q := DefaultQuotas()
+		q.Sync = true
+		e := &Engine{G: &Goal{Profiles: cfg.Profiles}, Q: q, Now: time.Now}
+		seen := map[string]bool{}
+		for _, p := range cfg.Profiles {
+			accts := p.Accounts
+			if len(accts) == 0 {
+				accts = []string{""}
+			}
+			for _, a := range accts {
+				prov, acct := e.subscription(p.Name, a)
+				if seen[prov+"/"+acct] {
+					continue
+				}
+				seen[prov+"/"+acct] = true
+				r := q.Reading(prov, acct, time.Now())
+				v := Judge(r, time.Now())
+				out, _ := json.Marshal(map[string]any{"profile": p.Name, "subscription": prov + "/" + acct, "reading": r, "eligible": v.Eligible, "low_trust": v.LowTrust, "why": v.Reason})
+				fmt.Println(string(out))
+			}
+		}
+		return 0
 	case "research":
 		if len(rest) < 1 {
 			return 2

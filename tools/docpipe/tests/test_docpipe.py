@@ -156,7 +156,9 @@ class Pipeline(unittest.TestCase):
         _, st = pipeline.import_file(self.db, p)
         self.assertEqual(st, "done")
         t = pipeline.totals(self.db, "المبلغ")["-"]
-        self.assertEqual(t["total"], Decimal("1250.5") + Decimal("1200.25") - Decimal("300") + Decimal("2150.75"))
+        # the SUM row (C5, a formula) is a total of the others: not added again, listed separately
+        self.assertEqual(t["total"], Decimal("1250.5") + Decimal("1200.25") - Decimal("300"))
+        self.assertEqual((t["formulas"], t["formula_sources"]), (1, [(1, "مبيعات!C5")]))
         self.assertIn((1, "مبيعات!C3"), t["sources"])  # every number traces to its cell
         flags = self.db.execute("SELECT flags FROM cells WHERE loc='مبيعات!C5'").fetchone()[0]
         self.assertIn("not recalculated", flags)
@@ -198,7 +200,7 @@ class Pipeline(unittest.TestCase):
         with mock.patch.object(pipeline, "com_extract", return_value=(fake, None)):
             _, st = pipeline.import_file(self.db, p, profile="company_nasca")
         self.assertEqual(st, "done")
-        self.assertEqual(pipeline.totals(self.db, "amount")["-"]["total"], Decimal("15.0"))
+        self.assertEqual(pipeline.totals(self.db, "amount")["-"]["total"], Decimal("10.5"))  # the formula cell is not summed
         self.assertEqual(self.db.execute("SELECT method FROM cells WHERE loc='S!A2'").fetchone()[0], "office-com")
 
     def test_zip_bomb_and_cfb_are_not_parsed(self):
@@ -219,9 +221,9 @@ class Pipeline(unittest.TestCase):
     def test_report_and_reference_check(self):
         pipeline.import_file(self.db, os.path.join(self.inp, "sales.xlsx"))
         html_p, csv_p = os.path.join(self.d, "r.html"), os.path.join(self.d, "r.csv")
-        res = report.build(self.db, html_p, csv_p, "تقرير", ["المبلغ"], {"المبلغ": "4301.50", "x": "1"})
-        self.assertEqual(res["checks"], [("المبلغ", "4301.50", "4301.50", True)])
-        bad = report.build(self.db, html_p, csv_p, "تقرير", ["المبلغ"], {"المبلغ": "4301.49"})
+        res = report.build(self.db, html_p, csv_p, "تقرير", ["المبلغ"], {"المبلغ": "2150.75", "x": "1"})
+        self.assertEqual(res["checks"], [("المبلغ", "2150.75", "2150.75", True)])
+        bad = report.build(self.db, html_p, csv_p, "تقرير", ["المبلغ"], {"المبلغ": "4301.50"})  # the old double count
         self.assertFalse(bad["checks"][0][3])
         with open(html_p, encoding="utf-8") as fh:
             body = fh.read()

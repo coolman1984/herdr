@@ -12,7 +12,8 @@ $s = Get-Content -Raw (Join-Path $out 'summary.json') | ConvertFrom-Json
 $t = @{}; foreach ($x in $s.totals) { $t[$x.field] = $x.total }
 Check ($t['Amount'] -eq '1350.75') "Amount total exact: $($t['Amount'])"
 Check ($t['Amount#2'] -eq '0.3') "0.1 + 0.2 = 0.3 exactly: $($t['Amount#2'])"
-Check ($s.records -eq 9) "every value under a header is a record (9): $($s.records)"
+Check ($s.records -eq 10) "every value under a header is a record (10): $($s.records)"
+Check ($s.formula_values_not_summed -eq 1) "the formula (total) row is not added again"
 Check (@($s.issues | Where-Object { $_ -match 'duplicate header' }).Count -eq 1) 'duplicate header reported'
 Check (@($s.issues | Where-Object { $_ -match 'no header' }).Count -eq 1) 'value without header reported'
 Check (@($s.issues | Where-Object { $_ -match 'reconcile' }).Count -eq 0) 'records reconcile with values under headers'

@@ -436,9 +436,16 @@ def totals(db, field):
     with localcontext() as ctx:
         ctx.prec = 200
         ctx.traps[Inexact] = True
-        for num, cur, loc, fid in db.execute("SELECT num, currency, loc, file_id FROM records WHERE field=? AND num IS NOT NULL", (field,)):
+        for num, cur, loc, fid, fl in db.execute("""SELECT r.num, r.currency, r.loc, r.file_id, c.flags FROM records r
+                LEFT JOIN cells c ON c.file_id=r.file_id AND c.loc=r.loc WHERE r.field=? AND r.num IS NOT NULL""", (field,)):
             k = cur or "-"
-            t = out.setdefault(k, {"total": Decimal(0), "count": 0, "sources": []})
+            t = out.setdefault(k, {"total": Decimal(0), "count": 0, "sources": [], "formulas": 0, "formula_sources": []})
+            if fl and "formula" in fl:
+                # A computed cell (often a subtotal or total row) is not added again: listed separately.
+                t["formulas"] += 1
+                if len(t["formula_sources"]) < MAX_SOURCES:
+                    t["formula_sources"].append((fid, loc))
+                continue
             t["total"] += Decimal(num)
             t["count"] += 1
             if len(t["sources"]) < MAX_SOURCES:

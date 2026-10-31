@@ -1725,3 +1725,17 @@ scripted agent's brief parser; mutations 54/54 (`app/tests/goal-mutations.py`); 
 `GOOS=windows go vet` clean.
 **Not done:** with/without-skill evaluation on real agents (needs the owner's accounts; harness in
 `tools/device-harness/`).
+
+## Phase 68 - Subtotals are not summed twice; device harness for the gates the cloud cannot run (2026-10-31)
+
+**Symptom (found while writing the device harness):** a total row that is a formula (`=SUM(B2:B3)`) was added
+into the grand total again; the earlier docpipe tests had encoded that double count (4301.50 instead of
+2150.75 for the sales fixture) - corrected.
+**Fix:** values of formula cells are excluded from totals and reported separately (count and sources) in
+Python and in the PowerShell-only pipeline; the report card says how many formula cells were not summed.
+**Device harness:** `tools/device-harness/run-device-gates.ps1` (+ README) for the owner's authorized PC:
+environment report, Office COM round trip on a workbook Excel itself made (Arabic, date, currency, formula),
+the owner's open workbook survives a worker run, a killed worker leaves only the owner's Excel, the
+PowerShell-only pipeline with Python hidden, a NASCA-protected file (no leftovers, no export without
+approval), real quota readings (`herdr-goal quota --profiles FILE`). Evidence JSON per gate; a gate not run
+is recorded `not-run`, never pass.

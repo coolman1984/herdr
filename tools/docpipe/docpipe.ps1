@@ -22,7 +22,7 @@ $worker = Join-Path $PSScriptRoot 'com-extract.ps1'
 $inv = [Globalization.CultureInfo]::InvariantCulture
 $files = @(); $unread = @(); $issues = New-Object System.Collections.Generic.List[string]
 $totals = @{}; $counts = @{}; $records = New-Object System.Collections.Generic.List[object]
-$cellCount = 0; $underHeaders = 0
+$cellCount = 0; $underHeaders = 0; $formulaValues = 0
 
 function Import-Records([string]$name, [string]$jsonl) {
     $heads = @{}; $hrow = @{}
@@ -49,7 +49,9 @@ function Import-Records([string]$name, [string]$jsonl) {
         if ($r.kind -eq 'n' -and -not $r.is_date) { $num = [decimal]::Parse(([double]$r.raw).ToString('R', $inv), [Globalization.NumberStyles]::Float, $inv) }
         $cur = if ($r.PSObject.Properties['currency'] -and $r.currency) { [string]$r.currency } else { '-' }
         $records.Add([pscustomobject]@{ file = $name; sheet = $sheet; row = $r.row; field = $f; number = $num; text = $(if ($null -eq $num) { [string]$r.raw } else { $null }); currency = $cur; source = $r.loc })
-        if ($null -ne $num) {
+        $isFormula = $r.PSObject.Properties['formula'] -and $r.formula
+        if ($null -ne $num -and $isFormula) { $script:formulaValues++ }   # computed (subtotal) cells: not summed again
+        if ($null -ne $num -and -not $isFormula) {
             $key = "$f|$cur"
             if (-not $totals.ContainsKey($key)) { $totals[$key] = [decimal]0; $counts[$key] = 0 }
             $totals[$key] = $totals[$key] + $num   # [decimal] throws on overflow: never rounded silently
@@ -83,6 +85,7 @@ if ($records.Count -ne $underHeaders) { $issues.Add("reconcile: $underHeaders va
 $summary = [ordered]@{
     files = $files; unread = $unread; cells = $cellCount; records = $records.Count
     totals = @($totals.Keys | Sort-Object | ForEach-Object { [ordered]@{ field = ($_ -split '\|')[0]; currency = ($_ -split '\|')[1]; total = $totals[$_].ToString($inv); count = $counts[$_] } })
+    formula_values_not_summed = $formulaValues
     checks = $checks; issues = @($issues); export = [bool]$ExportApproved
 }
 [IO.File]::WriteAllText((Join-Path $Out 'summary.json'), (ConvertTo-Json $summary -Depth 5), (New-Object Text.UTF8Encoding($false)))
