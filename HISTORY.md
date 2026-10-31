@@ -1707,3 +1707,11 @@ Proof (isolated folder): a test `cmd.exe` console opened 3 s after the hider sta
 `hid console window 'flashtest-keepalive' (ConsoleWindowClass, pid 24276: cmd.exe /k title flashtest-keepalive)`;
 `-Stealth off` showed 1 window and the hider stopped by itself.
 **Lesson:** #110.
+
+## Phase 68 - Herdr on the phone showed strange characters (2026-10-31)
+
+**Symptom:** owner opened Herdr from the Orca app on the phone (new Orca tab "Herdr" running `herdr`, made with `orca terminal create --shell pwsh.exe --command ...`). Screen showed `[9999999997;2n[O...` and a red ParserError after typing "Hi".
+**Cause (observed):** the Lead pane (w4:p1) was a bare PowerShell after its Claude had exited; the pane still received Herdr's focus, color and keyboard-mode codes and PowerShell printed them as text. Herdr itself and the Orca tab worked (client connected, 169x59).
+**Fix:** reset the pane's modes by `send-text`/`send-keys` (LESSONS #111), then `herdr-agents start next -Lead -Pane w4:p1`: Claude Code 2.1.316 (2040, Opus 5.5) is running in the pane, auto mode on.
+**Not verified:** typing from the phone itself; why the first Claude exited; whether it returns.
+**Lesson:** #111.
