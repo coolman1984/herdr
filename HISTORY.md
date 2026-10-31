@@ -1623,4 +1623,6 @@ SSH / `herdr --remote` from another device (needs the owner's Tailscale sign-ins
 **Follow-up:** the owner ran `setup-remote.ps1` in a normal window and it stopped with "Run this in an
 administrator PowerShell". It now asks Windows for admin rights itself (`Start-Process -Verb RunAs`)
 and continues in a new window that stays open; a refused prompt changes nothing.
+The owner then ran it as admin: sshd Running/Automatic, port 22 listening, the one OpenSSH firewall rule
+allows 100.64.0.0/255.192.0.0 only, DefaultShell = Scoop pwsh (old value empty). Tailscale still not signed in.
 **Lesson:** #108.
