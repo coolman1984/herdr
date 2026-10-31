@@ -1715,3 +1715,12 @@ Proof (isolated folder): a test `cmd.exe` console opened 3 s after the hider sta
 **Fix:** reset the pane's modes by `send-text`/`send-keys` (LESSONS #111), then `herdr-agents start next -Lead -Pane w4:p1`: Claude Code 2.1.316 (2040, Opus 5.5) is running in the pane, auto mode on.
 **Not verified:** typing from the phone itself; why the first Claude exited; whether it returns.
 **Lesson:** #111.
+
+## Phase 69 - Startup HUD shortcut created (2026-10-31)
+
+**Symptom:** `check.ps1` WARN: Startup `Herdr HUD.lnk` missing (open since Phase 57, where auto mode blocked creating it).
+**Fix (owner asked):** created `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Herdr HUD.lnk` ->
+`C:\Windows\System32\conhost.exe`, arguments `--headless pwsh -NoProfile -File "I:\herdr\herdr-hud.ps1"`,
+start in `I:\herdr` (docs/SETUP.md step 8). No old link existed, so no backup was needed.
+**Proof:** shortcut read back with the same target and arguments; `check.ps1` reports it OK.
+**Not verified:** the HUD starting at the next sign-in.
