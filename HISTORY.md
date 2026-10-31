@@ -1677,3 +1677,23 @@ running, no action. All three scripts parse with 0 errors; `check.ps1` passes.
 owner runs `-Install`); a real Orca restart (stopping Orca would end this Claude session);
 `setup-nosleep.ps1` (needs admin); the lock after automatic sign-in (no automatic sign-in yet).
 **Lesson:** #109.
+
+## Phase 67 - Stealth: Orca runs with no window; the phone controls Orca and Herdr (2026-10-31)
+
+**Symptom:** the owner wants to control Orca and Herdr from the Orca mobile app from anywhere, with
+nothing on the display, so nobody at home sees or closes them.
+**Found:** the owner's phone is already paired with this PC's Orca (device "Mobile 10/31/2026", scope
+mobile, through Orca's relay `relay.onorca.dev`, last seen 15:56 today) - that works from any network,
+no Tailscale needed. Herdr's server has no window. Only Orca's desktop window shows.
+`orca serve` (headless runtime) did not answer in 25 s while the desktop app runs and switching to it
+would end this Claude session (it runs inside desktop Orca), so the desktop app stays and is hidden.
+**Fix:** `herdr-keepalive.ps1 -Stealth on|off`. On: every minute (and 15 s after a restart) Orca's visible
+titled windows are hidden (Win32 `ShowWindow` SW_HIDE - no taskbar button, Orca keeps running); the
+handles go into the state. Off: exactly those windows are shown again. `-Status` shows stealth.
+From the phone, Herdr is reached inside Orca: open a terminal on this PC in the Orca app and type `herdr`.
+**Proof:** a throwaway WinForms test window: 1 visible -> hidden 1, 0 visible -> shown 1, 1 visible. Dry run in
+an isolated folder with stealth on against the real Orca: "would hide 1 Orca window(s)". Not run on the
+real Orca window from here (it would hide the owner's view of this session).
+**Not verified:** the real hide on the owner's PC, the phone reaching a hidden Orca, `herdr` inside an
+Orca terminal from the phone.
+**Lesson:** #110.

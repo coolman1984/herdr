@@ -14,6 +14,10 @@
 #   - Automatic Windows sign-in (Winlogon AutoAdminLogon=1): the first run after the sign-in locks the
 #     PC once the apps are started, so nobody at home uses the owner's open desktop.
 #   - One run at a time (named mutex); a run that finds another running exits.
+# Stealth (HISTORY 67): `-Stealth on` hides every visible Orca window each minute (also right after a
+# restart), so nothing shows on the display while Orca keeps running; the phone reaches it through the
+# Orca mobile app. `-Stealth off` shows the hidden windows again and stops hiding (owner at home).
+# Herdr's server has no window anyway; a Herdr view someone opens can be closed without harm.
 # State: %APPDATA%\herdr\keepalive-state.json; log %APPDATA%\herdr\keepalive.log (below 100 KB).
 #   pwsh -File herdr-keepalive.ps1 -Status     print state, pauses and what runs
 #   pwsh -File herdr-keepalive.ps1 -Install    register the task (no admin); -Uninstall removes it
@@ -25,6 +29,7 @@ param(
     [switch]$Install,
     [switch]$Uninstall,
     [switch]$DryRun,
+    [ValidateSet('', 'on', 'off')][string]$Stealth = '',
     [string]$OrcaExe = (Join-Path $env:LOCALAPPDATA 'Programs\orca\Orca.exe')   # tests point it elsewhere
 )
 $ErrorActionPreference = 'Stop'
@@ -77,6 +82,48 @@ function Test-OrcaUpdating {
     })
 }
 
+function Initialize-WindowApi {
+    if ('Herdr.KeepaliveWin' -as [type]) { return }
+    Add-Type -Namespace Herdr -Name KeepaliveWin -MemberDefinition @'
+public delegate bool EnumProc(System.IntPtr h, System.IntPtr l);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, System.IntPtr l);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr h, out uint pid);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool IsWindowVisible(System.IntPtr h);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool IsWindow(System.IntPtr h);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern int GetWindowTextLength(System.IntPtr h);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr h, int cmd);
+'@
+}
+
+# Visible top-level windows with a title that belong to the given processes.
+function Get-VisibleWindows([int[]]$ProcessIds) {
+    Initialize-WindowApi
+    $found = New-Object System.Collections.Generic.List[long]
+    $callback = [Herdr.KeepaliveWin+EnumProc] {
+        param($h, $l)
+        $owner = [uint32]0
+        $null = [Herdr.KeepaliveWin]::GetWindowThreadProcessId($h, [ref]$owner)
+        if ($ProcessIds -contains [int]$owner -and [Herdr.KeepaliveWin]::IsWindowVisible($h) -and [Herdr.KeepaliveWin]::GetWindowTextLength($h) -gt 0) { $found.Add($h.ToInt64()) }
+        $true
+    }
+    $null = [Herdr.KeepaliveWin]::EnumWindows($callback, [IntPtr]::Zero)
+    $found
+}
+
+# Hides them; returns the handles hidden (kept in the state so -Stealth off shows exactly these again).
+function Hide-Windows([int[]]$ProcessIds) {
+    $hidden = @()
+    foreach ($h in (Get-VisibleWindows $ProcessIds)) { $null = [Herdr.KeepaliveWin]::ShowWindow([IntPtr]$h, 0); $hidden += $h }
+    $hidden
+}
+
+function Show-Windows([long[]]$Handles) {
+    Initialize-WindowApi
+    $shown = 0
+    foreach ($h in $Handles) { if ([Herdr.KeepaliveWin]::IsWindow([IntPtr]$h)) { $null = [Herdr.KeepaliveWin]::ShowWindow([IntPtr]$h, 5); $shown++ } }
+    $shown
+}
+
 function Test-HerdrServer {
     $null = & $herdr workspace list 2>&1
     $LASTEXITCODE -eq 0
@@ -121,11 +168,26 @@ if ($Pause -gt 0 -or $Resume) {
     Write-KeepLog $(if ($Resume) { "resumed: $($names -join ', ')" } else { "paused $Pause min: $($names -join ', ')" })
     exit 0
 }
+if ($Stealth) {
+    $state.stealth = ($Stealth -eq 'on')
+    if ($Stealth -eq 'off') {
+        $shown = Show-Windows @($state.hiddenWindows | Where-Object { $_ })
+        $state.hiddenWindows = @()
+        Write-KeepLog "stealth off: $shown hidden window(s) shown again"
+    } else {
+        $hidden = @(Hide-Windows @((Get-OrcaApp).Id))
+        $state.hiddenWindows = @(@($state.hiddenWindows | Where-Object { $_ }) + $hidden | Select-Object -Unique)
+        Write-KeepLog "stealth on: $($hidden.Count) Orca window(s) hidden; Orca keeps running"
+    }
+    Save-KeepState $state
+    exit 0
+}
 if ($Status) {
     $t = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     Write-Output "Task:   $(if ($t) { "$($t.State)" } else { 'not installed (run -Install)' })"
     Write-Output "Orca:   $(if (Get-OrcaApp) { 'running' } else { 'not running' })$(if (Test-Paused $state 'orca') { " (paused until $($state.pause.orca))" })"
     Write-Output "Herdr:  $(if (Test-HerdrServer) { 'server running' } else { 'server not running' })$(if (Test-Paused $state 'herdr') { " (paused until $($state.pause.herdr))" })"
+    Write-Output "Stealth: $(if ($state.stealth) { "on ($(@($state.hiddenWindows | Where-Object { $_ }).Count) window(s) hidden)" } else { 'off' })"
     Write-Output "Last run: $($state.lastRun)"
     exit 0
 }
@@ -166,6 +228,22 @@ try {
             }
             $state.herdrDown = 0
         } else { Write-KeepLog "herdr server not running - start on the next check" }
+    }
+
+    # Stealth: hide Orca's windows (after a restart, give it time to open its window first).
+    if ($state.stealth -and -not (Test-Paused $state 'orca')) {
+        $ids = @((Get-OrcaApp).Id)
+        if ($ids -and $started) { Start-Sleep -Seconds 15; $ids = @((Get-OrcaApp).Id) }
+        if ($ids) {
+            if ($DryRun) { $n = @(Get-VisibleWindows $ids).Count; if ($n) { Write-KeepLog "dry run: would hide $n Orca window(s)" } }
+            else {
+                $hidden = @(Hide-Windows $ids)
+                if ($hidden) {
+                    $state.hiddenWindows = @(@($state.hiddenWindows | Where-Object { $_ }) + $hidden | Select-Object -Unique | Select-Object -Last 50)
+                    Write-KeepLog "stealth: $($hidden.Count) Orca window(s) hidden"
+                }
+            }
+        }
     }
 
     # Automatic sign-in leaves the owner's desktop open: lock once per sign-in after starting the apps.

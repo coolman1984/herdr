@@ -562,3 +562,7 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     `minimizeToTrayOnClose`) live in `profiles\local-default\profile-state.db`, which the running app
     owns - change them in Orca's Settings, never in the file. On this desktop `powercfg` exposes no
     power/sleep-button setting, and the Start-menu power button (`UIBUTTON_ACTION`) defaulted to Sleep.
+110. **Orca's mobile app reaches this PC from anywhere through Orca's relay** (2026-10-31): a phone paired
+    in Orca's settings is stored in `%APPDATA%\orca\orca-devices.json` (scope `mobile`, with a
+    `relayBinding`; relay director `relay.onorca.dev`), so no Tailscale or open port is needed for Orca. The
+    desktop app must be running; its window may be hidden (`ShowWindow` SW_HIDE) without stopping it.

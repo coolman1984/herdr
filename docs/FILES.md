@@ -23,7 +23,7 @@
 | `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
 | `herdr-boot.ps1` | at sign-in: headless Herdr server, a lead in workspace Lead, the watcher (GUIDE 13.21) |
-| `herdr-keepalive.ps1` | task "Herdr Keepalive": every minute restarts Orca / the Herdr server when closed; `-Install`, `-Status`, `-Pause` |
+| `herdr-keepalive.ps1` | task "Herdr Keepalive": every minute restarts Orca / the Herdr server when closed; `-Stealth on` hides Orca's window; `-Install`, `-Status`, `-Pause` |
 | `setup-nosleep.ps1` | owner runs once as admin: never sleep, power button shuts down, no auto update restart; `-Undo` |
 | `add-ssh-key.ps1` | adds one device's SSH public key (admin key file + its permissions); refuses private keys |
 | `setup-remote.ps1` | owner runs once as admin: SSH server at boot, Tailscale-only firewall, pwsh shell; `-Undo` |

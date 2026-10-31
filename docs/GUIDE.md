@@ -544,3 +544,9 @@ by themselves.
    starts again by itself after a power cut.
 5. Better for the family: a separate standard Windows account for the children (Settings > Accounts >
    Other users). Your apps keep running in your locked account while they use theirs.
+
+**Stealth and the phone (HISTORY 67):** `pwsh -File I:\herdr\herdr-keepalive.ps1 -Stealth on` hides Orca's
+window and keeps hiding it every minute, even after a restart; nothing shows on the display, Orca keeps
+running. On the phone, the Orca app (already paired, works from any network) controls Orca; for Herdr open
+a terminal on this PC in the Orca app and type `herdr`. At home: `-Stealth off` shows Orca again.
+In Orca's Settings, turn OFF the tray (menu bar) icon so nobody can quit Orca from the tray.
