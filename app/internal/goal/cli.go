@@ -27,6 +27,7 @@ const usage = `herdr-goal - give a goal, the engine finishes it (docs/GOAL-ENGIN
   task    add|update|retry|cancel LEDGER --id ID [--title T] [--spec S|--spec-file F] [--deps a,b]
           [--accept CMD]... [--files f,g] [--writer P] [--reviewer P] [--feedback TEXT]
   assume  LEDGER TEXT                decide LEDGER TEXT
+  research LEDGER --source URL|offline --why TEXT [--version V] [--license L] [--test HOW] [--task ID]
   answer  LEDGER ESCALATION [--keys k,k] [--text TEXT]
   pause|resume|stop LEDGER           revert LEDGER TASK
   ack     LEDGER MSG                 (agents: acknowledge a brief)
@@ -128,6 +129,23 @@ func Main(args []string) int {
 		return 0
 	case "task":
 		return cmdTask(rest)
+	case "research":
+		if len(rest) < 1 {
+			return 2
+		}
+		fs := flag.NewFlagSet("research", flag.ContinueOnError)
+		var r ResearchRecord
+		fs.StringVar(&r.Source, "source", "", "")
+		fs.StringVar(&r.Version, "version", "", "")
+		fs.StringVar(&r.License, "license", "", "")
+		fs.StringVar(&r.Why, "why", "", "")
+		fs.StringVar(&r.Test, "test", "", "")
+		fs.StringVar(&r.Task, "task", "", "")
+		if fs.Parse(rest[1:]) != nil || r.Source == "" || r.Why == "" {
+			fmt.Println("research LEDGER --source URL|offline --why TEXT [--version V] [--license L] [--test HOW] [--task ID]")
+			return 2
+		}
+		return enqueue(rest[0], "research", r)
 	case "assume", "decide":
 		if len(rest) < 2 {
 			return 2
@@ -223,9 +241,11 @@ func cmdNew(args []string) int {
 	text := fs.String("goal", "", "")
 	profiles := fs.String("profiles", "", "")
 	plan := fs.String("plan", "", "")
-	var accept, tests multi
+	var accept, tests, protect multi
 	fs.Var(&accept, "accept", "")
 	fs.Var(&tests, "test", "")
+	fs.Var(&protect, "protect", "")
+	research := fs.String("research", "", "")
 	if fs.Parse(args) != nil || *project == "" || *id == "" || *profiles == "" {
 		fmt.Println(usage)
 		return 2
@@ -243,6 +263,16 @@ func cmdNew(args []string) int {
 		mergeLimits(&lim, *cfg.Limits)
 	}
 	n := NewGoal{ID: *id, Text: *text, Project: *project, Accept: accept, Tests: tests, Profiles: cfg.Profiles, Lead: cfg.Lead, Limits: lim, Decider: cfg.Decider}
+	n.Protected = protect
+	if *research != "" {
+		b, err := os.ReadFile(*research)
+		if err != nil {
+			return fail(err)
+		}
+		if err := json.Unmarshal(b, &n.Research); err != nil {
+			return fail(fmt.Errorf("%s: %w (a JSON list of {source, version, license, why, test})", *research, err))
+		}
+	}
 	if *plan != "" {
 		var p struct {
 			Tasks []Task `json:"tasks"`
@@ -371,12 +401,15 @@ func cmdRun(args []string) int {
 	if b := capr.Budget; e.G.Limits.MaxAgents < 0 || b.MaxAgents < e.G.Limits.MaxAgents {
 		e.G.Limits.MaxAgents = b.MaxAgents
 	}
-	if cat := os.Getenv("HERDR_SKILLS_CATALOG"); cat != "" {
-		if sc, err := LoadSkillCatalog(cat); err == nil {
-			e.Skills = sc
-		} else {
-			fmt.Fprintln(os.Stderr, "skills catalog:", err)
+	if cat := FindSkillCatalog(e.G.Project); cat != "" {
+		sc, err := LoadSkillCatalog(cat)
+		if err != nil {
+			return fail(fmt.Errorf("skills catalog %s: %w", cat, err))
 		}
+		e.Skills = sc
+		e.event("skills-catalog", "", "", cat)
+	} else {
+		e.event("skills-catalog", "", "", "no trusted skills catalog found: briefs carry no skills (the company policy is still in every brief)")
 	}
 	if len(e.G.Decider) > 0 {
 		e.Decide = CommandDecider(e.G.Decider)

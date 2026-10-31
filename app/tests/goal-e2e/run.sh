@@ -14,7 +14,7 @@ export PATH="$bin:$PATH"
 rm -rf "$proj"; mkdir -p "$proj"; cd "$proj"
 git init -q -b main; git config user.name owner; git config user.email owner@x
 printf '# wordstat\n\nTODO\n' > README.md; git add -A; git commit -qm init
-herdr-goal new --project "$proj" --id wordstat --profiles "$here/profiles.json" --plan "$here/plan.json" \
+herdr-goal new --research "$here/research.json" --project "$proj" --id wordstat --profiles "$here/profiles.json" --plan "$here/plan.json" \
   --goal "A tiny word-count tool: package, CLI, tests, README with usage and install." \
   --test "[ ! -d tests ] || python3 -m unittest discover -s tests -q" \
   --accept "python3 -m unittest discover -s tests -q" --accept "grep -q '## Usage' README.md && grep -q '## Install' README.md"

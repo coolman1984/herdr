@@ -273,6 +273,36 @@ func insideDir(dir, rel string) (string, bool) {
 	return p, true
 }
 
+// Snapshot makes a detached worktree at the task's reviewed commit for the reviewer.
+func (w Workspace) Snapshot(t *Task) (string, error) {
+	dir := filepath.Join(w.Ledger.WorktreeDir(), "review-"+t.ID)
+	git(w.Project, "worktree", "remove", "--force", dir)
+	if _, err := git(w.Project, "worktree", "add", "--detach", dir, t.ReviewHead); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// ProtectedTouched lists the protected paths the task's reviewed commit changes.
+func (w Workspace) ProtectedTouched(g *Goal, t *Task) []string {
+	if len(g.Protected) == 0 {
+		return nil
+	}
+	out, err := git(w.Project, "diff", "--name-only", g.Branch+"..."+mergeTarget(t))
+	if err != nil {
+		return []string{"(could not list the change: " + err.Error() + ")"}
+	}
+	var hit []string
+	for _, f := range strings.Split(out, "\n") {
+		for _, p := range g.Protected {
+			if f != "" && pathsOverlap(p, f) {
+				hit = append(hit, f)
+			}
+		}
+	}
+	return hit
+}
+
 // mergeTarget is the exact commit the reviewer approved, so later pushes to the branch are not merged
 // unreviewed.
 func mergeTarget(t *Task) string {

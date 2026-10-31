@@ -17,7 +17,7 @@ while :; do
   proj="$work/p$round"; rm -rf "$proj"; mkdir -p "$proj"
   (cd "$proj" && git init -q -b main && git config user.name o && git config user.email o@x && echo seed > NOTES.md && git add -A && git commit -qm init)
   python3 "$here/genplan.py" 8 "$round" $secret > "$work/plan$round.json"
-  herdr-goal new --project "$proj" --id soak$round --profiles "$here/profiles.json" --plan "$work/plan$round.json" \
+  herdr-goal new --research "$here/research.json" --project "$proj" --id soak$round --profiles "$here/profiles.json" --plan "$work/plan$round.json" \
     --goal "Soak round $round: eight notes with tests." --test "[ ! -d tests ] || python3 -m unittest discover -s tests -q" \
     --accept "python3 -m unittest discover -s tests -q" --accept "for i in 1 2 3 4 5 6 7 8; do test -f notes/T\$i.txt || exit 1; done" > /dev/null || exit 1
   L="$proj/.herdr-goal/soak$round"; log="$work/runner$round.log"

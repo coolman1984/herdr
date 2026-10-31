@@ -75,3 +75,57 @@ func TestCancelledJobStaysOwnedUntilJoined(t *testing.T) {
 	_ = strings.TrimSpace
 	_ = os.Getenv
 }
+
+// Round-2 finding 16: research is a runtime gate before a plan runs and after repeated failures.
+func TestResearchGates(t *testing.T) {
+	probe := Probes{FreeRAMMB: func() int { return 8000 }, FreeDiskMB: func(string) int { return 1 << 20 }, LookPath: func(s string) (string, error) { return s, nil }}
+	r := newRig(t)
+	_, _, err := Create(NewGoal{ID: "g2", Text: "x", Project: r.e.G.Project, Accept: []string{"true"}, Profiles: testProfiles(),
+		Tasks: []Task{task("T1")}}, probe, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "research") {
+		t.Fatalf("a plan without research was accepted: %v", err)
+	}
+	r2 := newRig(t, task("T1"))
+	tt := r2.e.G.Task("T1")
+	for i := 0; i < 2; i++ {
+		r2.e.taskAttemptFailed(&AgentRun{Role: "write", Task: "T1", Profile: "alpha", Ended: true}, "same error")
+	}
+	tt.State = TaskFailed
+	if err := r2.e.apply(Command{Cmd: "task-retry", By: "lead", Args: json.RawMessage(`{"id":"T1"}`)}); err == nil {
+		t.Fatal("a twice-failed task was retried without research")
+	}
+	r2.advance(time.Second)
+	if err := r2.e.apply(Command{Cmd: "research", By: "lead", Args: json.RawMessage(`{"task":"T1","source":"https://docs.python.org/3/library/csv.html","version":"3.13","why":"newline handling"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r2.e.apply(Command{Cmd: "task-retry", By: "lead", Args: json.RawMessage(`{"id":"T1"}`)}); err != nil {
+		t.Fatalf("retry after research refused: %v", err)
+	}
+}
+
+// Round-2 finding 3: protected acceptance files cannot be changed by a task; the reviewer works in a
+// detached copy of exactly the reviewed commit.
+func TestProtectedFilesAndReviewerSnapshot(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.e.G.Protected = []string{"tests/acceptance"}
+	r.tick()
+	a := r.agentOf("T1")
+	os.MkdirAll(a.Cwd+"/tests/acceptance", 0o755)
+	os.WriteFile(a.Cwd+"/tests/acceptance/check.sh", []byte("exit 0\n"), 0o644)
+	r.finish("T1", Answer{Status: "done"})
+	r.tick()
+	r.tick()
+	rev := r.agentOf("T1")
+	if rev == nil || rev.Role != "review" || rev.Cwd == a.Cwd || !strings.Contains(rev.Cwd, "review-T1") {
+		t.Fatalf("reviewer not in a snapshot: %+v", rev)
+	}
+	head, _ := git(rev.Cwd, "rev-parse", "HEAD")
+	if head != r.e.G.Task("T1").ReviewHead {
+		t.Fatal("snapshot is not the reviewed commit")
+	}
+	r.finish("T1", Answer{Status: "done", Verdict: "pass"})
+	r.tick()
+	if r.e.G.Task("T1").State == TaskDone || len(r.events("protected-change")) != 1 {
+		t.Fatalf("a change to protected tests was merged: %s", r.e.G.Task("T1").State)
+	}
+}

@@ -1702,3 +1702,26 @@ lowers (never raises) the agent cap; agents receive `DOCPIPE_BATCH_ROWS` (measur
 **Bug found:** two processes opening a new SQLite database at once could fail with "database is locked"
 while switching to WAL (SQLite does not always wait for that lock); `connect` now retries for up to 30 s.
 Test `test_concurrent_migration_applies_once` (6 threads) and `test_unknown_device_profile_is_strict`.
+
+## Phase 67 - Async quotas and subscription ids; trusted skill catalog; research gates; protected acceptance (2026-10-31)
+
+**Finding 14:** quota readings refresh in the background with a deadline; until a reading arrives the account
+is unknown (low trust); a source that hangs becomes "did not answer" (unknown), never blocks the watchdog.
+Profiles map account names to one subscription id (`account_ids`), so "main" and "1984" can share one budget.
+**Finding 15:** the skill catalog is found without an environment variable (project, HERDR_HOME, next to the
+executable); every skill carries a pinned full SHA-256 - a changed or unpinned file is refused; paths must stay
+inside the catalog folder after links are resolved; optional skills fit a 64 KB context budget; the
+company-policy skill is always given, outside ranking and the 3-skill cap, and the policy text itself is in
+every brief even without a catalog. Bug found by a mutation: a short pinned hash made the engine panic.
+**Finding 16:** a plan does not run without a research record (dated source, version, license, why, test) or
+an explicit offline record with its reason; a task that failed twice cannot be retried until research for it
+is recorded after the last failure; the lead is told which research is missing. `herdr-goal research`,
+`new --research FILE`.
+**Finding 3:** `new --protect PATH`: a task whose reviewed commit touches a protected path (acceptance
+tests ...) is sent back, never merged; reviewers work in a detached snapshot worktree of exactly the
+reviewed commit, not in the writer's folder.
+**Proof:** tests for each; the scripted e2e (6 tasks, kills, cancel, late result) green after adapting the
+scripted agent's brief parser; mutations 54/54 (`app/tests/goal-mutations.py`); `-race` clean;
+`GOOS=windows go vet` clean.
+**Not done:** with/without-skill evaluation on real agents (needs the owner's accounts; harness in
+`tools/device-harness/`).

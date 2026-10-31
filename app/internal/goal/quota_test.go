@@ -3,6 +3,7 @@ package goal
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -52,7 +53,7 @@ func TestJudgeAtTheNinetyPercentEdge(t *testing.T) {
 
 func rigQuotas(r *rig, used map[string]float64) {
 	src := fixedSource{used: used, now: func() time.Time { return r.now }}
-	r.e.Q = &Quotas{Sources: map[string]QuotaSource{"a": src, "b": src}}
+	r.e.Q = &Quotas{Sync: true, Sources: map[string]QuotaSource{"a": src, "b": src}}
 }
 
 func TestAccountAtNinetyPercentGetsNoNewWork(t *testing.T) {
@@ -138,5 +139,46 @@ func TestCodexSessionReading(t *testing.T) {
 	}
 	if !r.Limits[0].ResetsAt.Equal(time.Date(2026, 10, 30, 12, 10, 0, 0, time.UTC)) {
 		t.Fatalf("reset %v", r.Limits[0].ResetsAt)
+	}
+}
+
+type slowSource struct{ release chan struct{} }
+
+func (s slowSource) Read(account string) QuotaReading {
+	<-s.release
+	return QuotaReading{Account: account, State: QuotaKnown, Observed: time.Now(), Limits: []Limit{{Kind: "five_hour", UsedPct: pct(95)}}}
+}
+
+// Round-2 finding 14: a slow provider never stalls the caller; until it answers the account is unknown
+// (low trust), afterwards its real reading counts.
+func TestSlowQuotaSourceDoesNotBlock(t *testing.T) {
+	src := slowSource{make(chan struct{})}
+	q := &Quotas{TTL: time.Minute, Sources: map[string]QuotaSource{"x": src}}
+	start := time.Now()
+	r := q.Reading("x", "a1", time.Now())
+	if time.Since(start) > time.Second || r.State != QuotaUnknown || !Judge(r, time.Now()).LowTrust {
+		t.Fatalf("blocked or trusted while measuring: %v %+v", time.Since(start), r)
+	}
+	close(src.release)
+	time.Sleep(100 * time.Millisecond)
+	if v := Judge(q.Reading("x", "a1", time.Now()), time.Now()); v.Eligible {
+		t.Fatal("the late reading (95%) was not applied")
+	}
+	q2 := &Quotas{TTL: time.Minute, Deadline: 50 * time.Millisecond, Sources: map[string]QuotaSource{"x": slowSource{make(chan struct{})}}}
+	q2.Reading("x", "a1", time.Now())
+	time.Sleep(200 * time.Millisecond)
+	if r := q2.Reading("x", "a1", time.Now()); r.State != QuotaUnknown || !strings.Contains(r.Note, "did not answer") {
+		t.Fatalf("a hung source must end as unknown after its deadline: %+v", r)
+	}
+}
+
+func TestAccountAliasesShareOneBudget(t *testing.T) {
+	r := newRig(t, task("T1"))
+	r.e.G.Profiles[0].Accounts = []string{"main", "a2"}
+	r.e.G.Profiles[0].AccountIDs = map[string]string{"main": "a1"} // "main" is the same subscription as a1
+	rigQuotas(r, map[string]float64{"a1": 95})
+	r.tick()
+	if a := r.agentOf("T1"); a == nil || a.Account == "main" {
+		t.Fatalf("the alias of an exhausted account was used: %+v", a)
 	}
 }

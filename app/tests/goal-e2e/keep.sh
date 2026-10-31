@@ -9,7 +9,7 @@ export PATH="$bin:$PATH"
 rm -rf "$proj"; mkdir -p "$proj"; cd "$proj"
 git init -q -b main; git config user.name o; git config user.email o@x
 printf '# wordstat\n\nTODO\n' > README.md; git add -A; git commit -qm init
-herdr-goal new --project "$proj" --id keep --profiles "$here/profiles.json" --plan "$here/plan.json" --goal "wordstat" \
+herdr-goal new --research "$here/research.json" --project "$proj" --id keep --profiles "$here/profiles.json" --plan "$here/plan.json" --goal "wordstat" \
   --test "[ ! -d tests ] || python3 -m unittest discover -s tests -q" \
   --accept "python3 -m unittest discover -s tests -q" --accept "grep -q '## Usage' README.md && grep -q '## Install' README.md" >/dev/null || exit 1
 L="$proj/.herdr-goal/keep"

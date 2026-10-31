@@ -230,7 +230,14 @@ func (e *Engine) Tick() error {
 		e.setState(GoalRunning, "account limit reset reached; resuming")
 	case GoalPlanning:
 		if len(g.Tasks) > 0 {
-			e.setState(GoalRunning, "plan has tasks")
+			if !g.planResearched() {
+				// Research comes before the plan runs: a dated source, or a recorded offline waiver.
+				if g.Reason != "waiting for a research record before the plan runs" {
+					e.setState(GoalPlanning, "waiting for a research record before the plan runs")
+				}
+			} else {
+				e.setState(GoalRunning, "plan has tasks and research")
+			}
 		}
 	}
 	if d := g.Limits.MaxDuration.D(); d > 0 && e.Now().Sub(g.Created.Time) > d {

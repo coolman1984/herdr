@@ -1,23 +1,125 @@
 {
-  "_comment": "Skill catalog for the goal engine (skills-vendor/POLICY.md). Only state 'approved' is ever injected into a brief; candidates are never activated automatically. requires: tool names from the capability report, '|' = any of. profiles: device profiles where the skill may be used (empty = all). tags: task tags it serves. evidence: what approval rests on.",
-  "skills": [
-    {"name": "herdr-documents", "path": "skills/herdr-documents/SKILL.md", "state": "approved", "license": "project",
-     "tags": ["documents", "excel", "word", "powerpoint", "pdf", "extract", "totals", "report", "dashboard", "data"],
-     "requires": ["python3|python|py"], "profiles": [],
-     "evidence": "tooling: tools/docpipe tests (14 unit, 8 browser) green on Linux; Windows CI runs the unit tests. Not a with/without-skill model evaluation."},
-    {"name": "herdr-environment-preflight", "path": "skills/herdr-environment-preflight/SKILL.md", "state": "approved", "license": "project",
-     "tags": ["plan", "lead", "environment", "quota"], "requires": [], "profiles": [],
-     "evidence": "owner's mandatory policy (PR #16); backed by herdr-goal env and quota tests"},
-    {"name": "systematic-debugging", "path": "skills-vendor/obra/superpowers/skills/systematic-debugging/SKILL.md", "state": "candidate-not-evaluated", "license": "MIT",
-     "tags": ["debug", "bug", "fix"], "requires": [], "profiles": [], "evidence": "none yet: needs a with/without evaluation on real agents"},
-    {"name": "test-driven-development", "path": "skills-vendor/obra/superpowers/skills/test-driven-development/SKILL.md", "state": "candidate-not-evaluated", "license": "MIT",
-     "tags": ["code", "feature", "tests"], "requires": [], "profiles": [], "evidence": "none yet"},
-    {"name": "verification-before-completion", "path": "skills-vendor/obra/superpowers/skills/verification-before-completion/SKILL.md", "state": "candidate-not-evaluated", "license": "MIT",
-     "tags": ["code", "review", "done"], "requires": [], "profiles": [], "evidence": "none yet"},
-    {"name": "frontend-design", "path": "skills-vendor/anthropics/skills/skills/frontend-design/SKILL.md", "state": "candidate-not-evaluated", "license": "Apache-2.0",
-     "tags": ["web", "design", "ui"], "requires": [], "profiles": [], "evidence": "none yet"},
-    {"name": "webapp-testing", "path": "skills-vendor/anthropics/skills/skills/webapp-testing/SKILL.md", "state": "candidate-not-evaluated", "license": "Apache-2.0",
-     "tags": ["web", "test", "browser"], "requires": ["python3|python|py"], "profiles": ["personal"],
-     "evidence": "none yet; adaptation required: wait on app-ready markers, not networkidle (POLICY.md)"}
-  ]
+ "_comment": "Skill catalog for the goal engine (skills-vendor/POLICY.md). Only state 'approved' is ever injected into a brief; candidates are never activated automatically. requires: tool names from the capability report, '|' = any of. profiles: device profiles where the skill may be used (empty = all). tags: task tags it serves. evidence: what approval rests on. sha256 = pinned full content hash: a file whose content differs is refused. mandatory = always given to every agent (company policy), outside ranking and the 3-skill cap.",
+ "skills": [
+  {
+   "name": "herdr-documents",
+   "path": "skills/herdr-documents/SKILL.md",
+   "state": "approved",
+   "license": "project",
+   "tags": [
+    "documents",
+    "excel",
+    "word",
+    "powerpoint",
+    "pdf",
+    "extract",
+    "totals",
+    "report",
+    "dashboard",
+    "data"
+   ],
+   "requires": [
+    "python3|python|py"
+   ],
+   "profiles": [],
+   "evidence": "tooling: tools/docpipe tests (14 unit, 8 browser) green on Linux; Windows CI runs the unit tests. Not a with/without-skill model evaluation.",
+   "sha256": "6ef7f6e13c76aada8aca8e34f7eea6e4b6f3dc504669ab0dfc9f0fad9564b4ab"
+  },
+  {
+   "name": "herdr-environment-preflight",
+   "path": "skills/herdr-environment-preflight/SKILL.md",
+   "state": "approved",
+   "license": "project",
+   "tags": [
+    "plan",
+    "lead",
+    "environment",
+    "quota"
+   ],
+   "requires": [],
+   "profiles": [],
+   "evidence": "owner's mandatory policy (PR #16); backed by herdr-goal env and quota tests",
+   "sha256": "9281a85ce57d31bf443c13729f2feebd11f0bb48a7568898fc48983f77195e85",
+   "mandatory": true
+  },
+  {
+   "name": "systematic-debugging",
+   "path": "skills-vendor/obra/superpowers/skills/systematic-debugging/SKILL.md",
+   "state": "candidate-not-evaluated",
+   "license": "MIT",
+   "tags": [
+    "debug",
+    "bug",
+    "fix"
+   ],
+   "requires": [],
+   "profiles": [],
+   "evidence": "none yet: needs a with/without evaluation on real agents",
+   "sha256": "51c6435d98c83c42c96ba7c35725a0b2c376cd487fb1a4e6bd0ddbe7e33ef202"
+  },
+  {
+   "name": "test-driven-development",
+   "path": "skills-vendor/obra/superpowers/skills/test-driven-development/SKILL.md",
+   "state": "candidate-not-evaluated",
+   "license": "MIT",
+   "tags": [
+    "code",
+    "feature",
+    "tests"
+   ],
+   "requires": [],
+   "profiles": [],
+   "evidence": "none yet",
+   "sha256": "64b03fce4aee5a97a93160cea8111f3ba13a17b7c001db4bd5836d67fd10705d"
+  },
+  {
+   "name": "verification-before-completion",
+   "path": "skills-vendor/obra/superpowers/skills/verification-before-completion/SKILL.md",
+   "state": "candidate-not-evaluated",
+   "license": "MIT",
+   "tags": [
+    "code",
+    "review",
+    "done"
+   ],
+   "requires": [],
+   "profiles": [],
+   "evidence": "none yet",
+   "sha256": "2befe7fc55bcadaa3d97dd9e8efeb633d2561c0ebe74c5a8b17c4d9e7e4520b3"
+  },
+  {
+   "name": "frontend-design",
+   "path": "skills-vendor/anthropics/skills/skills/frontend-design/SKILL.md",
+   "state": "candidate-not-evaluated",
+   "license": "Apache-2.0",
+   "tags": [
+    "web",
+    "design",
+    "ui"
+   ],
+   "requires": [],
+   "profiles": [],
+   "evidence": "none yet",
+   "sha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3"
+  },
+  {
+   "name": "webapp-testing",
+   "path": "skills-vendor/anthropics/skills/skills/webapp-testing/SKILL.md",
+   "state": "candidate-not-evaluated",
+   "license": "Apache-2.0",
+   "tags": [
+    "web",
+    "test",
+    "browser"
+   ],
+   "requires": [
+    "python3|python|py"
+   ],
+   "profiles": [
+    "personal"
+   ],
+   "evidence": "none yet; adaptation required: wait on app-ready markers, not networkidle (POLICY.md)",
+   "sha256": "51b7349e77ec63b7744a6f63647e7566a0b4d2e301121cc10e8c2113af6556a2"
+  }
+ ]
 }

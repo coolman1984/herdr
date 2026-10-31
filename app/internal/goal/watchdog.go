@@ -476,14 +476,24 @@ func (e *Engine) reviewExclude(a *AgentRun) string {
 
 // realAccount is the budget key: provider + account, so profiles on one subscription share it.
 func (e *Engine) realAccount(profile, account string) string {
+	prov, acct := e.subscription(profile, account)
+	return prov + "/" + acct
+}
+
+// subscription maps a profile's account name to the real (provider, account) it uses: profiles that
+// name the same subscription differently (Claude's default folder "main" vs "1984") share one budget.
+func (e *Engine) subscription(profile, account string) (string, string) {
 	prov := profile
 	if p := e.G.Profile(profile); p != nil {
 		prov = p.Provider
 		if prov == "" {
 			prov = p.Kind
 		}
+		if c := p.AccountIDs[account]; c != "" {
+			account = c
+		}
 	}
-	return prov + "/" + account
+	return prov, account
 }
 
 // accountVerdict reads the account's quota (90% rule). No quota source = unknown = low trust, never 0%.
@@ -492,11 +502,8 @@ func (e *Engine) accountVerdict(profile, account string) Verdict {
 	if e.Q == nil || p == nil {
 		return Verdict{Eligible: true, LowTrust: true, Reason: "no quota source"}
 	}
-	prov := p.Provider
-	if prov == "" {
-		prov = p.Kind
-	}
-	return Judge(e.Q.Reading(prov, account, e.Now()), e.Now())
+	prov, acct := e.subscription(profile, account)
+	return Judge(e.Q.Reading(prov, acct, e.Now()), e.Now())
 }
 
 // liveOnAccount counts live agents (any profile) on one real account.

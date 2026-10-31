@@ -100,7 +100,7 @@ func newRig(t *testing.T, tasks ...Task) *rig {
 	lim := DefaultLimits()
 	lim.MaxAgents = 2
 	g, l, err := Create(NewGoal{ID: "g1", Text: "test goal", Project: proj, Accept: []string{"test -f README.md"},
-		Profiles: testProfiles(), Limits: lim, Tasks: tasks}, probe, r.now)
+		Profiles: testProfiles(), Limits: lim, Tasks: tasks, Research: testResearch}, probe, r.now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -828,5 +828,7 @@ func (f fixedSource) Read(account string) QuotaReading {
 
 func fakeQuotas(used map[string]float64) *Quotas {
 	src := fixedSource{used: used, now: time.Now}
-	return &Quotas{TTL: 0, Sources: map[string]QuotaSource{"a": src, "b": src}}
+	return &Quotas{TTL: 0, Sync: true, Sources: map[string]QuotaSource{"a": src, "b": src}}
 }
+
+var testResearch = []ResearchRecord{{Source: "offline", Why: "test fixture plan"}}

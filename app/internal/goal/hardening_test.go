@@ -435,6 +435,8 @@ func TestFailureBudgetSurvivesReplans(t *testing.T) {
 			break
 		}
 		if tt.State == TaskFailed {
+			r.advance(time.Second)
+			r.e.apply(Command{Cmd: "research", By: "lead", Args: json.RawMessage(`{"task":"T1","source":"offline","why":"retry after failure"}`)})
 			if err := r.e.apply(Command{Cmd: "task-retry", By: "lead", Args: json.RawMessage(`{"id":"T1"}`)}); err != nil {
 				t.Fatal(err)
 			}
@@ -519,7 +521,7 @@ func TestAccountLimitDoesNotStopHealthyAgents(t *testing.T) {
 	r.e.G.Tasks[1].Writer = "beta"
 	r.tick()
 	healthy := r.agentOf("T2")
-	r.e.G.Accounts["beta/b1"] = &Account{LimitedUntil: T(r.now.Add(time.Hour))} // no free account left anywhere
+	r.e.G.Accounts[r.e.realAccount("beta", "b1")] = &Account{LimitedUntil: T(r.now.Add(time.Hour))} // no free account left anywhere
 	r.screen("T1", StatusIdle, "You've hit your limit · resets in 1h 0m\n")
 	r.tick()
 	if healthy.Ended || !r.b.agents[healthy.Name].exists {

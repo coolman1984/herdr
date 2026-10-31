@@ -320,29 +320,61 @@ type Quotas struct {
 	mu      sync.Mutex
 	Sources map[string]QuotaSource // provider -> source
 	TTL     time.Duration
-	cache   map[string]QuotaReading
-	at      map[string]time.Time
+	// Sync reads inline (tests). Otherwise a reading older than TTL is refreshed in the background with a
+	// deadline, and the caller gets the last reading (or "unknown, measuring") at once: a slow provider
+	// command can never stall the watchdog.
+	Sync     bool
+	Deadline time.Duration
+	cache    map[string]QuotaReading
+	at       map[string]time.Time
+	inflight map[string]bool
 }
 
 func (q *Quotas) Reading(provider, account string, now time.Time) QuotaReading {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	key := provider + "/" + account
+	if q.cache == nil {
+		q.cache, q.at, q.inflight = map[string]QuotaReading{}, map[string]time.Time{}, map[string]bool{}
+	}
 	if r, ok := q.cache[key]; ok && now.Sub(q.at[key]) < q.TTL {
 		return r
 	}
 	src := q.Sources[provider]
-	var r QuotaReading
 	if src == nil {
-		r = QuotaReading{Provider: provider, Account: account, State: QuotaUnknown, Note: "no quota source configured for " + provider}
-	} else {
-		r = src.Read(account)
+		r := QuotaReading{Provider: provider, Account: account, State: QuotaUnknown, Note: "no quota source configured for " + provider}
+		q.cache[key], q.at[key] = r, now
+		return r
 	}
-	if q.cache == nil {
-		q.cache, q.at = map[string]QuotaReading{}, map[string]time.Time{}
+	if q.Sync {
+		r := src.Read(account)
+		q.cache[key], q.at[key] = r, now
+		return r
 	}
-	q.cache[key], q.at[key] = r, now
-	return r
+	if !q.inflight[key] {
+		q.inflight[key] = true
+		deadline := q.Deadline
+		if deadline == 0 {
+			deadline = 45 * time.Second
+		}
+		go func() {
+			done := make(chan QuotaReading, 1)
+			go func() { done <- src.Read(account) }()
+			var r QuotaReading
+			select {
+			case r = <-done:
+			case <-time.After(deadline):
+				r = QuotaReading{Provider: provider, Account: account, State: QuotaUnknown, Note: "quota source did not answer in " + deadline.String()}
+			}
+			q.mu.Lock()
+			q.cache[key], q.at[key], q.inflight[key] = r, time.Now(), false
+			q.mu.Unlock()
+		}()
+	}
+	if r, ok := q.cache[key]; ok {
+		return r // the last reading while a fresh one is taken; Judge treats it as stale if it is old
+	}
+	return QuotaReading{Provider: provider, Account: account, State: QuotaUnknown, Note: "measuring"}
 }
 
 // DefaultQuotas wires the sources this project knows.

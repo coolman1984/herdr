@@ -77,9 +77,11 @@ type Profile struct {
 	Kind string `json:"kind"` // vendor family; a reviewer must differ from the writer
 	// Provider names the real subscription (anthropic, openai, google, cline); profiles with the same
 	// provider and account share one quota. Empty = Kind.
-	Provider string   `json:"provider,omitempty"`
-	Command  []string `json:"command"` // argv; {prompt} is replaced by the first prompt when present
-	Model    string   `json:"model,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	// AccountIDs maps an account name to its canonical subscription id when two names are one account.
+	AccountIDs map[string]string `json:"account_ids,omitempty"`
+	Command    []string          `json:"command"` // argv; {prompt} is replaced by the first prompt when present
+	Model      string            `json:"model,omitempty"`
 	// Fallback is tried after RetryCap capacity/model errors.
 	Fallback string            `json:"fallback,omitempty"`
 	Accounts []string          `json:"accounts,omitempty"` // tried in order on account limits
@@ -108,6 +110,8 @@ type Task struct {
 	Reviews    int      `json:"reviews"`
 	Branch     string   `json:"branch,omitempty"`
 	ReviewHead string   `json:"review_head,omitempty"` // the commit the reviewer was given; merged exactly
+	ReviewDir  string   `json:"review_dir,omitempty"`  // detached snapshot of ReviewHead the reviewer works in
+	LastFail   Time     `json:"last_fail"`             // when the last attempt failed (research gate)
 	Worktree   string   `json:"worktree,omitempty"`
 	Agent      string   `json:"agent,omitempty"` // current agent run name
 	Feedback   string   `json:"feedback,omitempty"`
@@ -185,8 +189,10 @@ type Goal struct {
 	Branch      string               `json:"branch"` // integration branch goal/<id>
 	State       string               `json:"state"`
 	Reason      string               `json:"reason,omitempty"`
-	Accept      []string             `json:"accept"` // the goal's acceptance: the gate to done
-	Tests       []string             `json:"tests"`  // the project's full tests: run after every merge
+	Accept      []string             `json:"accept"`              // the goal's acceptance: the gate to done
+	Tests       []string             `json:"tests"`               // the project's full tests: run after every merge
+	Protected   []string             `json:"protected,omitempty"` // paths no task may change (acceptance tests ...)
+	Research    []ResearchRecord     `json:"research,omitempty"`
 	Limits      Limits               `json:"limits"`
 	Profiles    []Profile            `json:"profiles"`
 	Lead        string               `json:"lead,omitempty"` // lead profile; empty = no Architect pane
@@ -238,6 +244,19 @@ type Event struct {
 	Task   string `json:"task,omitempty"`
 	Detail string `json:"detail,omitempty"`
 	Screen string `json:"screen,omitempty"`
+}
+
+// ResearchRecord: a dated source the plan or a fix rests on (owner's rule: research before planning and
+// after unfamiliar or repeated failures). Source "offline" with a reason is the bounded fallback.
+type ResearchRecord struct {
+	Source  string `json:"source"`
+	Version string `json:"version,omitempty"`
+	License string `json:"license,omitempty"`
+	Why     string `json:"why"`
+	Test    string `json:"test,omitempty"` // how the adopted idea is proven here
+	Task    string `json:"task,omitempty"` // the task it is for ("" = the plan)
+	By      string `json:"by"`
+	At      Time   `json:"at"`
 }
 
 // Ledger is the goal folder. All state is in goal.json (written atomically), history in events.jsonl.

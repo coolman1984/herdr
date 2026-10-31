@@ -1,0 +1,5 @@
+[
+ {"source": "https://github.com/python/cpython/blob/main/Doc/library/unittest.rst", "version": "3.13", "license": "PSF-2.0",
+  "why": "acceptance and task checks use the standard library unittest runner: present on every machine, no package to install",
+  "test": "python3 -m unittest discover -s tests -q in each goal's acceptance"}
+]

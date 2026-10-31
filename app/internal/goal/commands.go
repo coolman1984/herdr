@@ -185,7 +185,7 @@ var idRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$`)
 var allowed = map[string][]string{
 	"owner": {"*"},
 	"plan":  {"task-add"},
-	"lead":  {"task-add", "task-update", "task-retry", "task-cancel", "assume", "decide", "answer", "revert"},
+	"lead":  {"task-add", "task-update", "task-retry", "task-cancel", "assume", "decide", "answer", "revert", "research"},
 }
 
 func authorized(by, cmd string) bool {
@@ -284,6 +284,9 @@ func (e *Engine) apply(c Command) error {
 		if t.State == TaskDone || t.State == TaskMerging {
 			return fmt.Errorf("task %s is %s; add a new task instead", t.ID, t.State)
 		}
+		if c.Cmd == "task-retry" && t.Total >= 2 && !g.researchedSince(t.ID, t.LastFail.Time) {
+			return fmt.Errorf("task %s failed %d times: record research for it first (`herdr-goal research --task %s ...`: what the failure is, sources checked, the fix chosen)", t.ID, t.Total, t.ID)
+		}
 		if c.Cmd == "task-retry" && strings.HasPrefix(t.Note, "BUDGET:") && c.By != "owner" {
 			return fmt.Errorf("task %s used its whole failure budget; split it into new tasks instead", t.ID)
 		}
@@ -336,6 +339,17 @@ func (e *Engine) apply(c Command) error {
 			}
 		}
 		t.Updated = T(e.Now())
+	case "research":
+		var r ResearchRecord
+		if err := json.Unmarshal(c.Args, &r); err != nil {
+			return err
+		}
+		if strings.TrimSpace(r.Source) == "" || strings.TrimSpace(r.Why) == "" {
+			return errors.New("research needs a source (URL, document, or \"offline\") and why it applies")
+		}
+		r.By, r.At = c.By, T(e.Now())
+		g.Research = append(g.Research, r)
+		e.event("research", c.By, r.Task, r.Source+" "+r.Version+": "+r.Why)
 	case "assume", "decide":
 		var a struct{ Text string }
 		if err := json.Unmarshal(c.Args, &a); err != nil || a.Text == "" {
@@ -430,16 +444,18 @@ func (e *Engine) apply(c Command) error {
 
 // NewGoal is everything `herdr-goal new` needs.
 type NewGoal struct {
-	ID       string
-	Text     string
-	Project  string
-	Accept   []string
-	Tests    []string
-	Profiles []Profile
-	Lead     string
-	Limits   Limits
-	Tasks    []Task
-	Decider  []string
+	ID        string
+	Text      string
+	Project   string
+	Accept    []string
+	Tests     []string
+	Profiles  []Profile
+	Lead      string
+	Limits    Limits
+	Tasks     []Task
+	Decider   []string
+	Research  []ResearchRecord
+	Protected []string
 }
 
 // Create checks readiness and writes a new ledger. It refuses rather than guess.
@@ -501,8 +517,16 @@ func Create(n NewGoal, probe Probes, now time.Time) (*Goal, Ledger, error) {
 		}
 		e.event("task-added", "", t.ID, t.Title)
 	}
+	for _, r := range n.Research {
+		r.By, r.At = "owner", T(now)
+		g.Research = append(g.Research, r)
+	}
+	g.Protected = n.Protected
 	if len(g.Tasks) > 0 {
-		e.setState(GoalRunning, "plan given at creation")
+		if !g.planResearched() {
+			return nil, l, errors.New("a plan needs research first: give --research FILE (sources, versions, licenses, why), or a record with source \"offline\" and the reason")
+		}
+		e.setState(GoalRunning, "plan given at creation, with research")
 	}
 	return g, l, e.flush()
 }
@@ -597,4 +621,24 @@ func Status(dir string) (string, error) {
 		fmt.Fprintf(&b, "%4d %s %-16s %-12s %-5s %s\n", ev.Seq, ev.At.Format("15:04:05"), ev.Kind, ev.Agent, ev.Task, oneLine(ev.Detail, 120))
 	}
 	return b.String(), nil
+}
+
+// planResearched: at least one research record for the plan (Task == "").
+func (g *Goal) planResearched() bool {
+	for _, r := range g.Research {
+		if r.Task == "" {
+			return true
+		}
+	}
+	return false
+}
+
+// researchedSince: a research record for the task made after its last failure.
+func (g *Goal) researchedSince(task string, since time.Time) bool {
+	for _, r := range g.Research {
+		if r.Task == task && !r.At.Before(since) {
+			return true
+		}
+	}
+	return false
 }

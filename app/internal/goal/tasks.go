@@ -81,6 +81,12 @@ func (e *Engine) schedule() {
 			}
 			t.Reviewer = r
 			t.ReviewHead = e.W.BranchHead(t)
+			snap, err := e.W.Snapshot(t)
+			if err != nil {
+				e.event("error", "", t.ID, "review snapshot: "+err.Error())
+				continue
+			}
+			t.ReviewDir = snap
 			e.event("choose", "", t.ID, "reviewer "+r+" for writer "+t.Writer+" on "+short(t.ReviewHead))
 			e.startAgent("review", t.ID, r, "", nil, "")
 		case TaskChecking:
@@ -256,6 +262,9 @@ func (e *Engine) startAgent(role, task, profile, account string, retries map[str
 	t := g.Task(task)
 	if t != nil {
 		cwd = t.Worktree
+		if role == "review" && t.ReviewDir != "" {
+			cwd = t.ReviewDir // a detached copy of exactly the reviewed commit, not the writer's folder
+		}
 	}
 	a := &AgentRun{Name: name, Role: role, Task: task, Profile: profile, Account: account, Cwd: cwd, Msg: msg,
 		State: "starting", Started: T(e.Now()), LastMove: T(e.Now()), Retries: map[string]int{}}
@@ -362,13 +371,14 @@ func (e *Engine) brief(a *AgentRun, t *Task, note string) string {
 	case "review":
 		fmt.Fprintf(&b, "# Review task %s: %s\n\nGoal %s, message %s. You review work written by another model (%s). No human is watching.\n\n", t.ID, t.Title, g.ID, a.Msg, t.Writer)
 		fmt.Fprintf(&b, "1. First create the file %s (any content).\n", ack)
-		fmt.Fprintf(&b, "2. In %s run `git diff %s...HEAD` and read the change. Do NOT change any file.\n", t.Worktree, g.Branch)
+		fmt.Fprintf(&b, "2. In %s (a read-only copy of commit %s) run `git diff %s...HEAD` and read the change. Do NOT change any file.\n", a.Cwd, short(t.ReviewHead), g.Branch)
 		fmt.Fprintf(&b, "3. The task it had to do:\n\n%s\n\n", t.Spec)
 		if len(t.Accept) > 0 {
 			fmt.Fprintf(&b, "Its checks (already green): %s\n", strings.Join(t.Accept, "; "))
 		}
 		b.WriteString("Verdict \"pass\" only if the change does the task correctly; else \"fail\" with concrete notes the writer can act on.\n")
 	}
+	b.WriteString("\nCompany policy (always applies): company files are opened only by their authorized application (Office over COM, PowerShell first); never read their bytes another way, never upload or export their content unless approved; no package installs after a refusal - use PowerShell or the Python standard library; never type secrets or sign in; never push.\n")
 	if t != nil && e.Skills != nil && a.Role != "lead" {
 		tools, profile := map[string]Fact{}, "unknown"
 		if e.Caps != nil {
@@ -492,6 +502,7 @@ func (e *Engine) taskAttemptFailed(a *AgentRun, why string) {
 	}
 	t.Attempts++
 	t.Total++
+	t.LastFail = T(e.Now())
 	g.score(a.Profile).Failed++
 	t.Feedback = why
 	if t.Total >= 3*g.Limits.MaxAttempts {
@@ -639,6 +650,14 @@ func (e *Engine) runCheck(t *Task) {
 func (e *Engine) runMerge(t *Task) {
 	g := e.G
 	w, to := e.W, g.Limits.VerifyTimeout.D()
+	if hit := e.W.ProtectedTouched(g, t); len(hit) > 0 {
+		// Acceptance tests and other protected files are the owner's yardstick: a task may not move it.
+		e.event("protected-change", "", t.ID, strings.Join(hit, ", "))
+		t.Reviews = 0
+		a := &AgentRun{Role: "write", Task: t.ID, Profile: t.Writer, Ended: true}
+		e.taskAttemptFailed(a, "Your change touches protected files ("+strings.Join(hit, ", ")+"). Undo those changes; protected tests and files may not be edited by a task.")
+		return
+	}
 	tc := *t
 	j := e.startJob(jobKey("merge", t), true, func(ctx context.Context, j *job) { j.sha, j.out, j.err = w.MergeCtx(ctx, g, &tc, to) })
 	if j == nil {
@@ -798,7 +817,13 @@ func (e *Engine) lead() {
 	for _, t := range g.Tasks {
 		if t.State == TaskFailed {
 			news = append(news, "failed "+t.ID+fmt.Sprint(t.Updated.Unix()))
+			if t.Total >= 2 && !g.researchedSince(t.ID, t.LastFail.Time) {
+				news = append(news, "research needed for "+t.ID)
+			}
 		}
+	}
+	if g.State == GoalPlanning && len(g.Tasks) > 0 && !g.planResearched() {
+		news = append(news, "research needed for the plan")
 	}
 	if len(g.Tasks) == 0 {
 		news = append(news, "no plan")
@@ -809,6 +834,6 @@ func (e *Engine) lead() {
 	key := strings.Join(news, ",")
 	if key != "" && key != g.LeadNews && cur.Begun && (cur.State == "idle" || cur.State == "stopped-early") {
 		g.LeadSeen, g.LeadNews = g.Seq, key
-		e.send(cur, fmt.Sprintf("Next step needed. Run `herdr-goal status %s`, decide, act with herdr-goal commands, record why.", e.L.Dir))
+		e.send(cur, fmt.Sprintf("Next step needed (%s). Run `herdr-goal status %s`, decide, act with herdr-goal commands, record why.", strings.Join(news, "; "), e.L.Dir))
 	}
 }

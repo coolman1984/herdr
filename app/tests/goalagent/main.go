@@ -90,7 +90,7 @@ var (
 	briefRe  = regexp.MustCompile(`brief (\S+\.md) \(message (\S+)\)`)
 	ackRe    = regexp.MustCompile(`create the file (\S+)`)
 	answerRe = regexp.MustCompile(`write (\S+\.json) as JSON`)
-	folderRe = regexp.MustCompile(`(?:Work only in this folder: |In )(\S+) (?:\(git|run)`)
+	folderRe = regexp.MustCompile(`(?:Work only in this folder: |In )(\S+) (?:\(git|\(a read-only|run)`)
 	branchRe = regexp.MustCompile("git diff (\\S+)\\.\\.\\.HEAD")
 	shRe     = regexp.MustCompile("(?s)```sh\n(.*?)```")
 	fixRe    = regexp.MustCompile("(?s)```resolve\n(.*?)```")
@@ -147,6 +147,9 @@ func main() {
 			for _, t := range g.Tasks {
 				if t.State == "failed" && !retried[t.ID] {
 					retried[t.ID] = true
+					rout, rerr := exec.Command("herdr-goal", "research", os.Getenv("HERDR_GOAL"), "--task", t.ID, "--source", "offline",
+						"--why", "scripted lead: failure read from the ledger, same recipe retried").CombinedOutput()
+					say("lead research %s: %s %v", t.ID, rout, rerr)
 					out, err := exec.Command("herdr-goal", "task", "retry", os.Getenv("HERDR_GOAL"), "--id", t.ID, "--feedback", "lead: one more try after a failure").CombinedOutput()
 					say("lead retried %s: %s %v", t.ID, out, err)
 				}
