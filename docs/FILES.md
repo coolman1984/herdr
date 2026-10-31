@@ -63,6 +63,8 @@
 | `%APPDATA%\herdr\leaders\` | one `<name>-<hash8>.json` per project: leader item, name, pane, folder, project path, start time and server; atomic write |
 | `%APPDATA%\herdr\leader.json` | legacy shared leader; used only for a matching project, removed after that project's replacement is saved |
 | `%APPDATA%\herdr\leader-limits.json` | per-item reset, source (screen/usage/default) and observation time; expired entries are free; atomic write |
+| `%APPDATA%\herdr\autoswitch-state.json` | per-project watcher outcome, notification signature and retry time; atomic write |
+| `%APPDATA%\herdr\autoswitch.log` | timestamped watcher actions and errors; newest lines kept below 200 KB |
 | `<project>\.herdr\handoffs\` | handoffs for other projects; `.herdr/` added once to the local git exclude file, never `.gitignore`; Herdr itself keeps `tasks\` |
 | `%APPDATA%\herdr\herdr-agents-panes.json` | panes started by `herdr-agents` |
 | `%APPDATA%\herdr\layout-last.json` | last layout chosen in the layout builder |

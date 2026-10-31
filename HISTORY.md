@@ -1573,3 +1573,31 @@ NEXT skip items signed in as the current leader's email (here: NEXT is codex, no
 `NEXT: codex`. Two new tests: 60/60 pass; on HEAD 58/60 (both new ones fail). All scripts and
 `check.ps1` pass.
 **Lesson:** #107.
+
+## Phase 63 - Automatic switching when a leader hits its limit (2026-10-31)
+
+**Symptom:** the owner still had to notice a limited leader and press Shift+C.
+**Cause:** leader switching had no background observer.
+**Fix (owner approved):** `autoswitch` holds one per-user named mutex and checks project
+leader files every 60 seconds (or one tick with `-Once`). It skips dead, other-server and
+working leaders. An idle/done/blocked leader with a screen limit uses `Switch-Leader` in-process,
+including the current pane-run fallback and same-email account checks. The caller's focused-pane
+environment is restored. `start -Lead` and successful manual switching ensure the hidden watcher
+runs through `conhost.exe --headless`; `leaders` shows watcher status. No Startup item is added.
+Herdr notifications report switched, blocked or failed outcomes. Atomic per-project retry state
+waits 10 minutes after BLOCKED, or until the earliest known successor reset (30 minutes if unknown)
+after failure, suppressing unchanged notifications. A bounded log records actions and caught error
+messages. Five consecutive erroneous ticks stop and notify; 30 minutes without live leaders exits.
+Manual command failures keep their exit behavior; failures inside the watcher are catchable.
+**Proof:** leader tests 79/79 pass, including 19 new watcher tests; HEAD copies pass 60/79,
+with all 19 watcher tests failing. Seven other scripts pass 155/155. `check.ps1` exits 1:
+three herdr-team skill copies await the lead's sync, plus an App Path missing/broken report;
+warnings are the Startup HUD shortcut and user PATH. No outside settings are changed here.
+Real watcher launch, notifications and live agent switching are not exercised.
+**Lead review (Claude):** on the lead's PC all 8 test scripts pass (234/234), `sync-skills.ps1` copied
+herdr-team to the 3 Claude folders, `check.ps1` passes. Live: `autoswitch -Once` against the real lead
+`claude-2040` (idle, no limit) exited 0 and did nothing; the watcher was then started with
+`conhost.exe --headless` (pid 29976) and `leaders` shows `Watcher: running`. A real limit switch and the
+notification are still unproven until a lead hits its limit. The watcher does not start after a reboot
+until a `start -Lead` or `switch` runs.
+**Lesson:** no new CLI fact; watcher state follows projects while account limits remain global.

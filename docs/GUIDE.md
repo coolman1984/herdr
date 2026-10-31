@@ -444,6 +444,23 @@ Grok / OpenCode subscription (another email) has its own limits.
 
 ### 13.20 Usage limits and switching the lead
 
+**Automatic switching:** `start -Lead` and a successful `switch` ensure one hidden watcher is
+running for this Windows user. Every 60 seconds it checks registered project leaders on its
+Herdr server. A live leader that is not working and shows a limit message is handed off through
+the same switch command; no key press is needed. Working panes and ordinary mentions of limits
+are skipped. The same-email account checks still apply.
+
+`herdr-agents autoswitch` starts the watcher explicitly; `-IntervalSec 60` changes the check
+interval and `-Once` makes one pass. A second watcher exits with `autoswitch already running`.
+`leaders` prints `Watcher: running` or `Watcher: not running (starts with start -Lead or switch)`.
+Notifications say **Lead switched**, **Lead switch needs you** (answer the new pane's screen),
+or **Lead switch failed**. A blocked project waits 10 minutes; a failed project waits for the
+earliest known successor reset, or 30 minutes when unknown. The same outcome is not notified
+again unless the leader, blocked pane or error changes. Other projects continue independently.
+The watcher exits after 30 minutes without a live leader. Five consecutive ticks with errors
+stop it with **Lead watcher stopped**. See `autoswitch.log` in `%APPDATA%\herdr` for the cause;
+the log stays below 200 KB by dropping older lines. Start a lead or run `autoswitch` to restart.
+
 1. `herdr-agents leaders` shows the ordered choices, installed tools, remembered limits and NEXT.
 2. Press `Ctrl+B` `Shift+C`, or run `herdr-agents switch`. It remembers the old lead's reset,
    writes a handoff with git facts and its last 80 screen lines, opens the next free leader,

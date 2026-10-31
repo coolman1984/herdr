@@ -142,6 +142,8 @@ DeepSeek does Y ..."), ALWAYS run this routine:
 
 ## Switching the lead
 
+`start -Lead` / successful `switch` ensure a hidden `autoswitch` watcher: it switches idle leaders showing a limit, notifies the owner, backs off after failure/BLOCKED, and stops after 30 minutes without a live leader; `leaders` shows its status.
+
 Leaders are remembered per project (git root, else folder); use `switch -Cwd <folder>` / `leaders -Cwd <folder>`; other projects keep handoffs in `.herdr/handoffs`, and account limits stay global.
 
 Run `herdr-agents leaders` to see the ordered choices in `agents.json` `leaders.order`.

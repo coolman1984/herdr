@@ -20,6 +20,7 @@ All three run `launcher\HerdrLauncher.exe` - no console window flashes (`Herdr.c
 **Leader switching:** `herdr-agents leaders` shows the chain; `Ctrl+B` `Shift+C` (or
 `herdr-agents switch`) saves a handoff and starts the next free leader - another Claude account (2040, then 1984), never the main sign-in. Claude usage numbers
 are optional; limits are learned from the screen (docs/GUIDE.md 13.20).
+**Automatic switching:** `start -Lead` and a successful `switch` start a hidden watcher that switches idle leaders at their limit and sends a notification; `leaders` shows watcher status.
 
 Close the window any time: the agents keep running (Herdr's server runs on its own).
 Open Herdr again and they are still working. **Stop everything for real:** `Ctrl+B`

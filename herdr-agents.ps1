@@ -31,6 +31,7 @@
 #   herdr-agents switch [-To item] [-Cwd PATH] [-Notify] hand off and start the next free leader
 #                                                        (-Notify: the result in a message box; the Shift+C key)
 #   herdr-agents start 2040 -Lead                        record who leads
+#   herdr-agents autoswitch [-IntervalSec 60] [-Once]     watch project leads and switch on a limit
 #   herdr-agents handoff [-TaskFile out.md]              a handoff file for the next lead, facts filled in
 #
 # Approval: agents.json "args" set each agent's approval mode; since 2026-10-22 the owner
@@ -39,7 +40,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory)]
-    [ValidateSet("tools", "start", "ask", "read", "status", "stop", "diff", "fanout", "history", "watch", "team", "collect", "login", "accounts", "usage", "handoff", "leaders", "switch")]
+    [ValidateSet("tools", "start", "ask", "read", "status", "stop", "diff", "fanout", "history", "watch", "team", "collect", "login", "accounts", "usage", "handoff", "leaders", "switch", "autoswitch")]
     [string]$Command,
     [Parameter(Position = 1)] [string]$Target,
     [Parameter(Position = 2)] [string]$Task,
@@ -59,7 +60,7 @@ param(
     [string[]]$Agents,
     [int]$TimeoutSec = 900,
     [int]$Lines = 200,
-    [int]$IntervalSec = 2,
+    [int]$IntervalSec = $(if ($Command -eq 'autoswitch') { 60 } else { 2 }),
     [switch]$Visible,
     [switch]$Fresh,
     [switch]$Once,
@@ -122,6 +123,8 @@ function Get-AgentDialog([string]$Screen) {
 }
 
 function Fail([string]$Message) {
+    # A background tick must be catchable; an exhausted chain must not exit the watcher.
+    if ($AutoswitchContext) { throw "ERROR: $Message" }
     Write-Output "ERROR: $Message"
     Show-Notify "ERROR: $Message" "Error"
     exit 1
@@ -561,6 +564,162 @@ function Get-NextClaudeLeader($KnownLimits, [datetime]$Now) {
     Get-LeaderChoices $KnownLimits $Now | Where-Object { $_.Kind -eq 'claude' -and $_.Installed -and -not $_.Until } | Select-Object -First 1
 }
 
+function New-AutoswitchMutex { [Threading.Mutex]::new($false, 'Local\herdr-autoswitch') }
+
+function Test-AutoswitchRunning {
+    if ($script:autoswitchOwnsMutex) { return $true }
+    $mutex = New-AutoswitchMutex
+    $acquired = $false
+    try {
+        try { $acquired = $mutex.WaitOne(0) }
+        catch [Threading.AbandonedMutexException] { $acquired = $true; Write-AutoswitchLog '-' "Recovered abandoned watcher mutex: $($_.Exception.Message)" }
+        -not $acquired
+    } finally { if ($acquired) { $mutex.ReleaseMutex() }; $mutex.Dispose() }
+}
+
+function Ensure-Autoswitch {
+    if ($AutoswitchContext -or (Test-AutoswitchRunning)) { return }
+    $arguments = @('--headless', 'pwsh', '-NoProfile', '-File', ('"' + (Join-Path $PSScriptRoot 'herdr-agents.ps1') + '"'), 'autoswitch')
+    Start-Process -FilePath 'conhost.exe' -ArgumentList $arguments -WindowStyle Hidden
+}
+
+function Write-AutoswitchLog([string]$Project, [string]$Outcome) {
+    $path = Join-Path $env:APPDATA 'herdr\autoswitch.log'
+    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force
+    $text = ("{0:yyyy-MM-dd HH:mm:ss} {1} {2}" -f (Get-Date), $Project, $Outcome) -replace '[\r\n]+', ' '
+    if ($text.Length -gt 4096) { $text = $text.Substring(0,4096) }
+    Add-Content -LiteralPath $path -Value $text -Encoding utf8
+    if ((Get-Item -LiteralPath $path).Length -ge 200KB) {
+        $rows = @([IO.File]::ReadAllLines($path))
+        do {
+            if ($rows.Count -gt 1) { $rows = @($rows | Select-Object -Last ([int][Math]::Ceiling($rows.Count / 2.0))) }
+            else { $rows = @($rows[0].Substring([int][Math]::Floor($rows[0].Length / 2.0))) }
+            [IO.File]::WriteAllLines($path, [string[]]$rows, [Text.UTF8Encoding]::new($false))
+        } while ((Get-Item -LiteralPath $path).Length -ge 200KB)
+    }
+}
+
+function Send-AutoswitchNotification([string]$Title, [string]$Body) {
+    $sent = Invoke-Herdr @('notification','show',$Title,'--body',$Body,'--sound','request')
+    if (-not $sent.Ok) { throw "Autoswitch notification failed: $($sent.Text)" }
+}
+
+function Get-AutoswitchRetry($Leader, [datetime]$Now) {
+    $known = Read-LeaderJson (Join-Path $env:APPDATA 'herdr\leader-limits.json')
+    $choices = @(Get-LeaderChoices $known $Now)
+    $email = ($choices | Where-Object Item -eq $Leader.item | Select-Object -First 1).Email
+    $earliest = $choices | Where-Object {
+        $_.Installed -and $_.Item -ne $Leader.item -and $_.Until -gt $Now -and -not ($email -and $_.Email -eq $email)
+    } | Sort-Object Until | Select-Object -First 1
+    if ($earliest) { return [datetime]$earliest.Until }
+    $Now.AddMinutes(30)
+}
+
+function Invoke-AutoswitchTick([datetime]$Now = (Get-Date)) {
+    $AutoswitchContext = $true
+    $stateFile = Join-Path $env:APPDATA 'herdr\autoswitch-state.json'
+    $state = Read-LeaderJson $stateFile
+    foreach ($key in $state.Keys) {
+        if ($state[$key].outcome -notin @('success','failure','blocked') -or -not $state[$key].retry_after) { throw "Invalid autoswitch state for '$key' in $stateFile" }
+        $null = [datetime]$state[$key].retry_after
+    }
+    $folder = Join-Path $env:APPDATA 'herdr\leaders'
+    $files = if (Test-Path -LiteralPath $folder) { @(Get-ChildItem -LiteralPath $folder -Filter '*.json' -File) } else { @() }
+    $live = if ($files.Count) { @(Get-LiveAgents) } else { @() }
+    $liveCount = 0; $hadErrors = $false
+    foreach ($file in $files) {
+        $project = $file.FullName
+        try {
+            $leader = Read-LeaderJson $file.FullName
+            if (-not $leader.project) { throw "Missing project in leader state $($file.FullName)" }
+            $project = [string]$leader.project
+            $leader = Read-LeaderJson $file.FullName $project
+            if (-not [string]::Equals($file.FullName, (Get-LeaderStatePath $project), [StringComparison]::OrdinalIgnoreCase)) { throw "Project state filename mismatch: $($file.FullName)" }
+            $server = ConvertTo-ServerId ([string]$leader.server)
+            if ($server -ne (Get-ServerIdentity)) { continue }
+            $agent = $live | Where-Object { $_.name -eq $leader.name -and $_.pane_id -eq $leader.pane_id } | Select-Object -First 1
+            if (-not $agent) { continue }
+            $liveCount++
+            if ($agent.agent_status -eq 'working') { continue }
+            $previous = $state[$project]
+            if ($previous -and [datetime]$previous.retry_after -gt $Now) { continue }
+            $read = Invoke-Herdr @('agent','read',$leader.name,'--source','recent')
+            if (-not $read.Ok) { throw "Cannot read leader $($leader.name): $($read.Text)" }
+            $limit = Get-LimitFromScreen $read.Text $Now
+            if (-not $limit) { continue }
+            $Cwd = $project; $To = ''; $TaskFile = ''; $Notify = $false
+            $savedEnv = @{}
+            foreach ($key in @('HERDR_PANE_ID','HERDR_ACTIVE_PANE_ID','HERDR_ACTIVE_PANE_CWD','HERDR_ENV')) { $savedEnv[$key] = [Environment]::GetEnvironmentVariable($key) }
+            $outcome = 'success'; $problem = ''; $script:lastSwitchName = ''
+            try {
+                $env:HERDR_PANE_ID = $leader.pane_id; $env:HERDR_ACTIVE_PANE_ID = $leader.pane_id
+                $env:HERDR_ACTIVE_PANE_CWD = $project; $env:HERDR_ENV = '1'
+                try {
+                    $output = @(Switch-Leader)
+                    if ($output.Count -and $output[-1] -is [int] -and $output[-1] -eq 3) { $outcome = 'blocked' }
+                    elseif (-not ($output | Where-Object { $_ -is [string] -and $_ -like 'SWITCHED *' })) { throw 'Switch returned without a confirmed outcome.' }
+                } catch { $outcome = 'failure'; $problem = $_.Exception.Message }
+            } finally { foreach ($key in $savedEnv.Keys) { [Environment]::SetEnvironmentVariable($key, $savedEnv[$key]) } }
+            $newName = $script:lastSwitchName
+            $retry = $Now
+            if ($outcome -eq 'blocked') {
+                $retry = $Now.AddMinutes(10); $title = 'Lead switch needs you'; $body = "$newName - answer its screen"
+            } elseif ($outcome -eq 'failure') {
+                $retry = Get-AutoswitchRetry $leader $Now; $title = 'Lead switch failed'; $body = $problem
+            } else {
+                $new = Read-ProjectLeader $project
+                $newName = $new.name; $title = 'Lead switched'
+                $body = "$($leader.item) hit its limit (until $($limit.Until.ToString('ddd HH:mm'))) - now $($new.item) in $project"
+            }
+            $signature = "$outcome|$($leader.name)|$newName" + $(if ($outcome -eq 'failure') { "|$problem" } else { '' })
+            Write-AutoswitchLog $project "$outcome $body"
+            if (-not $previous -or $previous.signature -ne $signature) { Send-AutoswitchNotification $title $body }
+            $state[$project] = @{ outcome = $outcome; retry_after = $retry.ToString('o'); signature = $signature; seen = $Now.ToString('o') }
+            Save-LeaderJson $stateFile $state
+        } catch {
+            $hadErrors = $true
+            Write-AutoswitchLog $project "ERROR $($_.Exception.Message)"
+        }
+    }
+    [pscustomobject]@{ Live = $liveCount; HadErrors = $hadErrors }
+}
+
+function Invoke-Autoswitch([int]$IntervalSec = 60, [switch]$Once) {
+    if ($IntervalSec -lt 1) { throw 'autoswitch IntervalSec must be at least 1.' }
+    $AutoswitchContext = $true
+    $script:autoswitchExitCode = 0
+    $mutex = New-AutoswitchMutex; $acquired = $false
+    try {
+        try { $acquired = $mutex.WaitOne(0) }
+        catch [Threading.AbandonedMutexException] { $acquired = $true; Write-AutoswitchLog '-' "Recovered abandoned watcher mutex: $($_.Exception.Message)" }
+        if (-not $acquired) { Write-Output 'autoswitch already running'; return }
+        $script:autoswitchOwnsMutex = $true
+        $lastLive = Get-Date; $consecutiveErrors = 0
+        do {
+            $tickHadErrors = $false
+            try {
+                $tick = Invoke-AutoswitchTick (Get-Date)
+                $tickHadErrors = $tick.HadErrors
+                if ($tick.Live -gt 0) { $lastLive = Get-Date }
+            } catch { $tickHadErrors = $true; Write-AutoswitchLog '-' "ERROR $($_.Exception.Message)" }
+            if ($tickHadErrors) { $consecutiveErrors++ } else { $consecutiveErrors = 0 }
+            if ($consecutiveErrors -ge 5) {
+                Write-AutoswitchLog '-' 'STOP five consecutive tick errors'
+                try { Send-AutoswitchNotification 'Lead watcher stopped' 'Five consecutive tick errors; see autoswitch.log.' }
+                catch { Write-AutoswitchLog '-' "ERROR $($_.Exception.Message)" }
+                $script:autoswitchExitCode = 1
+                return
+            }
+            if ($Once) { if ($tickHadErrors) { $script:autoswitchExitCode = 1 }; return }
+            if ((Get-Date) -ge $lastLive.AddMinutes(30)) { Write-AutoswitchLog '-' 'STOP no live leader for 30 minutes'; return }
+            Start-Sleep -Seconds $IntervalSec
+        } while ($true)
+    } finally {
+        if ($acquired) { $script:autoswitchOwnsMutex = $false; $mutex.ReleaseMutex() }
+        $mutex.Dispose()
+    }
+}
+
 function Switch-Leader {
     $now = Get-Date
     $project = Get-LeaderProject (Get-LeaderFolder $Cwd)
@@ -609,9 +768,12 @@ function Switch-Leader {
     $handoff = $script:lastHandoff
     $Target = $next.Item; $Name = ''; $Account = ''; $Model = ''; $Effort = ''; $Provider = ''; $Pane = ''; $Worktree = ''; $Lead = $false
     $env:HERDR_PANE_ID = $focused; $env:HERDR_ENV = '1'
+    $script:lastStartName = ''
     Start-Agent
+    $script:lastSwitchName = $script:lastStartName
     if ($script:agentStartFailed) { Write-Output 'BLOCKED: new leader is not ready; owner must answer its screen.'; return 3 }
     $new = $script:lastStartedLeader
+    $script:lastSwitchName = $new.name
     $read = Invoke-Herdr @('agent','read',$new.name,'--source','visible')
     if (-not $read.Ok) { Fail "Cannot inspect new leader: $($read.Text)" }
     if (Get-AgentDialog $read.Text) { Write-Output "BLOCKED: $($new.name)`n$(Format-Screen $read.Text)"; return 3 }
@@ -640,6 +802,7 @@ function Switch-Leader {
         Write-Output "Old leader still open in pane $($old.pane_id): herdr-agents stop $($old.name)"
     }
     Write-Output "SWITCHED $($old.item) -> $($next.Item) (handoff: $handoff)"
+    Ensure-Autoswitch
 }
 
 # Execute the same start command body in-process. Keeping its body in the command
@@ -711,6 +874,10 @@ function New-LeaderHandoff([string]$FromItem, [string]$ToItem, [string]$OldScree
 $null = Get-Registry
 
 switch ($Command) {
+    "autoswitch" {
+        Invoke-Autoswitch -IntervalSec $IntervalSec -Once:$Once
+        if ($script:autoswitchExitCode) { exit $script:autoswitchExitCode }
+    }
     "switch" {
         $script:switchExitCode = 0
         $switchLines = [Collections.Generic.List[string]]::new()
@@ -738,6 +905,7 @@ switch ($Command) {
         }
         $next = Get-FreeLeaders $choices $current.item | Select-Object -First 1
         Write-Output "NEXT: $(if ($next) { $next.Item } else { Get-LeaderUnavailableMessage $choices })"
+        Write-Output $(if (Test-AutoswitchRunning) { 'Watcher: running' } else { 'Watcher: not running (starts with start -Lead or switch)' })
     }
     "tools" {
         $registry = Get-Registry
@@ -893,6 +1061,7 @@ switch ($Command) {
         }
 
         $startArgs = @("agent", "start", $Name, "--kind", $a.kind, "--pane", $pane, "--timeout", "120000")
+        $script:lastStartName = $Name
         if ($agentArgs.Count -gt 0) { $startArgs += @("--") + $agentArgs }
         $started = Invoke-Herdr $startArgs
         if (-not $started.Ok -and $started.Text -match 'agent_pane_busy') {
@@ -943,6 +1112,7 @@ switch ($Command) {
         if ($Lead) {
             if ($Worktree) { $leadProject = Get-LeaderProject (Get-LeaderFolder $Cwd) }
             Save-ProjectLeader $leadProject $script:lastStartedLeader
+            Ensure-Autoswitch
         }
     }
 

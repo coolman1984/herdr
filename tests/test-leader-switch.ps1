@@ -13,6 +13,9 @@ foreach ($def in $ast.FindAll({ param($n) $n -is [System.Management.Automation.L
     . ([scriptblock]::Create($def.Extent.Text.Replace('$PSScriptRoot', "'" + $SourceRoot.Replace("'", "''") + "'")))
 }
 function Fail([string]$Message) { throw "ERROR: $Message" }
+# Old start/switch fixtures must never launch a real background watcher.
+function Ensure-Autoswitch { }
+function Test-AutoswitchRunning { $false }
 # Never read the owner's real Claude sign-ins: every account is signed in separately unless a test says not.
 $script:signIns = @{}
 function Get-ClaudeSignIn([string]$AccountName, [bool]$Main) { $script:signIns[$(if ($Main) { 'main' } else { $AccountName })] }
@@ -380,5 +383,196 @@ $deltaStart = $pass + $failed; $deltaFailedStart = $failed
     }
 }
 Write-Output "PROJECT DELTA: $($failed - $deltaFailedStart) failed / $(($pass + $failed) - $deltaStart) tests"
+$autoStart = $pass + $failed; $autoFailedStart = $failed
+& {
+    $autoScratch = Join-Path $PSScriptRoot ('leader-auto-' + [guid]::NewGuid().ToString('N'))
+    $oldAppData = $env:APPDATA; $env:APPDATA = $autoScratch
+    $null = New-Item -ItemType Directory -Path $autoScratch
+    $script:autoNow = $now; $script:autoCalls = 0; $script:autoNotes = @(); $script:autoMode = 'success'
+    $script:autoLive = @(); $script:autoScreens = @{}; $script:autoReads = 0
+    $projectOne = Join-Path $autoScratch 'one'; $projectTwo = Join-Path $autoScratch 'two'
+    function Get-ServerIdentity { 'fixture' }
+    function Get-LiveAgents { $script:autoLive }
+    function Get-Date { $script:autoNow }
+    function Invoke-Herdr($Arguments) {
+        if ($Arguments[0] -eq 'notification') { $script:autoNotes += ,$Arguments }
+        else { $script:autoReads++ }
+        [pscustomobject]@{ Ok = $true; Text = $script:autoScreens[$Arguments[2]] }
+    }
+    function Get-LeaderChoices {
+        @([pscustomobject]@{ Item = '2040'; Installed = $true; Until = $null; Email = '' },
+          [pscustomobject]@{ Item = 'codex'; Installed = $true; Until = $now.AddMinutes(20); Email = '' })
+    }
+    function Switch-Leader {
+        $script:autoCalls++
+        if ($script:autoMode -eq 'failure') { throw 'ERROR: every leader is limited' }
+        $script:lastSwitchName = 'next-lead'
+        if ($script:autoMode -eq 'blocked') { 'BLOCKED: next-lead'; return 3 }
+        $record = Read-ProjectLeader $Cwd
+        $record.name = 'next-lead'; $record.item = 'codex'; $record.pane_id = 'new-pane'
+        Save-ProjectLeader $Cwd $record
+        'SWITCHED 2040 -> codex'
+    }
+    function Reset-Auto {
+        foreach ($project in @($projectOne,$projectTwo)) {
+            Save-ProjectLeader $project @{ item = '2040'; name = $(if ($project -eq $projectOne) { 'old-one' } else { 'old-two' }); pane_id = $(if ($project -eq $projectOne) { 'p1' } else { 'p2' }); cwd = $project; since = $now.ToString('o'); server = 'fixture' }
+        }
+        Save-LeaderJson (Join-Path $env:APPDATA 'herdr\autoswitch-state.json') @{}
+        $script:autoNow = $now; $script:autoCalls = 0; $script:autoNotes = @(); $script:autoReads = 0; $script:autoMode = 'success'
+        $script:autoLive = @([pscustomobject]@{ name = 'old-one'; pane_id = 'p1'; agent_status = 'idle' }, [pscustomobject]@{ name = 'old-two'; pane_id = 'p2'; agent_status = 'idle' })
+        $script:autoScreens = @{ 'old-one' = "You've hit your limit - resets 3pm"; 'old-two' = 'normal answer' }
+    }
+    try {
+        Check 'auto: idle limit switches once, notifies and restores focus' {
+            Reset-Auto; $before = $env:HERDR_PANE_ID
+            $null = Invoke-AutoswitchTick $now
+            $null = Invoke-AutoswitchTick $now.AddMinutes(1)
+            $script:autoCalls -eq 1 -and $script:autoNotes.Count -eq 1 -and $script:autoNotes[0][2] -eq 'Lead switched' -and $script:autoNotes[0] -contains 'request' -and [string]$env:HERDR_PANE_ID -eq [string]$before
+        }
+        Check 'auto: working leader is not read or switched' {
+            Reset-Auto; $script:autoLive[0].agent_status = 'working'; $null = Invoke-AutoswitchTick $now
+            $script:autoCalls -eq 0 -and $script:autoReads -eq 1
+        }
+        Check 'auto: no limit means no switch' {
+            Reset-Auto; $script:autoScreens['old-one'] = 'rate limit handling in the API'; $null = Invoke-AutoswitchTick $now
+            $script:autoCalls -eq 0 -and $script:autoNotes.Count -eq 0
+        }
+        Check 'auto: dead pane is skipped' {
+            Reset-Auto; $script:autoLive = @(); $r = Invoke-AutoswitchTick $now
+            $r.Live -eq 0 -and $script:autoCalls -eq 0 -and $script:autoReads -eq 0
+        }
+        Check 'auto: another server is skipped despite matching ids' {
+            Reset-Auto; $record = Read-ProjectLeader $projectOne; $record.server = 'other'; Save-ProjectLeader $projectOne $record
+            $null = Invoke-AutoswitchTick $now
+            $script:autoCalls -eq 0 -and $script:autoReads -eq 1
+        }
+        Check 'auto: two projects switch only the limited one' {
+            Reset-Auto; $path = Get-LeaderStatePath $projectTwo; $before = [IO.File]::ReadAllText($path)
+            $null = Invoke-AutoswitchTick $now
+            $script:autoCalls -eq 1 -and [IO.File]::ReadAllText($path) -ceq $before -and (Read-ProjectLeader $projectOne).item -eq 'codex'
+        }
+        Check 'auto: failure cooldown retries after earliest reset without notification spam' {
+            Reset-Auto; $script:autoMode = 'failure'; $null = Invoke-AutoswitchTick $now
+            $null = Invoke-AutoswitchTick $now.AddMinutes(19)
+            $beforeRetry = $script:autoCalls
+            $null = Invoke-AutoswitchTick $now.AddMinutes(21)
+            $beforeRetry -eq 1 -and $script:autoCalls -eq 2 -and $script:autoNotes.Count -eq 1 -and $script:autoNotes[0][2] -eq 'Lead switch failed'
+        }
+        Check 'auto: failure without a reset waits thirty minutes' {
+            Reset-Auto; $script:autoMode = 'failure'
+            function Get-LeaderChoices { @() }
+            $null = Invoke-AutoswitchTick $now
+            $state = Read-LeaderJson (Join-Path $env:APPDATA 'herdr\autoswitch-state.json')
+            [datetime]$state[$projectOne].retry_after -eq $now.AddMinutes(30)
+        }
+        Check 'auto: BLOCKED waits ten minutes and names the new leader once' {
+            Reset-Auto; $script:autoMode = 'blocked'; $null = Invoke-AutoswitchTick $now
+            $null = Invoke-AutoswitchTick $now.AddMinutes(9); $beforeRetry = $script:autoCalls
+            $null = Invoke-AutoswitchTick $now.AddMinutes(11)
+            $beforeRetry -eq 1 -and $script:autoCalls -eq 2 -and $script:autoNotes.Count -eq 1 -and $script:autoNotes[0][2] -eq 'Lead switch needs you' -and ($script:autoNotes[0] -join ' ') -match 'next-lead.*answer its screen'
+        }
+        Check 'auto: a changed outcome notifies again' {
+            Reset-Auto; $script:autoMode = 'blocked'; $null = Invoke-AutoswitchTick $now
+            $script:autoMode = 'success'; $null = Invoke-AutoswitchTick $now.AddMinutes(11)
+            $script:autoNotes.Count -eq 2 -and $script:autoNotes[1][2] -eq 'Lead switched'
+        }
+        Check 'auto: log trimming preserves newest action under 200 KB' {
+            $path = Join-Path $env:APPDATA 'herdr\autoswitch.log'
+            [IO.File]::WriteAllLines($path, @(1..4000 | ForEach-Object { 'old-' + $_ + ('x' * 150) }))
+            Write-AutoswitchLog $projectOne 'newest-action'
+            (Get-Item -LiteralPath $path).Length -lt 200KB -and (Get-Content -LiteralPath $path -Tail 1) -match 'newest-action'
+        }
+        Check 'auto: leaders reports both watcher states' {
+            Reset-Auto
+            $clause = $dispatch.Clauses | Where-Object { $_.Item1.Value -eq 'leaders' }
+            $text = $clause.Item2.Extent.Text; $body = [scriptblock]::Create($text.Substring(1,$text.Length-2))
+            $Cwd = $projectOne
+            function Get-LeaderProject($Folder) { $Folder }; function Get-LeaderFolder($Folder) { $Folder }
+            function Test-AutoswitchRunning { $true }
+            $running = @(& $body)
+            function Test-AutoswitchRunning { $false }
+            $stopped = @(& $body)
+            $running -contains 'Watcher: running' -and $stopped -contains 'Watcher: not running (starts with start -Lead or switch)'
+        }
+        Check 'auto: Ensure launches headless only when mutex is free' {
+            $definition = $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Ensure-Autoswitch' }, $true) | Select-Object -First 1
+            if (-not $definition) { throw 'Ensure helper unavailable' }
+            . ([scriptblock]::Create($definition.Extent.Text.Replace('$PSScriptRoot', "'" + $SourceRoot.Replace("'", "''") + "'")))
+            $script:fakeRunning = $false; $script:launches = @()
+            function Test-AutoswitchRunning { $script:fakeRunning }
+            function Start-Process { param($FilePath,$ArgumentList,$WindowStyle) $script:launches += [pscustomobject]@{ File = $FilePath; Args = $ArgumentList; Style = $WindowStyle } }
+            Ensure-Autoswitch; $script:fakeRunning = $true; Ensure-Autoswitch
+            $script:launches.Count -eq 1 -and $script:launches[0].File -eq 'conhost.exe' -and ($script:launches[0].Args -join ' ') -match '--headless pwsh -NoProfile -File .*herdr-agents.ps1.* autoswitch' -and $script:launches[0].Style -eq 'Hidden'
+        }
+        Check 'auto: actual start Lead ensures the watcher using a fake process' {
+            $definition = $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Ensure-Autoswitch' }, $true) | Select-Object -First 1
+            if (-not $definition) { throw 'Ensure helper unavailable' }
+            . ([scriptblock]::Create($definition.Extent.Text.Replace('$PSScriptRoot', "'" + $SourceRoot.Replace("'", "''") + "'")))
+            function Test-AutoswitchRunning { $false }; $script:launches = @()
+            function Start-Process { param($FilePath,$ArgumentList,$WindowStyle) $script:launches += ,@($FilePath,$ArgumentList,$WindowStyle) }
+            function Get-LiveAgents { @() }; function Get-State { @() }; function Save-State { }
+            function Read-ProjectLeader { @{} }; function Save-ProjectLeader { }
+            function Get-LeaderProject($Folder) { $Folder }; function Get-EnvArgs { @() }
+            function Invoke-Herdr { [pscustomobject]@{ Ok = $true; Text = ''; Json = @{ result = @{ pane = @{ pane_id = 'fake-pane' } } } } }
+            $Target = 'codex'; $Name = 'auto-starter'; $Cwd = $SourceRoot; $Account = ''; $Pane = ''; $Worktree = ''; $Model = ''; $Effort = ''; $Provider = ''; $Lead = $true; $Direction = 'right'
+            $oldPane = $env:HERDR_PANE_ID; $oldEnv = $env:HERDR_ENV
+            try { $env:HERDR_ENV = '1'; $env:HERDR_PANE_ID = 'fake-caller'; $null = & $startBody }
+            finally { $env:HERDR_PANE_ID = $oldPane; $env:HERDR_ENV = $oldEnv }
+            $script:launches.Count -eq 1 -and $script:launches[0][0] -eq 'conhost.exe'
+        }
+        Check 'auto: command defaults to sixty seconds and accepts an override' {
+            $binding = [scriptblock]::Create($ast.ParamBlock.Extent.Text + "`n[pscustomobject]@{ Interval = `$IntervalSec; Once = [bool]`$Once }")
+            $first = & $binding autoswitch -Once
+            $override = & $binding autoswitch -IntervalSec 17
+            $ordinary = & $binding watch
+            $first.Interval -eq 60 -and $first.Once -and $override.Interval -eq 17 -and $ordinary.Interval -eq 2
+        }
+        Check 'auto: second instance exits normally when test mutex is held' {
+            $script:testMutexName = 'Local\herdr-autoswitch-test-' + [guid]::NewGuid().ToString('N')
+            function New-AutoswitchMutex { [Threading.Mutex]::new($false, $script:testMutexName) }
+            $ready = [Threading.ManualResetEventSlim]::new($false); $release = [Threading.ManualResetEventSlim]::new($false)
+            $job = Start-ThreadJob -ArgumentList $script:testMutexName,$ready,$release -ScriptBlock {
+                param($mutexName,$readyEvent,$releaseEvent)
+                $held = [Threading.Mutex]::new($false,$mutexName); $null = $held.WaitOne()
+                try { $readyEvent.Set(); $null = $releaseEvent.Wait(10000) } finally { $held.ReleaseMutex(); $held.Dispose() }
+            }
+            try {
+                if (-not $ready.Wait(5000)) { throw 'Test mutex did not become ready' }
+                $output = @(Invoke-Autoswitch -Once)
+                ($output -join ' ') -match 'autoswitch already running' -and $script:autoswitchExitCode -eq 0
+            } finally { $release.Set(); $null = $job | Wait-Job | Receive-Job; Remove-Job $job; $ready.Dispose(); $release.Dispose() }
+        }
+        Check 'auto: five consecutive tick errors stop and notify with logged cause' {
+            function New-AutoswitchMutex { [Threading.Mutex]::new() }
+            function Invoke-AutoswitchTick { throw 'fixture repeated tick failure' }
+            function Start-Sleep { }
+            $script:autoNotes = @(); $null = Invoke-Autoswitch
+            $script:autoswitchExitCode -eq 1 -and $script:autoNotes.Count -eq 1 -and $script:autoNotes[0][2] -eq 'Lead watcher stopped' -and (Get-Content -LiteralPath (Join-Path $env:APPDATA 'herdr\autoswitch.log') -Raw) -match 'fixture repeated tick failure'
+        }
+        Check 'auto: production Fail is caught by a one-tick watcher, not a process exit' {
+            Reset-Auto
+            $definition = $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Fail' }, $true) | Select-Object -First 1
+            . ([scriptblock]::Create($definition.Extent.Text))
+            function New-AutoswitchMutex { [Threading.Mutex]::new() }
+            function Get-LiveAgents { Fail 'fixture discovery failure' }
+            $null = Invoke-Autoswitch -Once
+            $script:autoswitchExitCode -eq 1 -and (Get-Content -LiteralPath (Join-Path $env:APPDATA 'herdr\autoswitch.log') -Raw) -match 'fixture discovery failure'
+        }
+        Check 'auto: thirty minutes without live leaders exits and releases mutex' {
+            function New-AutoswitchMutex { [Threading.Mutex]::new() }
+            $script:idleTicks = 0; $script:autoNow = $now
+            function Invoke-AutoswitchTick { $script:idleTicks++; [pscustomobject]@{ Live = 0; HadErrors = $false } }
+            function Start-Sleep { $script:autoNow = $script:autoNow.AddMinutes(10) }
+            $null = Invoke-Autoswitch -IntervalSec 600
+            $script:idleTicks -eq 4 -and $script:autoswitchExitCode -eq 0 -and -not $script:autoswitchOwnsMutex
+        }
+    } finally {
+        $env:APPDATA = $oldAppData
+        $resolved = [IO.Path]::GetFullPath($autoScratch)
+        if (-not $resolved.StartsWith([IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\') + '\leader-auto-', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe auto fixture cleanup' }
+        Remove-Item -LiteralPath $resolved -Recurse -Force
+    }
+}
+Write-Output "AUTO DELTA: $($failed - $autoFailedStart) failed / $(($pass + $failed) - $autoStart) tests"
 Write-Output "PASS $pass/$($pass + $failed); FAIL $failed"
 if ($failed) { exit 1 }
