@@ -551,3 +551,7 @@ Numbered so HISTORY.md and the skills can point at them. Add, never renumber.
     mflma2030. The folder name proves nothing; `oauthAccount.emailAddress` in its `.claude.json` (no
     secret) does, and `herdr-agents leaders` now shows it. Sign a folder in with the browser on the
     right account (or a private window), then check `leaders` / `/status`.
+108. **A headless `herdr server` makes its own first workspace** (2026-10-31, Herdr 0.9.5, lab session):
+    started by `herdr --session lab server`, it already has workspace w1 "herdr"; a workspace created
+    next is w2. Read ids from `workspace create` JSON (`result.root_pane.pane_id`), never assume w1.
+    Herdr 0.9.5 also has `herdr --remote <ssh-target>` to attach to another PC's server over SSH.

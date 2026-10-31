@@ -496,3 +496,25 @@ Switch reads limit messages from the screen; without a reset time it remembers o
 Time-zone labels are ignored; reset times use local time. `start next` uses the first free
 Claude in the chain when no eligible usage account is available. With usage data `start next` takes the least-used account, which can be the main sign-in - to move the lead use `switch` (the chain), not `start next`.
 The new leader reads the handoff, fills its TODOs from history and continues the work.
+
+### 13.21 Run this PC as a 24-hour server and reach it from anywhere
+
+The PC never sleeps on AC power. Three parts make Herdr run day and night and answer from a phone or laptop:
+
+1. **Start at sign-in (done by the lead):** the Startup shortcut `Herdr Boot.lnk` runs `herdr-boot.ps1`
+   hidden. If no Herdr server runs, it starts one headless, opens a workspace **Lead** in `I:\herdr`
+   and runs `herdr-agents start next -Lead` there (the first free leader in the chain; this also starts
+   the watcher). If Herdr already runs, it only makes sure the watcher runs. Log: `%APPDATA%\herdr\boot.log`.
+   Opening Herdr later (desktop icon) attaches to this same server.
+2. **Sign in by itself after a restart (owner):** Startup items run only after Windows signs in. Turn on
+   automatic sign-in yourself (it needs your password, so no agent does it), e.g. Sysinternals Autologon.
+3. **Reach it from anywhere (owner, once):**
+   - In an administrator PowerShell: `pwsh -File I:\herdr\setup-remote.ps1` - SSH server on at boot,
+     answering only the Tailscale network (100.64.0.0/10), with PowerShell 7 as its shell
+     (`-Undo` reverses it). Tailscale is a private network between your own devices.
+   - On this PC: `tailscale up --unattended` and sign in (unattended keeps it on when you sign out).
+   - On the phone or laptop: install Tailscale, sign in with the same account, then
+     `ssh <user>@<pc name>` and run `herdr`, or from a PC with Herdr: `herdr --remote <user>@<pc name>`.
+     Termux works on Android.
+
+Not proven yet: an SSH login and `herdr --remote` from another device (needs the two Tailscale sign-ins).

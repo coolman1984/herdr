@@ -21,6 +21,7 @@ All three run `launcher\HerdrLauncher.exe` - no console window flashes (`Herdr.c
 `herdr-agents switch`) saves a handoff and starts the next free leader - another Claude account (2040, then 1984), never the main sign-in. Claude usage numbers
 are optional; limits are learned from the screen (docs/GUIDE.md 13.20).
 **Automatic switching:** `start -Lead` and a successful `switch` start a hidden watcher that switches idle leaders at their limit and sends a notification; `leaders` shows watcher status.
+**24 hours / from anywhere:** `herdr-boot.ps1` (Startup shortcut) starts the server, a lead and the watcher at sign-in; `setup-remote.ps1` (admin, once) opens SSH to the Tailscale network only (docs/GUIDE.md 13.21).
 
 Close the window any time: the agents keep running (Herdr's server runs on its own).
 Open Herdr again and they are still working. **Stop everything for real:** `Ctrl+B`

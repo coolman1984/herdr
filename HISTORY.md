@@ -1601,3 +1601,23 @@ herdr-team to the 3 Claude folders, `check.ps1` passes. Live: `autoswitch -Once`
 notification are still unproven until a lead hits its limit. The watcher does not start after a reboot
 until a `start -Lead` or `switch` runs.
 **Lesson:** no new CLI fact; watcher state follows projects while account limits remain global.
+
+## Phase 64 - Herdr starts at sign-in; remote access over Tailscale (2026-10-31)
+
+**Symptom:** the owner wants to reach Herdr from anywhere and keep it working 24 hours. After a restart
+nothing ran: no server, no lead, no watcher (Phase 63 starts the watcher only with `start -Lead` or `switch`).
+**Cause:** no sign-in start; SSH server stopped/manual; Tailscale installed but not signed in.
+**Fix (owner approved "do all"):** `herdr-boot.ps1` + Startup shortcut `Herdr Boot.lnk`
+(`conhost.exe --headless`, no window). Without a running server it starts `herdr server` headless,
+creates workspace **Lead** in `I:\herdr` and runs `start next -Lead -Pane <root pane>`; with a running
+server it only starts the watcher (its mutex keeps one copy). `setup-remote.ps1` (owner runs it as
+admin, `-Undo` reverses): sshd automatic, OpenSSH firewall rules limited to 100.64.0.0/10, OpenSSH
+DefaultShell = pwsh (old value saved to `%APPDATA%\herdr\openssh-defaultshell.bak.txt`).
+Restored branch `goal-unified` at fa81da05 (deleted locally, never pushed).
+**Proof:** `herdr-boot.ps1 -Session lab -DryRun` in an isolated session: server started, workspace
+Lead w2 pane w2:p1, the lead start printed, exit 0; a second run reported "server already running",
+exit 0. Live run on the owner's server: "server already running; starting only the watcher", exit 0,
+still one watcher process (pid 29976). Both scripts parse with 0 errors; `check.ps1` passes.
+**Not verified:** a real reboot; the lead start at sign-in; `setup-remote.ps1` (needs admin);
+SSH / `herdr --remote` from another device (needs the owner's Tailscale sign-ins).
+**Lesson:** #108.

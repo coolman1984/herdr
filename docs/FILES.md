@@ -22,6 +22,8 @@
 | `herdr-spaces.ps1` | Spaces side by side and separate again (ctrl+b shift+s) |
 | `herdr-columns.ps1` | Split the focused pane into N equal columns or rows (ctrl+b shift+v = 4) |
 | `herdr-agents.ps1`, `herdr-agents.cmd` | Delegation tool |
+| `herdr-boot.ps1` | at sign-in: headless Herdr server, a lead in workspace Lead, the watcher (GUIDE 13.21) |
+| `setup-remote.ps1` | owner runs once as admin: SSH server at boot, Tailscale-only firewall, pwsh shell; `-Undo` |
 | `herdr-autosync.ps1` | Owner-authorized GitHub main sync loop; status/dry-run modes, bounded log and conflict stop (maintained separately from Deck) |
 | `herdr-headless.ps1` | Run a Cline profile headless (no pane): waits, saves the JSONL log, prints DONE/FAILED, answer and tokens |
 | `herdr-trial.ps1` | Run one model trial, grade it and append results.csv; leave the agent for review |
@@ -65,6 +67,9 @@
 | `%APPDATA%\herdr\leader-limits.json` | per-item reset, source (screen/usage/default) and observation time; expired entries are free; atomic write |
 | `%APPDATA%\herdr\autoswitch-state.json` | per-project watcher outcome, notification signature and retry time; atomic write |
 | `%APPDATA%\herdr\autoswitch.log` | timestamped watcher actions and errors; newest lines kept below 200 KB |
+| `%APPDATA%\herdr\boot.log` | `herdr-boot.ps1` steps at sign-in; newest lines kept below 100 KB |
+| `%APPDATA%\herdr\openssh-defaultshell.bak.txt` | old OpenSSH DefaultShell value, saved by `setup-remote.ps1` |
+| Startup folder `Herdr Boot.lnk` | runs `herdr-boot.ps1` via `conhost.exe --headless` at sign-in |
 | `<project>\.herdr\handoffs\` | handoffs for other projects; `.herdr/` added once to the local git exclude file, never `.gitignore`; Herdr itself keeps `tasks\` |
 | `%APPDATA%\herdr\herdr-agents-panes.json` | panes started by `herdr-agents` |
 | `%APPDATA%\herdr\layout-last.json` | last layout chosen in the layout builder |
