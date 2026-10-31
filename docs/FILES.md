@@ -74,6 +74,7 @@
 | `%APPDATA%\herdr\openssh-defaultshell.bak.txt` | old OpenSSH DefaultShell value, saved by `setup-remote.ps1` |
 | Task Scheduler `Herdr Keepalive` | runs `herdr-keepalive.ps1` at sign-in and every minute (replaced Startup `Herdr Boot.lnk`) |
 | `%APPDATA%\herdr\keepalive-state.json`, `keepalive.log` | guard state (down counts, pauses, last run, locked sign-in); log below 100 KB |
+| `%APPDATA%\herdr\consolehider-hidden.json` | console windows hidden in stealth mode (shown again by `-Stealth off`) |
 | `%APPDATA%\herdr\nosleep-backup.json` | old power and policy values saved by `setup-nosleep.ps1` |
 | `<project>\.herdr\handoffs\` | handoffs for other projects; `.herdr/` added once to the local git exclude file, never `.gitignore`; Herdr itself keeps `tasks\` |
 | `%APPDATA%\herdr\herdr-agents-panes.json` | panes started by `herdr-agents` |

@@ -1696,4 +1696,14 @@ an isolated folder with stealth on against the real Orca: "would hide 1 Orca win
 real Orca window from here (it would hide the owner's view of this session).
 **Not verified:** the real hide on the owner's PC, the phone reaching a hidden Orca, `herdr` inside an
 Orca terminal from the phone.
+**Console popups (owner, same day):** "hide all popup of cmd activity". In stealth the guard also keeps one
+console hider running (`-HideConsoles`, mutex `Local\herdr-consolehider`, started by `-Stealth on` and by each
+check): every 250 ms it hides any visible console (`ConsoleWindowClass`) or Windows Terminal window, logs each
+new one once with its program and command line (to find and fix the source), and keeps the handles in
+`consolehider-hidden.json`. `-Stealth off` shows them again; the hider exits within 5 s and shows what it hid.
+A popup can still blink for up to a quarter second before it is hidden. Scheduled tasks and Run entries on this
+PC were checked: none start a console tool directly.
+Proof (isolated folder): a test `cmd.exe` console opened 3 s after the hider started was hidden and logged as
+`hid console window 'flashtest-keepalive' (ConsoleWindowClass, pid 24276: cmd.exe /k title flashtest-keepalive)`;
+`-Stealth off` showed 1 window and the hider stopped by itself.
 **Lesson:** #110.

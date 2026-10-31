@@ -30,6 +30,7 @@ param(
     [switch]$Uninstall,
     [switch]$DryRun,
     [ValidateSet('', 'on', 'off')][string]$Stealth = '',
+    [switch]$HideConsoles,   # internal: the long-running console hider started in stealth mode
     [string]$OrcaExe = (Join-Path $env:LOCALAPPDATA 'Programs\orca\Orca.exe')   # tests point it elsewhere
 )
 $ErrorActionPreference = 'Stop'
@@ -39,6 +40,7 @@ $boot = Join-Path $PSScriptRoot 'herdr-boot.ps1'
 $dataDir = Join-Path $env:APPDATA 'herdr'
 $statePath = Join-Path $dataDir 'keepalive-state.json'
 $logPath = Join-Path $dataDir 'keepalive.log'
+$consoleListPath = Join-Path $dataDir 'consolehider-hidden.json'
 $null = New-Item -ItemType Directory -Path $dataDir -Force
 
 function Write-KeepLog([string]$Text) {
@@ -92,7 +94,80 @@ public delegate bool EnumProc(System.IntPtr h, System.IntPtr l);
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool IsWindow(System.IntPtr h);
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern int GetWindowTextLength(System.IntPtr h);
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr h, int cmd);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern int GetClassName(System.IntPtr h, System.Text.StringBuilder s, int n);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern int GetWindowText(System.IntPtr h, System.Text.StringBuilder s, int n);
 '@
+}
+
+# Visible console / terminal windows (classic console host and Windows Terminal), any process.
+function Get-ConsoleWindows {
+    Initialize-WindowApi
+    $found = New-Object System.Collections.Generic.List[object]
+    $callback = [Herdr.KeepaliveWin+EnumProc] {
+        param($h, $l)
+        if ([Herdr.KeepaliveWin]::IsWindowVisible($h)) {
+            $class = New-Object System.Text.StringBuilder 128
+            $null = [Herdr.KeepaliveWin]::GetClassName($h, $class, 128)
+            if ($class.ToString() -in 'ConsoleWindowClass', 'CASCADIA_HOSTING_WINDOW_CLASS') {
+                $title = New-Object System.Text.StringBuilder 256
+                $null = [Herdr.KeepaliveWin]::GetWindowText($h, $title, 256)
+                $owner = [uint32]0
+                $null = [Herdr.KeepaliveWin]::GetWindowThreadProcessId($h, [ref]$owner)
+                $found.Add([pscustomobject]@{ Handle = $h.ToInt64(); Class = $class.ToString(); Title = $title.ToString(); Pid = [int]$owner })
+            }
+        }
+        $true
+    }
+    $null = [Herdr.KeepaliveWin]::EnumWindows($callback, [IntPtr]::Zero)
+    $found
+}
+
+function Test-ConsoleHider {
+    $m = $null
+    if ([Threading.Mutex]::TryOpenExisting('Local\herdr-consolehider', [ref]$m)) { $m.Dispose(); return $true }
+    $false
+}
+
+function Start-ConsoleHider {
+    if (Test-ConsoleHider) { return }
+    $pwsh = (Get-Command pwsh).Source
+    Start-Process -FilePath 'conhost.exe' -ArgumentList @('--headless', "`"$pwsh`"", '-NoProfile', '-File', "`"$PSCommandPath`"", '-HideConsoles') -WindowStyle Hidden
+    Write-KeepLog "console hider started"
+}
+
+# Long-running (stealth only): every 250 ms hide any console or terminal window that appears, so
+# command windows of agents, tools or updaters never show. Logs each new one with its program, to
+# find and fix the source. Exits within 5 s of `-Stealth off` and shows the windows it hid.
+function Invoke-ConsoleHider {
+    $mutex = New-Object Threading.Mutex($false, 'Local\herdr-consolehider')
+    $owned = $false
+    try { $owned = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $owned = $true }
+    if (-not $owned) { $mutex.Dispose(); return }
+    $hidden = [System.Collections.Generic.HashSet[long]]::new()
+    try {
+        $nextCheck = Get-Date
+        while ($true) {
+            if ((Get-Date) -ge $nextCheck) {
+                $nextCheck = (Get-Date).AddSeconds(5)
+                if (-not (Read-KeepState).stealth) { break }
+            }
+            foreach ($w in (Get-ConsoleWindows)) {
+                $null = [Herdr.KeepaliveWin]::ShowWindow([IntPtr]$w.Handle, 0)
+                if ($hidden.Add($w.Handle)) {
+                    $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId=$($w.Pid)" -ErrorAction SilentlyContinue).CommandLine
+                    Write-KeepLog ("hid console window '{0}' ({1}, pid {2}: {3})" -f $w.Title, $w.Class, $w.Pid, $cmd)
+                    ConvertTo-Json -InputObject @($hidden) | Set-Content -LiteralPath $consoleListPath -Encoding utf8
+                }
+            }
+            Start-Sleep -Milliseconds 250
+        }
+        $shown = Show-Windows @($hidden)
+        Set-Content -LiteralPath $consoleListPath -Value '[]' -Encoding utf8
+        Write-KeepLog "console hider stopped (stealth off), $shown window(s) shown again"
+    } catch {
+        Write-KeepLog "console hider ERROR: $($_.Exception.Message)"
+        throw
+    } finally { $mutex.ReleaseMutex(); $mutex.Dispose() }
 }
 
 # Visible top-level windows with a title that belong to the given processes.
@@ -168,18 +243,22 @@ if ($Pause -gt 0 -or $Resume) {
     Write-KeepLog $(if ($Resume) { "resumed: $($names -join ', ')" } else { "paused $Pause min: $($names -join ', ')" })
     exit 0
 }
+if ($HideConsoles) { Invoke-ConsoleHider; exit 0 }
 if ($Stealth) {
     $state.stealth = ($Stealth -eq 'on')
     if ($Stealth -eq 'off') {
-        $shown = Show-Windows @($state.hiddenWindows | Where-Object { $_ })
+        $consoles = if (Test-Path -LiteralPath $consoleListPath) { @(Get-Content -LiteralPath $consoleListPath -Raw | ConvertFrom-Json) } else { @() }
+        $shown = Show-Windows (@($state.hiddenWindows | Where-Object { $_ }) + @($consoles | Where-Object { $_ }))
         $state.hiddenWindows = @()
-        Write-KeepLog "stealth off: $shown hidden window(s) shown again"
+        Write-KeepLog "stealth off: $shown hidden window(s) shown again; the console hider stops within 5 s"
+        Save-KeepState $state
     } else {
         $hidden = @(Hide-Windows @((Get-OrcaApp).Id))
         $state.hiddenWindows = @(@($state.hiddenWindows | Where-Object { $_ }) + $hidden | Select-Object -Unique)
         Write-KeepLog "stealth on: $($hidden.Count) Orca window(s) hidden; Orca keeps running"
+        Save-KeepState $state
+        Start-ConsoleHider
     }
-    Save-KeepState $state
     exit 0
 }
 if ($Status) {
@@ -187,7 +266,7 @@ if ($Status) {
     Write-Output "Task:   $(if ($t) { "$($t.State)" } else { 'not installed (run -Install)' })"
     Write-Output "Orca:   $(if (Get-OrcaApp) { 'running' } else { 'not running' })$(if (Test-Paused $state 'orca') { " (paused until $($state.pause.orca))" })"
     Write-Output "Herdr:  $(if (Test-HerdrServer) { 'server running' } else { 'server not running' })$(if (Test-Paused $state 'herdr') { " (paused until $($state.pause.herdr))" })"
-    Write-Output "Stealth: $(if ($state.stealth) { "on ($(@($state.hiddenWindows | Where-Object { $_ }).Count) window(s) hidden)" } else { 'off' })"
+    Write-Output "Stealth: $(if ($state.stealth) { "on ($(@($state.hiddenWindows | Where-Object { $_ }).Count) Orca window(s) hidden; console hider $(if (Test-ConsoleHider) { 'running' } else { 'not running' }))" } else { 'off' })"
     Write-Output "Last run: $($state.lastRun)"
     exit 0
 }
@@ -230,7 +309,8 @@ try {
         } else { Write-KeepLog "herdr server not running - start on the next check" }
     }
 
-    # Stealth: hide Orca's windows (after a restart, give it time to open its window first).
+    # Stealth: the console hider must run; hide Orca's windows (after a restart, give it time to open first).
+    if ($state.stealth -and -not $DryRun) { Start-ConsoleHider }
     if ($state.stealth -and -not (Test-Paused $state 'orca')) {
         $ids = @((Get-OrcaApp).Id)
         if ($ids -and $started) { Start-Sleep -Seconds 15; $ids = @((Get-OrcaApp).Id) }

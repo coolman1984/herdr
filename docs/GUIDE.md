@@ -550,3 +550,5 @@ window and keeps hiding it every minute, even after a restart; nothing shows on 
 running. On the phone, the Orca app (already paired, works from any network) controls Orca; for Herdr open
 a terminal on this PC in the Orca app and type `herdr`. At home: `-Stealth off` shows Orca again.
 In Orca's Settings, turn OFF the tray (menu bar) icon so nobody can quit Orca from the tray.
+Command windows: while stealth is on, any command (console) or Windows Terminal window that pops up is hidden
+within a quarter second; `%APPDATA%\herdr\keepalive.log` names the program that opened it.
