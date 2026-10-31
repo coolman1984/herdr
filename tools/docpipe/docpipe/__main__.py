@@ -40,7 +40,11 @@ def main(argv=None):
     b.add_argument("--to", required=True)
     a = ap.parse_args(argv)
     if a.cmd == "check":
-        res = store.integrity(store.connect(a.db))
+        c = store.connect(a.db)
+        try:
+            res = store.integrity(c)
+        finally:
+            c.close()
         print(res)
         return 0 if res == "ok" else 1
     if a.cmd == "serve":
@@ -48,11 +52,26 @@ def main(argv=None):
         web.serve(a.db, a.host, a.port, a.allow_remote, not a.no_export)
         return 0
     if a.cmd == "backup":
-        store.backup(store.connect(a.db), a.to)
-        print("backup", a.to, store.integrity(store.connect(a.to)))
+        src = store.connect(a.db)
+        try:
+            store.backup(src, a.to)
+        finally:
+            src.close()
+        dst = store.connect(a.to)
+        try:
+            print("backup", a.to, store.integrity(dst))
+        finally:
+            dst.close()
         return 0
     os.makedirs(a.out, exist_ok=True)
     db = store.connect(a.db)
+    try:
+        return _run(a, db)
+    finally:
+        db.close()  # Windows cannot delete or move a database file that is still open
+
+
+def _run(a, db):
     paths = []
     for root, _, names in os.walk(a.src):
         for n in sorted(names):

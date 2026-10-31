@@ -1739,3 +1739,12 @@ the owner's open workbook survives a worker run, a killed worker leaves only the
 PowerShell-only pipeline with Python hidden, a NASCA-protected file (no leftovers, no export without
 approval), real quota readings (`herdr-goal quota --profiles FILE`). Evidence JSON per gate; a gate not run
 is recorded `not-run`, never pass.
+
+## Phase 69 - docpipe CLI closes its databases (Windows CI) (2026-10-31)
+
+**Symptom (CI run 41169389853, windows-latest):** `test_company_run_without_approval_exports_no_values`
+errored with WinError 32 - the database file was still open after `python -m docpipe run` returned.
+On Linux an open file can be deleted, so the leak was invisible here.
+**Fix:** `run`, `check` and `backup` close every connection in `finally`. Checked locally that no
+SQLite connection stays open after `main()`; CI re-runs on Windows. The same run showed the
+PowerShell-only pipeline passing every check in Windows PowerShell 5.1 and 7.
